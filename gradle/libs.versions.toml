@@ -28,6 +28,11 @@ kotlinxCoroutines = "1.10.1"
 junit = "4.13.2"
 kotlinTest = "2.3.0"
 
+# 코드 품질
+spotless = "8.10.0"
+detekt = "1.23.8"
+ktlint = "1.8.0"
+
 [libraries]
 # build-logic 전용 (convention plugin 컴파일 클래스패스)
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
@@ -74,6 +79,8 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 
 # 이 프로젝트가 정의하는 convention 플러그인
 nursemate-android-application = { id = "nursemate.android.application" }
