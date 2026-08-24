@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 전용 앱 — 시스템 테마는 최소만. 실제 테마는 NurseMateTheme(Compose)이 담당 -->
+    <style name="Theme.NurseMate" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
