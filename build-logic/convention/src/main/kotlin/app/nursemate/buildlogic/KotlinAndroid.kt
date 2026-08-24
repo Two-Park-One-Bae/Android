@@ -13,9 +13,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 /**
  * Android 모듈 공통 설정. AGP 9 — Kotlin 내장이므로 별도 Kotlin 플러그인을 적용하지 않는다.
  */
-internal fun Project.configureKotlinAndroid(
-    commonExtension: CommonExtension,
-) {
+internal fun Project.configureKotlinAndroid(commonExtension: CommonExtension) {
     commonExtension.apply {
         compileSdk = 37
 

@@ -7,9 +7,7 @@ import org.gradle.kotlin.dsl.dependencies
 /**
  * Compose 공통 설정 — 호출 전에 org.jetbrains.kotlin.plugin.compose 가 적용돼 있어야 한다.
  */
-internal fun Project.configureAndroidCompose(
-    commonExtension: CommonExtension,
-) {
+internal fun Project.configureAndroidCompose(commonExtension: CommonExtension) {
     commonExtension.apply {
         buildFeatures.apply {
             compose = true
