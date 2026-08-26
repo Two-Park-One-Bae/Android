@@ -25,6 +25,10 @@ spec/                 스펙 서브모듈 (API·기능 스펙·디자인 정본)
 2. `secrets.properties.sample`을 `secrets.properties`로 복사하고 값 채우기
 3. `./gradlew assembleDebug`
 
+## 릴리스
+
+서명·버전 정책·AAB 산출 절차는 [docs/RELEASE.md](docs/RELEASE.md). 업로드 keystore는 `certificates` 레포 보관.
+
 ## 컨벤션
 
 브랜치 · 커밋 · PR · Jira 자동 전환 규칙의 정본은 [spec/docs/CONVENTIONS.md](spec/docs/CONVENTIONS.md).
