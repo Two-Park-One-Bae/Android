@@ -3,12 +3,9 @@ package app.nursemate.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -42,8 +39,6 @@ fun HomeScreen(onPillClick: () -> Unit, onTimerClick: () -> Unit, modifier: Modi
         modifier = modifier
             .fillMaxSize()
             .background(colors.bgApp)
-            // 상태바에 인사말이 가리지 않도록 시스템 인셋을 먼저 준다
-            .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
             .padding(NmSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(NmSpacing.lg)

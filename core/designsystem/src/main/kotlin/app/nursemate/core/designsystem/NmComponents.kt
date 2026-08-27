@@ -1,7 +1,6 @@
 package app.nursemate.core.designsystem
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
 /**
@@ -39,8 +39,7 @@ fun NmListRow(
     val colors = NmTheme.semanticColors
     Row(
         modifier = modifier
-            .background(colors.surface, RoundedCornerShape(NmRadius.lg))
-            .border(1.dp, colors.border, RoundedCornerShape(NmRadius.lg))
+            .background(colors.surface, RoundedCornerShape(NmRadius.xl))
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(NmSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -48,23 +47,34 @@ fun NmListRow(
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .background(iconBackground, RoundedCornerShape(NmRadius.md)),
+                .size(64.dp)
+                .background(iconBackground, RoundedCornerShape(NmRadius.lg)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(32.dp)
             )
         }
-        Column(verticalArrangement = Arrangement.spacedBy(NmSpacing.xs)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(NmSpacing.xs)
+        ) {
             Text(text = title, style = NmTypography.heading3, color = colors.textPrimary)
             Text(text = subtitle, style = NmTypography.body, color = colors.textSecondary)
             if (caption != null) {
                 Text(text = caption, style = NmTypography.caption, color = captionColor)
             }
+        }
+        if (onClick != null) {
+            Icon(
+                painter = painterResource(R.drawable.nm_ic_chevron_right),
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
