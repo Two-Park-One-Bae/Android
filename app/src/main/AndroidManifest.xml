@@ -5,12 +5,15 @@
 
     <application
         android:name=".NurseMateApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="널스메이트"
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.NurseMate.Splash"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

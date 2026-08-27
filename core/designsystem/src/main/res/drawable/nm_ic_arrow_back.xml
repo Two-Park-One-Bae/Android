@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  뒤로가기 아이콘 — Material Symbols "arrow_back".
+  출처: Material Symbols (Apache License 2.0) https://fonts.google.com/icons
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M9.55,18L3.55,12L9.55,6L10.97,7.4L7.38,11L20.45,11L20.45,13L7.38,13L10.97,16.6L9.55,18Z" />
+</vector>
