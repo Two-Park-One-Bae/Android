@@ -25,7 +25,6 @@ import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
 import app.nursemate.home.NmBottomBar
 import app.nursemate.home.NmTab
-import app.nursemate.home.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -58,7 +57,8 @@ private fun NurseMateApp() {
             when (tab) {
                 NmTab.Home -> HomeScreen(
                     onPillClick = { tab = NmTab.Pill },
-                    onTimerClick = { tab = NmTab.Timer }
+                    onTimerClick = { tab = NmTab.Timer },
+                    onActiveTimerClick = { tab = NmTab.Timer }
                 )
 
                 NmTab.Pill -> FeaturePreparingScreen(
@@ -79,7 +79,16 @@ private fun NurseMateApp() {
                     iconTint = NmColor.Secondary.C500
                 )
 
-                NmTab.Settings -> SettingsScreen()
+                // 설정 화면의 내용(로그아웃·탈퇴, 타이머 울림 방식)은 인증·타이머 스펙에 딸려 있다.
+                // 그 기능들이 붙기 전까지는 임의로 채우지 않는다 — spec/feature/auth·care-timer 참고.
+                NmTab.Settings -> FeaturePreparingScreen(
+                    title = "설정",
+                    description = "계정과 알림 설정을 준비하고 있어요.\n" +
+                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
+                    icon = painterResource(DsR.drawable.nm_ic_settings),
+                    iconBackground = NmColor.Neutral.C100,
+                    iconTint = NmColor.Neutral.C500
+                )
             }
         }
         NmBottomBar(selected = tab, onSelect = { tab = it })

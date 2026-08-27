@@ -17,11 +17,6 @@ fun secret(key: String): String? = secrets.getProperty(key) ?: System.getenv(key
 android {
     namespace = "app.nursemate"
 
-    // 설정 화면에서 versionName을 표시한다
-    buildFeatures {
-        buildConfig = true
-    }
-
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer

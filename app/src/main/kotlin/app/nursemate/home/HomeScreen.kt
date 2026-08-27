@@ -25,13 +25,20 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * 홈 화면 — iOS HomeVC 구조를 이식했다(인사말 · 상태 칩 · 기능 카드).
+ * 홈 화면 — spec/design hero-home-real.png 기준(인사말 · 상태 칩 · 기능 카드).
  *
  * 알약 식별·처치 타이머는 아직 미구현이라 카드를 누르면 [FeaturePreparingScreen]으로 간다.
- * 각 기능이 붙을 때 [onPillClick]·[onTimerClick] 목적지만 교체하면 된다.
+ * 각 기능이 붙을 때 목적지만 교체하면 된다.
+ *
+ * @param onActiveTimerClick 상태 칩 → 타이머 리스트. spec/feature/care-timer의 C1 진입점 중 하나다.
  */
 @Composable
-fun HomeScreen(onPillClick: () -> Unit, onTimerClick: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeScreen(
+    onPillClick: () -> Unit,
+    onTimerClick: () -> Unit,
+    onActiveTimerClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
     val today = remember { LocalDate.now().format(KoreanDateFormat) }
 
@@ -57,7 +64,8 @@ fun HomeScreen(onPillClick: () -> Unit, onTimerClick: () -> Unit, modifier: Modi
         // 타이머 기능 구현 전이라 0 고정. 기능이 붙으면 실제 개수를 넣는다.
         NmChip(
             text = "활성 타이머 0",
-            icon = painterResource(DsR.drawable.nm_ic_timer)
+            icon = painterResource(DsR.drawable.nm_ic_timer),
+            onClick = onActiveTimerClick
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(NmSpacing.md)) {
@@ -67,6 +75,8 @@ fun HomeScreen(onPillClick: () -> Unit, onTimerClick: () -> Unit, modifier: Modi
                 subtitle = "환자 지참약을 한 번에 식별하고 정보를 확인하세요.",
                 iconBackground = NmColor.Primary.C50,
                 iconTint = NmColor.Primary.C500,
+                // 스펙상 이 자리는 "남은 횟수 n/limit"다(spec/feature/pill-recognition §식별 횟수 제한).
+                // 식별 API가 붙기 전까지는 없는 값을 지어내지 않고 상태만 알린다.
                 caption = "준비 중",
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onPillClick

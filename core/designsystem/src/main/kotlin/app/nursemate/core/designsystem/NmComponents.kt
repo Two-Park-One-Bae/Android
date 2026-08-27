@@ -79,18 +79,23 @@ fun NmListRow(
     }
 }
 
-/** 상태를 짧게 보여주는 알약형 칩. iOS DSKit DSChip 대응. */
+/**
+ * 상태를 짧게 보여주는 알약형 칩. iOS DSKit DSChip 대응.
+ * [onClick]을 주면 해당 화면으로 가는 진입점이 된다.
+ */
 @Composable
 fun NmChip(
     text: String,
     icon: Painter,
     modifier: Modifier = Modifier,
     contentColor: Color = NmColor.Secondary.C600,
-    containerColor: Color = NmColor.Secondary.C50
+    containerColor: Color = NmColor.Secondary.C50,
+    onClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
             .background(containerColor, RoundedCornerShape(percent = 50))
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = NmSpacing.md, vertical = NmSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(NmSpacing.xs)
