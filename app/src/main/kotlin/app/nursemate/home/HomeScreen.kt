@@ -87,6 +87,7 @@ fun HomeScreen(
                 subtitle = "투약 및 처치 시간을 체계적으로 관리하세요.",
                 iconBackground = NmColor.Secondary.C50,
                 iconTint = NmColor.Secondary.C500,
+                // 디자인상 이 카드에는 캡션이 없다. 타이머 기능이 붙으면 이 줄을 지운다.
                 caption = "준비 중",
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onTimerClick
