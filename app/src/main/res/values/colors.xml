@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 시스템 리소스(런처 아이콘·스플래시)용. Compose 토큰은 NmColor가 정본 -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="nm_splash_background">#EEF2F7</color>
+</resources>

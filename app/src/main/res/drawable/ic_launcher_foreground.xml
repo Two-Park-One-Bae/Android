@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  런처 아이콘 전경 — 브랜드 로고 마크.
+  adaptive icon은 108dp 캔버스 중 가운데 72dp만 항상 보이므로(바깥은 마스크에 잘림),
+  로고를 그 안전 영역에 맞춰 배치한다. viewport를 1080으로 두고 scale로 축소.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1080"
+    android:viewportHeight="1080">
+    <group
+        android:pivotX="540"
+        android:pivotY="540"
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="-2"
+        android:translateY="18">
+        <group
+            android:scaleX="1.875"
+            android:scaleY="1.875">
+            <path
+                android:fillColor="#0EA5E9"
+                android:fillType="nonZero"
+                android:pathData="M224,24l0,56 -56,0c-13.3,0 -24,10.7 -24,24l0,48c0,13.3 10.7,24 24,24l56,0 0,56c0,13.3 10.7,24 24,24l48,0c13.3,0 24,-10.7 24,-24l0,-56 56,0c13.3,0 24,-10.7 24,-24l0,-48c0,-13.3 -10.7,-24 -24,-24l-56,0 0,-56c0,-13.3 -10.7,-24 -24,-24l-48,0c-13.3,0 -24,10.7 -24,24z M559.7,392.2c17.8,-13.1 21.6,-38.1 8.5,-55.9s-38.1,-21.6 -55.9,-8.5l-119.7,88.2 -120.6,0c-8.8,0 -16,-7.2 -16,-16s7.2,-16 16,-16l16,0 64,0c17.7,0 32,-14.3 32,-32s-14.3,-32 -32,-32l-64,0 -16,0 -78.3,0c-29.1,0 -57.3,9.9 -80,28l-44.9,36 -36.8,0c-17.7,0 -32,14.3 -32,32l0,64c0,17.7 14.3,32 32,32l160,0 160.5,0c29,0 57.3,-9.3 80.7,-26.5l126.6,-93.3z" />
+        </group>
+    </group>
+</vector>
