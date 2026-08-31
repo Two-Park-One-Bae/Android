@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 촬영 결과를 앱 캐시에 저장하고 카메라 앱에 넘기기 위한 경로 -->
+<paths>
+    <cache-path name="capture" path="." />
+</paths>

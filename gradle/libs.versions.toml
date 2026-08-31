@@ -28,6 +28,10 @@ kotlinxCoroutines = "1.10.1"
 junit = "4.13.2"
 kotlinTest = "2.3.0"
 
+# NM-396 스파이크 전용 (온디바이스 추론 런타임 비교). 스파이크 종료 시 정리 대상.
+onnxruntime = "1.29.0"
+androidxExifInterface = "1.4.1"
+
 # 코드 품질
 spotless = "8.10.0"
 detekt = "1.23.8"
@@ -70,6 +74,10 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlinTest" }
+
+# NM-396 스파이크 전용 — 온디바이스 추론 런타임. 프로덕션 모듈에서 쓰지 말 것.
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "androidxExifInterface" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
