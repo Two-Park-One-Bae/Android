@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ SplashScreen API — 시스템이 브랜드 로고 스플래시를 그린다 -->
+    <style name="Theme.NurseMate.Splash" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/nm_splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/nm_splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/nm_logo</item>
+    </style>
+</resources>
