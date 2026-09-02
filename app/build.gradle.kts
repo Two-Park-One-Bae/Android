@@ -77,6 +77,14 @@ dependencies {
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
 
+    implementation(libs.androidx.navigation.compose)
+
+    // 구글 로그인 — 자격 증명 획득은 UI 레이어의 일이라 app 에 둔다.
+    // 세션(FirebaseAuth)은 core:data 의 AuthRepository 가 갖는다.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+
     // App Check provider 는 빌드 타입별로 하나씩만 넣는다.
     //   debug   → DebugAppCheckProvider  (Play 스토어 밖이라 Play Integrity 가 통하지 않는다)
     //   release → PlayIntegrityAppCheckProvider
