@@ -2,6 +2,10 @@ package app.nursemate.core.network.di
 
 import app.nursemate.core.network.BuildConfig
 import app.nursemate.core.network.NetworkConfig
+import app.nursemate.core.network.api.UserApi
+import app.nursemate.core.network.auth.AppCheckInterceptor
+import app.nursemate.core.network.auth.AuthHeaderInterceptor
+import app.nursemate.core.network.auth.TokenRefreshAuthenticator
 import app.nursemate.core.network.error.ErrorInterceptor
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
@@ -19,9 +23,8 @@ import retrofit2.Retrofit
 /**
  * HTTP 골격.
  *
- * 여기에는 **인증이 없다.** 토큰을 싣는 인터셉터와 401 재시도는 인증 기능에 딸린 것이라
- * NM-407 이 이 모듈에 얹는다. 이 모듈은 어떤 API 도 알지 못한다 — API 인터페이스는
- * 각 기능이 자기 것을 제공한다.
+ * 인터셉터 순서가 의미를 갖는다. Auth 가 헤더를 붙이고, Error 는 그 바깥에서 최종 응답을 본다 —
+ * Authenticator 의 재시도까지 끝난 결과라야 진짜 실패다.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -41,8 +44,16 @@ internal object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(errorInterceptor: ErrorInterceptor): OkHttpClient = OkHttpClient.Builder()
+    fun provideOkHttpClient(
+        authHeaderInterceptor: AuthHeaderInterceptor,
+        appCheckInterceptor: AppCheckInterceptor,
+        errorInterceptor: ErrorInterceptor,
+        authenticator: TokenRefreshAuthenticator
+    ): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(authHeaderInterceptor)
+        .addInterceptor(appCheckInterceptor)
         .addInterceptor(errorInterceptor)
+        .authenticator(authenticator)
         .apply {
             if (BuildConfig.DEBUG) {
                 // 헤더에 토큰이 실리게 되므로 본문·헤더까지 찍지 않는다.
@@ -67,6 +78,10 @@ internal object NetworkModule {
         .client(client)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
+
+    @Provides
+    @Singleton
+    fun provideUserApi(retrofit: Retrofit): UserApi = retrofit.create(UserApi::class.java)
 
     private const val CONNECT_TIMEOUT_SECONDS = 10L
 

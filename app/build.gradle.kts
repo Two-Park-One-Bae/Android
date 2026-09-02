@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.nursemate.android.application)
     alias(libs.plugins.nursemate.android.application.compose)
     alias(libs.plugins.nursemate.hilt)
+    // 빌드 타입별 google-services.json 을 읽어 FirebaseApp 설정을 만든다.
+    //   debug   → app/src/debug/google-services.json    (Nursemate-dev  · app.nursemate.debug)
+    //   release → app/src/release/google-services.json  (Nursemate-prod · app.nursemate)
+    // ⚠️ 두 파일은 커밋하지 않는다(.gitignore). 새 환경에서는 Firebase 콘솔에서 받아 넣어야 빌드된다.
+    alias(libs.plugins.google.services)
 }
 
 // 릴리스 서명 주입 — 우선순위: secrets.properties > 환경변수. keystore는 certificates 레포 보관 (docs/RELEASE.md)
@@ -71,6 +76,13 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
+
+    // App Check provider 는 빌드 타입별로 하나씩만 넣는다.
+    //   debug   → DebugAppCheckProvider  (Play 스토어 밖이라 Play Integrity 가 통하지 않는다)
+    //   release → PlayIntegrityAppCheckProvider
+    // 둘을 같이 넣으면 release 에서도 디버그 토큰으로 통과할 수 있어 App Check 가 무의미해진다.
+    debugImplementation(libs.firebase.appcheck.debug)
+    releaseImplementation(libs.firebase.appcheck.playintegrity)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
