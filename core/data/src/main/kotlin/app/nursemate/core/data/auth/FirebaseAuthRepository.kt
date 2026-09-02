@@ -44,6 +44,11 @@ class FirebaseAuthRepository @Inject constructor(private val auth: FirebaseAuth)
         Unit
     }
 
+    override suspend fun signInWithCustomToken(customToken: String): Result<Unit> = runCatching {
+        auth.signInWithCustomToken(customToken).await()
+        Unit
+    }
+
     override suspend fun idToken(forceRefresh: Boolean): String? {
         val user = auth.currentUser ?: return null
         return user.getIdToken(forceRefresh).await().token

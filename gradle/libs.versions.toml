@@ -31,6 +31,7 @@ firebaseBom = "34.18.0"
 googleServices = "4.5.0"
 androidxCredentials = "1.6.0"
 googleid = "1.2.0"
+kakaoSdk = "2.25.0"
 
 # 온디바이스 검출 (core:vision)
 onnxruntime = "1.29.0"
@@ -109,6 +110,10 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidxCredentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidxCredentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+
+# 카카오 로그인. Firebase 비네이티브라 서버가 Custom Token 으로 바꿔 준다.
+# v2-user 만 넣는다 — v2-all 은 톡·스토리·내비까지 딸려 온다.
+kakao-user = { group = "com.kakao.sdk", name = "v2-user", version.ref = "kakaoSdk" }
 
 # 온디바이스 추론 런타임. 프리빌트 배포본이며 EP는 CPU만 쓴다.
 # (WebGPU EP는 소스 빌드에만 들어 있다 — NM-396 스파이크 참조)

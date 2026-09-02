@@ -85,7 +85,9 @@ private fun NmNavHost(session: AuthSession) {
                 state = state,
                 // 자격 증명 선택 UI 를 띄우려면 **Activity** 컨텍스트여야 한다.
                 // Compose 의 LocalContext 는 호스팅 Activity 를 준다.
-                onGoogleClick = { viewModel.signInWithGoogle(context) }
+                // 카카오도 마찬가지다 — 카카오톡 전환·웹 로그인 모두 Activity 를 요구한다.
+                onGoogleClick = { viewModel.signInWithGoogle(context) },
+                onKakaoClick = { viewModel.signInWithKakao(context) }
             )
         }
 

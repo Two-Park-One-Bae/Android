@@ -19,6 +19,22 @@ val secrets = Properties().apply {
 
 fun secret(key: String): String? = secrets.getProperty(key) ?: System.getenv(key)
 
+/**
+ * 카카오 앱 키를 BuildConfig 와 매니페스트 스킴에 함께 주입한다.
+ *
+ * 둘이 **반드시 같은 값**이어야 한다. 카카오 로그인은 `kakao{앱키}://oauth` 로 돌아오는데,
+ * SDK 초기화에 쓴 키와 매니페스트에 박힌 스킴이 어긋나면 카카오톡에서 돌아올 곳을 찾지 못한다.
+ * 한 함수에서 같이 세팅해 갈라질 여지를 없앤다.
+ *
+ * 키가 없으면(secrets.properties 미설정, PR CI 등) 빈 값으로 두고 빌드는 통과시킨다 —
+ * 카카오 로그인만 동작하지 않는다.
+ */
+fun com.android.build.api.dsl.ApplicationBuildType.kakaoAppKey(key: String?) {
+    val value = key.orEmpty()
+    buildConfigField("String", "KAKAO_APP_KEY", "\"$value\"")
+    manifestPlaceholders["kakaoScheme"] = if (value.isEmpty()) "kakao-unset" else "kakao$value"
+}
+
 android {
     namespace = "app.nursemate"
 
@@ -42,6 +58,10 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     buildTypes {
         debug {
             // Play 비공개 테스트 빌드와 **나란히** 설치되게 패키지를 분리한다.
@@ -49,6 +69,7 @@ android {
             // 개발하려면 테스터가 쓰고 있는 앱을 지워야 한다.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            kakaoAppKey(secret("KAKAO_APP_KEY_DEBUG"))
         }
 
         release {
@@ -59,6 +80,7 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.findByName("release")
+            kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
         }
     }
 }
@@ -84,6 +106,9 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
+
+    // 카카오 로그인 — 액세스 토큰까지만 여기서 받고, Firebase 교환은 서버가 한다.
+    implementation(libs.kakao.user)
 
     // App Check provider 는 빌드 타입별로 하나씩만 넣는다.
     //   debug   → DebugAppCheckProvider  (Play 스토어 밖이라 Play Integrity 가 통하지 않는다)

@@ -47,6 +47,14 @@ interface AuthRepository {
     suspend fun signInWithGoogle(idToken: String): Result<Unit>
 
     /**
+     * 서버가 발급한 Firebase Custom Token 으로 로그인한다(카카오 경로).
+     *
+     * 카카오는 Firebase 네이티브 공급자가 아니라, 서버가 카카오 토큰을 검증하고 Custom Token 을
+     * 만들어 준다. 결과물은 구글·애플과 같은 Firebase ID 토큰이라 **이후 흐름이 동일하다.**
+     */
+    suspend fun signInWithCustomToken(customToken: String): Result<Unit>
+
+    /**
      * `Authorization: Bearer`에 실을 Firebase ID 토큰.
      *
      * @param forceRefresh 서버가 401을 준 뒤의 **단 한 번**의 재시도에만 true를 쓴다

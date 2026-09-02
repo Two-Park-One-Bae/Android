@@ -67,11 +67,16 @@ import app.nursemate.ui.SystemBarIcons
  * 디자인이 나오면 이 두 군데를 교체하면 된다.
  */
 @Composable
-fun LoginScreen(state: LoginUiState, onGoogleClick: () -> Unit, modifier: Modifier = Modifier) {
+fun LoginScreen(
+    state: LoginUiState,
+    onGoogleClick: () -> Unit,
+    onKakaoClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
-    // 애플·카카오는 아직 붙지 않았다. 눌러도 홈으로 보내지 않는다 —
+    // 애플은 아직 붙지 않았다. 눌러도 홈으로 보내지 않는다 —
     // 세션 없이 홈에 도달하는 경로를 만들면 스펙(로그인 필수)이 깨진다.
     var pendingProviderNotice by remember { mutableStateOf(false) }
 
@@ -119,7 +124,7 @@ fun LoginScreen(state: LoginUiState, onGoogleClick: () -> Unit, modifier: Modifi
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             val notice = state.error?.toMessage()
-                ?: "애플·카카오 로그인은 준비 중이에요".takeIf { pendingProviderNotice }
+                ?: "Apple 로그인은 준비 중이에요".takeIf { pendingProviderNotice }
             if (notice != null) {
                 Text(
                     text = notice,
@@ -134,22 +139,29 @@ fun LoginScreen(state: LoginUiState, onGoogleClick: () -> Unit, modifier: Modifi
                 label = "카카오 로그인",
                 container = KakaoYellow,
                 content = Color.Black,
-                enabled = !state.inProgress,
-                onClick = { pendingProviderNotice = true }
+                enabled = state.pending == null,
+                onClick = {
+                    pendingProviderNotice = false
+                    onKakaoClick()
+                }
             ) {
-                Icon(
-                    painter = painterResource(DsR.drawable.nm_logo_kakao),
-                    contentDescription = null,
-                    tint = Color.Black,
-                    modifier = Modifier.size(20.dp)
-                )
+                if (state.pending == LoginProvider.Kakao) {
+                    ProgressMark(color = Color.Black)
+                } else {
+                    Icon(
+                        painter = painterResource(DsR.drawable.nm_logo_kakao),
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             ProviderButton(
                 label = "Apple로 로그인",
                 container = Color.Black,
                 content = Color.White,
-                enabled = !state.inProgress,
+                enabled = state.pending == null,
                 onClick = { pendingProviderNotice = true }
             ) {
                 Icon(
@@ -164,19 +176,15 @@ fun LoginScreen(state: LoginUiState, onGoogleClick: () -> Unit, modifier: Modifi
                 label = "Google로 계속하기",
                 container = Color.White,
                 content = GoogleTextColor,
-                enabled = !state.inProgress,
+                enabled = state.pending == null,
                 border = GoogleBorder,
                 onClick = {
                     pendingProviderNotice = false
                     onGoogleClick()
                 }
             ) {
-                if (state.inProgress) {
-                    CircularProgressIndicator(
-                        color = NmColor.Primary.C500,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(18.dp)
-                    )
+                if (state.pending == LoginProvider.Google) {
+                    ProgressMark(color = NmColor.Primary.C500)
                 } else {
                     // ⚠️ 4색 브랜드 로고라 tint 하면 안 된다. Icon 이 아니라 Image 로 그린다.
                     Image(
@@ -222,6 +230,12 @@ private fun ProviderButton(
         Spacer(modifier = Modifier.size(10.dp))
         Text(text = label, style = ProviderLabel, color = content)
     }
+}
+
+/** 마크 자리(22×22)에 들어가는 진행 인디케이터. 버튼 배경에 묻히지 않게 색만 받는다. */
+@Composable
+private fun ProgressMark(color: Color) {
+    CircularProgressIndicator(color = color, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
 }
 
 private fun AuthError.toMessage(): String = when (this) {
