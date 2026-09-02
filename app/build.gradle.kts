@@ -20,8 +20,8 @@ android {
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     signingConfigs {
@@ -38,6 +38,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Play 비공개 테스트 빌드와 **나란히** 설치되게 패키지를 분리한다.
+            // 같은 applicationId 면 서명이 달라 INSTALL_FAILED_UPDATE_INCOMPATIBLE 이 나고,
+            // 개발하려면 테스터가 쓰고 있는 앱을 지워야 한다.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
