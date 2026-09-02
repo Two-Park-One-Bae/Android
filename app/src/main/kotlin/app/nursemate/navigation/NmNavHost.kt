@@ -14,7 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +45,10 @@ import app.nursemate.core.model.User
 import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
 import app.nursemate.home.NmTab
+import app.nursemate.settings.SettingsConfirm
+import app.nursemate.settings.SettingsConfirmDialog
+import app.nursemate.settings.SettingsScreen
+import app.nursemate.settings.SettingsViewModel
 
 /**
  * 앱 셸.
@@ -201,18 +207,35 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
             }
         }
 
-        // 설정 화면의 내용(로그아웃·탈퇴, 타이머 울림 방식)은 인증·타이머 스펙에 딸려 있다.
-        // 그 기능들이 붙기 전까지는 임의로 채우지 않는다 — spec/feature/auth·care-timer 참고.
+        // 타이머 울림 방식은 아직 없다 — 처치 타이머(NM-308)에 딸린 설정이라 그때 함께 온다.
         composable(NmRoute.SETTINGS) {
-            TabRoot(navController, NmTab.Settings) {
-                FeaturePreparingScreen(
-                    title = "설정",
-                    description = "계정과 알림 설정을 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_settings),
-                    iconBackground = NmColor.Neutral.C100,
-                    iconTint = NmColor.Neutral.C500
-                )
+            val viewModel: SettingsViewModel = hiltViewModel()
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            // 확인 모달은 탭바까지 덮어야 해서 화면 밖(scaffold overlay)에 그린다.
+            var confirming by remember { mutableStateOf<SettingsConfirm?>(null) }
+
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Settings,
+                overlay = confirming?.let { pending ->
+                    {
+                        SettingsConfirmDialog(
+                            confirm = pending,
+                            // 로그아웃·탈퇴 모두 화면을 직접 옮기지 않는다.
+                            // 세션이 끊기면 셸이 로그인으로 보낸다.
+                            onConfirmed = {
+                                confirming = null
+                                when (pending) {
+                                    SettingsConfirm.SignOut -> viewModel.signOut()
+                                    SettingsConfirm.Delete -> viewModel.deleteAccount()
+                                }
+                            },
+                            onDismiss = { confirming = null }
+                        )
+                    }
+                }
+            ) {
+                SettingsScreen(state = state, onConfirm = { confirming = it })
             }
         }
     }
@@ -256,10 +279,16 @@ private fun Context.openPolicy(url: String) {
 
 /** 탭바를 두르는 루트 화면. 전체화면 플로우(알약 촬영 등)는 이걸 쓰지 않는다. */
 @Composable
-private fun TabRoot(navController: NavController, tab: NmTab, content: @Composable () -> Unit) {
+private fun TabRoot(
+    navController: NavController,
+    tab: NmTab,
+    overlay: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
     NmTabScaffold(
         selected = tab,
         onSelect = navController::switchTab,
+        overlay = overlay,
         content = content
     )
 }

@@ -26,30 +26,34 @@ import app.nursemate.ui.SystemBarIcons
  *
  * 상단은 상태바 인셋만 피한다. 하단 인셋은 [NmBottomBar] 가 직접 흡수한다 —
  * 바 배경이 제스처 영역까지 이어져야 잘린 것처럼 보이지 않는다.
+ *
+ * @param overlay 화면과 **탭바 위**에 덮는 것(확인 모달 등). [content] 안에서 그리면
+ *                탭바를 덮지 못해, 모달을 띄운 채 탭을 눌러 빠져나갈 수 있다.
+ *                정본도 dim 이 탭바까지 덮는다.
  */
 @Composable
 fun NmTabScaffold(
     selected: NmTab,
     onSelect: (NmTab) -> Unit,
     modifier: Modifier = Modifier,
+    overlay: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val colors = NmTheme.semanticColors
     // 밝은 bg-app 위라 시스템 바 아이콘은 어둡게.
     SystemBarIcons(darkIcons = true)
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .windowInsetsPadding(WindowInsets.statusBars)
-        ) {
-            content()
+    Box(modifier = modifier.fillMaxSize().background(colors.bgApp)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+            ) {
+                content()
+            }
+            NmBottomBar(selected = selected, onSelect = onSelect)
         }
-        NmBottomBar(selected = selected, onSelect = onSelect)
+        overlay?.invoke()
     }
 }

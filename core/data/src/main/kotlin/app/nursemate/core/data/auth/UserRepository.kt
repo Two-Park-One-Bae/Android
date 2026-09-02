@@ -16,4 +16,12 @@ import javax.inject.Singleton
 class UserRepository @Inject constructor(private val userApi: UserApi) {
     /** 실패 사유는 [app.nursemate.core.network.error.ApiFailure] 로 감싸여 온다. */
     suspend fun me(): Result<User> = runCatching { userApi.me() }
+
+    /**
+     * 회원 탈퇴.
+     *
+     * 성공하면 **호출부가 로그아웃까지 해야** 한다 — 서버가 Firebase 사용자를 지워도 기기에
+     * 남은 세션은 그대로라, 로그아웃하지 않으면 없는 계정으로 홈에 앉아 있게 된다.
+     */
+    suspend fun delete(): Result<Unit> = runCatching { userApi.deleteMe() }
 }

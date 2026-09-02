@@ -1,6 +1,7 @@
 package app.nursemate.core.network.api
 
 import app.nursemate.core.model.User
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 
 /**
@@ -22,4 +23,20 @@ interface UserApi {
      */
     @GET("api/v0/users/me")
     suspend fun me(): User
+
+    /**
+     * 회원 탈퇴. 회원·동의·userId 로 키된 데이터와 Firebase 사용자를 지운다(Apple 심사 필수 요건).
+     *
+     * **식별 사용량은 지워지지 않는다** — 지우면 "한도 소진 → 탈퇴 → 재로그인"으로 한도를
+     * 무제한 초기화할 수 있다. 카운트 키가 회원이 아니라 소셜 식별자 해시라 재가입해도 이어진다.
+     * 탈퇴 안내 문구는 이 예외를 사실대로 적어야 한다(spec §탈퇴).
+     *
+     * **멱등** — 이미 지워진 회원이면 남은 정리를 하고 204 를 준다. 재시도가 안전하다.
+     *
+     * @throws app.nursemate.core.network.error.ApiFailure
+     *   500 — Firebase 사용자 삭제가 실패한 경우. 계정이 남아 있으므로 **로그아웃하지 않고**
+     *   재시도한다. 삭제됐다고 안내해 놓고 계정이 살아 있는 상태를 만들지 않기 위해서다.
+     */
+    @DELETE("api/v0/users/me")
+    suspend fun deleteMe()
 }

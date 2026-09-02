@@ -40,6 +40,8 @@ import app.nursemate.R
 import app.nursemate.core.designsystem.NmButtonPrimary
 import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmConfirmDialog
+import app.nursemate.core.designsystem.NmDim
 import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
@@ -93,7 +95,7 @@ fun ConsentScreen(
                 .size(width = 140.dp, height = 124.dp)
         )
 
-        Box(modifier = Modifier.fillMaxSize().background(Dim))
+        Box(modifier = Modifier.fillMaxSize().background(NmDim))
 
         Sheet(
             state = state,
@@ -108,12 +110,15 @@ fun ConsentScreen(
         )
 
         if (confirmingCancel) {
-            CancelDialog(
-                onDismiss = { confirmingCancel = false },
-                onSignOut = {
+            NmConfirmDialog(
+                title = "로그인 화면으로 돌아갈까요?",
+                message = "동의하지 않으면 이용이 제한돼요",
+                confirmLabel = "로그아웃",
+                onConfirm = {
                     confirmingCancel = false
                     onCancel()
-                }
+                },
+                onDismiss = { confirmingCancel = false }
             )
         }
     }
@@ -335,83 +340,9 @@ private fun CheckBox(
     }
 }
 
-/** 취소 확인 — 디자인 `인증 / 동의 취소 확인`. 동의 없이 홈으로 가는 길은 없으므로 결론은 로그아웃이다. */
-@Composable
-private fun CancelDialog(onDismiss: () -> Unit, onSignOut: () -> Unit) {
-    val colors = NmTheme.semanticColors
-
-    Box(
-        modifier = Modifier.fillMaxSize().background(Dim),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(300.dp)
-                .clip(RoundedCornerShape(NmRadius.lg))
-                .background(colors.surface)
-                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = NmSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(22.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(text = "로그인 화면으로 돌아갈까요?", style = DialogTitle, color = colors.textPrimary)
-                Text(
-                    text = "동의하지 않으면 이용이 제한돼요",
-                    style = NmTypography.caption,
-                    color = colors.textSecondary
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                DialogButton(
-                    label = "취소",
-                    container = NmColor.Neutral.C100,
-                    content = colors.textPrimary,
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                )
-                DialogButton(
-                    label = "로그아웃",
-                    container = NmColor.Primary.C500,
-                    content = NmColor.Neutral.C0,
-                    onClick = onSignOut,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-/**
- * 모달 버튼 — 높이 48 · radius 12 · 라벨 15/600.
- *
- * DS 버튼(라벨 16, 패딩으로 높이 ~54)과 규격이 달라 여기서 그린다. 설정의 로그아웃·탈퇴
- * 모달도 같은 규격이라, 그쪽을 만들 때 같으면 DS 로 올린다.
- */
-@Composable
-private fun DialogButton(
-    label: String,
-    container: Color,
-    content: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(NmRadius.md)
-    Box(
-        modifier = modifier
-            .height(48.dp)
-            .clip(shape)
-            .background(container)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = label, style = DialogLabel, color = content)
-    }
-}
-
 /** 정본 y=140/844. 로고가 dim 뒤에 비치는 배경이라 정확한 위치가 중요하진 않다. */
 private val LogoTop = 140.dp
 private val LoadingHeight = 180.dp
-private val Dim = Color(0x990F172A)
 
 // 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
 private val SheetTitle = NmTypography.heading3.copy(fontWeight = FontWeight.Bold)
@@ -421,5 +352,3 @@ private val AllLabel = NmTypography.bodyLarge.copy(fontWeight = FontWeight.SemiB
 private val RequiredBadge = NmTypography.caption.copy(fontWeight = FontWeight.SemiBold)
 private val ItemLabel = NmTypography.bodyLarge.copy(fontSize = 15.sp)
 private val ViewLabel = NmTypography.body.copy(fontSize = 13.sp)
-private val DialogTitle = NmTypography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-private val DialogLabel = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
