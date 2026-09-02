@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose 전용 앱 — 시스템 테마는 최소만. 실제 테마는 NurseMateTheme(Compose)이 담당.
+      런치 테마는 Splash. API 31+ 스플래시 속성은 values-v31에서 얹는다.
+      MainActivity가 onCreate에서 Theme.NurseMate로 되돌린다.
+    -->
+    <style name="Theme.NurseMate.Splash" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/nm_splash_background</item>
+    </style>
+
+    <style name="Theme.NurseMate" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
