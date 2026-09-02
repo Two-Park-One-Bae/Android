@@ -10,6 +10,9 @@ object NmRoute {
     /** 인증 — 스펙상 로그인 없이 홈에 도달하는 경로는 없다. */
     const val LOGIN = "login"
 
+    /** 동의 온보딩 — 로그인은 됐지만 필수 동의가 남은 상태. 동의 없이 홈으로 가는 경로도 없다. */
+    const val CONSENT = "consent"
+
     const val HOME = "home"
     const val PILL = "pill"
     const val TIMER = "timer"

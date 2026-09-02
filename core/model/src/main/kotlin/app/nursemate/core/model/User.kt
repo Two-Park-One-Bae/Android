@@ -66,3 +66,26 @@ data class User(
      */
     val onboardingRequired: Boolean
 )
+
+/**
+ * 서버가 정의한 동의 항목 — `GET /api/v0/consents` 응답.
+ *
+ * ⚠️ **버전·항목명·URL 을 앱에 하드코딩하지 않는다**(spec §동의 온보딩). 약관을 개정하면
+ * 서버가 [version] 을 올리고, 앱은 받은 값 그대로 화면을 그리고 그대로 되돌려 보낸다.
+ * 앱에 박아 두면 개정 때마다 스토어 심사를 기다려야 한다.
+ */
+@Serializable
+data class ConsentDefinition(
+    val type: ConsentType,
+    /** 게시본 시행일 `YYYY-MM-DD`(동일자 재개정은 `.N`). */
+    val version: String,
+    val required: Boolean,
+    /** 전문 URL. '보기'가 이 주소를 연다. */
+    val policyUrl: String,
+    /** 표시용 항목명. 화면 문구는 이걸 쓴다. */
+    val title: String
+)
+
+/** 동의 저장 요청 항목 — `POST /api/v0/users/me/consents`. */
+@Serializable
+data class ConsentAgreement(val type: ConsentType, val version: String, val agreed: Boolean)

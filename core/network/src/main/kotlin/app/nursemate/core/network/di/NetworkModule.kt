@@ -3,6 +3,7 @@ package app.nursemate.core.network.di
 import app.nursemate.core.network.BuildConfig
 import app.nursemate.core.network.NetworkConfig
 import app.nursemate.core.network.api.AuthApi
+import app.nursemate.core.network.api.ConsentApi
 import app.nursemate.core.network.api.UserApi
 import app.nursemate.core.network.auth.AppCheckInterceptor
 import app.nursemate.core.network.auth.AuthHeaderInterceptor
@@ -87,6 +88,10 @@ internal object NetworkModule {
     @Provides
     @Singleton
     fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideConsentApi(retrofit: Retrofit): ConsentApi = retrofit.create(ConsentApi::class.java)
 
     private const val CONNECT_TIMEOUT_SECONDS = 10L
 
