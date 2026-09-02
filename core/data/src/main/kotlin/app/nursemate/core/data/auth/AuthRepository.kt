@@ -1,5 +1,6 @@
 package app.nursemate.core.data.auth
 
+import android.app.Activity
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -53,6 +54,37 @@ interface AuthRepository {
      * 만들어 준다. 결과물은 구글·애플과 같은 Firebase ID 토큰이라 **이후 흐름이 동일하다.**
      */
     suspend fun signInWithCustomToken(customToken: String): Result<Unit>
+
+    /**
+     * 애플로 로그인한다.
+     *
+     * ## 여기만 [Activity]를 받는다
+     * 구글·카카오는 UI 레이어가 토큰을 얻어 오고 이 레이어는 받아 쓰기만 한다. 애플은 그럴 수 없다 —
+     * 안드로이드에는 애플 SDK가 없어서 **Firebase가 직접 웹 플로우 창을 띄우고**(Custom Tab),
+     * 토큰은 우리 손을 거치지 않은 채 세션이 성립한다. 창을 띄우려면 Activity가 있어야 한다.
+     *
+     * 대안은 앱 레이어가 `FirebaseAuth`를 직접 부르는 것인데, 그러면 세션을 바꾸는 곳이 둘로
+     * 갈린다. 데이터 레이어에 Activity가 들어오는 쪽이 덜 나쁘다고 봤다.
+     *
+     * ## 애플 쪽 설정이 있어야 동작한다
+     * Firebase 콘솔의 Apple 공급자에 **Service ID `app.nursemate.signin`** 과 키가 등록돼 있어야 하고,
+     * 그 Service ID에 `https://<프로젝트>.firebaseapp.com/__/auth/handler`가 리턴 URL로 등록돼
+     * 있어야 한다. Apple은 https 리디렉션만 받으므로 이 중계 페이지를 뺄 수 없다.
+     *
+     * @param activity 웹 플로우를 띄울 Activity
+     */
+    suspend fun signInWithApple(activity: Activity): Result<Unit>
+
+    /**
+     * 애플 로그인 도중 프로세스가 죽었을 때 SDK에 남아 있는 결과를 이어받는다.
+     *
+     * 브라우저에 다녀오는 동안 우리 앱은 백그라운드라 메모리 회수 대상이다. 그 사이 죽으면
+     * 사용자는 애플 인증을 마쳤는데 앱은 로그인 화면으로 돌아온다. 그대로 두면 방금 끝낸
+     * 로그인을 또 하게 되므로, 화면이 뜰 때 남은 결과가 있는지 본다.
+     *
+     * @return 이어받을 게 없으면 null
+     */
+    suspend fun resumeAppleSignIn(): Result<Unit>?
 
     /**
      * `Authorization: Bearer`에 실을 Firebase ID 토큰.

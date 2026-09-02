@@ -1,7 +1,9 @@
 package app.nursemate.core.data.auth
 
+import android.app.Activity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +51,34 @@ class FirebaseAuthRepository @Inject constructor(private val auth: FirebaseAuth)
         Unit
     }
 
+    override suspend fun signInWithApple(activity: Activity): Result<Unit> = runCatching {
+        // 새 창을 띄우기 전에 남은 결과부터 본다. 프로세스가 죽었다 살아난 직후라면 사용자는
+        // 이미 애플 인증을 마쳤고, 여기서 또 띄우면 같은 일을 두 번 시키는 셈이다.
+        val pending = auth.pendingAuthResult
+            ?: auth.startActivityForSignInWithProvider(activity, appleProvider())
+        pending.await()
+        Unit
+    }
+
+    override suspend fun resumeAppleSignIn(): Result<Unit>? {
+        val pending = auth.pendingAuthResult ?: return null
+        return runCatching {
+            pending.await()
+            Unit
+        }
+    }
+
+    /**
+     * `name`·`email`은 애플이 **최초 동의 때 한 번만** 내려준다. 지금 화면에서 쓰진 않지만
+     * Firebase가 프로필에 채워 두도록 요청해 둔다 — 나중에 필요해졌을 때는 이미 늦다.
+     *
+     * `locale`은 애플 로그인 페이지 언어다. 안 넣으면 기기가 아니라 애플 계정의 국가를 따라간다.
+     */
+    private fun appleProvider(): OAuthProvider = OAuthProvider.newBuilder(APPLE_PROVIDER_ID, auth)
+        .setScopes(listOf("email", "name"))
+        .addCustomParameter("locale", "ko")
+        .build()
+
     override suspend fun idToken(forceRefresh: Boolean): String? {
         val user = auth.currentUser ?: return null
         return user.getIdToken(forceRefresh).await().token
@@ -60,5 +90,8 @@ class FirebaseAuthRepository @Inject constructor(private val auth: FirebaseAuth)
 
     private companion object {
         const val FIREBASE_PROVIDER = "firebase"
+
+        /** 서버가 `firebase.sign_in_provider`로 보는 값과 같다(api/domains/auth.md §클레임 추출). */
+        const val APPLE_PROVIDER_ID = "apple.com"
     }
 }

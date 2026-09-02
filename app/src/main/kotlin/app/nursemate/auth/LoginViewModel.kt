@@ -1,5 +1,6 @@
 package app.nursemate.auth
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -16,7 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** 로그인 버튼 종류. 진행 표시를 **누른 버튼 위에** 그리려고 구분한다. */
-enum class LoginProvider { Google, Kakao }
+enum class LoginProvider { Google, Apple, Kakao }
 
 /**
  * 로그인 화면 상태.
@@ -40,6 +41,16 @@ class LoginViewModel @Inject constructor(
     private val _state = MutableStateFlow(LoginUiState())
     val state = _state.asStateFlow()
 
+    init {
+        // 애플만 브라우저에 다녀오는 사이 우리 앱이 죽을 수 있다. 그때 남은 결과를 이어받는다.
+        // 평소에는 이어받을 게 없어 즉시 null 이라 화면에 아무 흔적도 남지 않는다 —
+        // 그래서 여기서는 진행 표시를 켜지 않는다.
+        viewModelScope.launch {
+            val result = authRepository.resumeAppleSignIn() ?: return@launch
+            result.finish("애플 로그인 이어받기 실패", Throwable::toAppleAuthError)
+        }
+    }
+
     /**
      * @param activityContext 자격 증명 선택 UI를 띄울 **Activity** 컨텍스트.
      *
@@ -53,21 +64,21 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             googleIdTokenProvider.request(activityContext)
                 .mapCatching { idToken -> authRepository.signInWithGoogle(idToken).getOrThrow() }
-                .onSuccess {
-                    // 화면 전환은 세션 관찰자가 한다. 여기서는 진행 표시만 끈다.
-                    _state.update { it.copy(pending = null) }
-                }
-                .onFailure { throwable ->
-                    // 사용자가 계정 선택을 닫은 건 오류가 아니다 — 문구 없이 원래 화면으로 되돌린다.
-                    when (val error = throwable.toAuthError()) {
-                        is AuthError.Cancelled -> _state.update { LoginUiState() }
+                .finish("구글 로그인 실패", Throwable::toAuthError)
+        }
+    }
 
-                        else -> {
-                            Log.w(TAG, "구글 로그인 실패", throwable)
-                            _state.update { LoginUiState(error = error) }
-                        }
-                    }
-                }
+    /**
+     * 애플 — Firebase가 웹 플로우 창을 직접 띄운다. 그래서 [Activity]가 필요하다
+     * (`AuthRepository.signInWithApple` 주석 참고).
+     */
+    fun signInWithApple(activity: Activity) {
+        if (_state.value.pending != null) return
+        _state.update { LoginUiState(pending = LoginProvider.Apple) }
+
+        viewModelScope.launch {
+            authRepository.signInWithApple(activity)
+                .finish("애플 로그인 실패", Throwable::toAppleAuthError)
         }
     }
 
@@ -88,21 +99,33 @@ class LoginViewModel @Inject constructor(
                 .mapCatching { response ->
                     authRepository.signInWithCustomToken(response.firebaseCustomToken).getOrThrow()
                 }
-                .onSuccess { _state.update { it.copy(pending = null) } }
-                .onFailure { throwable ->
-                    when (val error = throwable.toKakaoAuthError()) {
-                        is AuthError.Cancelled -> _state.update { LoginUiState() }
-
-                        else -> {
-                            Log.w(TAG, "카카오 로그인 실패", throwable)
-                            _state.update { LoginUiState(error = error) }
-                        }
-                    }
-                }
+                .finish("카카오 로그인 실패", Throwable::toKakaoAuthError)
         }
     }
 
     fun dismissError() = _state.update { it.copy(error = null) }
+
+    /**
+     * 로그인 시도의 끝. 세 공급자가 공유한다.
+     *
+     * 성공해도 화면을 옮기지 않는다 — 세션 관찰자가 한다. 여기서는 진행 표시만 끈다.
+     * 사용자가 창을 닫은 건 오류가 아니라, 문구 없이 원래 화면으로 되돌린다.
+     *
+     * @param toError 공급자마다 취소를 알아보는 방법이 달라 밖에서 받는다.
+     */
+    private fun Result<Unit>.finish(failureLog: String, toError: (Throwable) -> AuthError) {
+        onSuccess { _state.update { it.copy(pending = null) } }
+        onFailure { throwable ->
+            when (val error = toError(throwable)) {
+                is AuthError.Cancelled -> _state.update { LoginUiState() }
+
+                else -> {
+                    Log.w(TAG, failureLog, throwable)
+                    _state.update { LoginUiState(error = error) }
+                }
+            }
+        }
+    }
 
     private companion object {
         const val TAG = "NM407"

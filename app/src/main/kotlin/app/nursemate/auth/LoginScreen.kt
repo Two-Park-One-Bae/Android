@@ -22,10 +22,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,22 +59,19 @@ import app.nursemate.ui.SystemBarIcons
  *
  * ## 진행·오류 표시는 정본에 없다
  * 디자인에 로딩·오류 상태 프레임이 없다. 그렇다고 실패를 삼킬 수는 없어 **최소한으로만** 얹었다 —
- * 진행 중에는 구글 버튼의 마크 자리에 인디케이터를 넣고, 오류는 버튼 묶음 위에 한 줄로 띄운다.
+ * 진행 중에는 **누른 버튼의** 마크 자리에 인디케이터를 넣고, 오류는 버튼 묶음 위에 한 줄로 띄운다.
  * 디자인이 나오면 이 두 군데를 교체하면 된다.
  */
 @Composable
 fun LoginScreen(
     state: LoginUiState,
     onGoogleClick: () -> Unit,
+    onAppleClick: () -> Unit,
     onKakaoClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
-
-    // 애플은 아직 붙지 않았다. 눌러도 홈으로 보내지 않는다 —
-    // 세션 없이 홈에 도달하는 경로를 만들면 스펙(로그인 필수)이 깨진다.
-    var pendingProviderNotice by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -124,7 +117,6 @@ fun LoginScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             val notice = state.error?.toMessage()
-                ?: "Apple 로그인은 준비 중이에요".takeIf { pendingProviderNotice }
             if (notice != null) {
                 Text(
                     text = notice,
@@ -140,10 +132,7 @@ fun LoginScreen(
                 container = KakaoYellow,
                 content = Color.Black,
                 enabled = state.pending == null,
-                onClick = {
-                    pendingProviderNotice = false
-                    onKakaoClick()
-                }
+                onClick = onKakaoClick
             ) {
                 if (state.pending == LoginProvider.Kakao) {
                     ProgressMark(color = Color.Black)
@@ -162,14 +151,18 @@ fun LoginScreen(
                 container = Color.Black,
                 content = Color.White,
                 enabled = state.pending == null,
-                onClick = { pendingProviderNotice = true }
+                onClick = onAppleClick
             ) {
-                Icon(
-                    painter = painterResource(DsR.drawable.nm_logo_apple),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(19.dp)
-                )
+                if (state.pending == LoginProvider.Apple) {
+                    ProgressMark(color = Color.White)
+                } else {
+                    Icon(
+                        painter = painterResource(DsR.drawable.nm_logo_apple),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
             }
 
             ProviderButton(
@@ -178,10 +171,7 @@ fun LoginScreen(
                 content = GoogleTextColor,
                 enabled = state.pending == null,
                 border = GoogleBorder,
-                onClick = {
-                    pendingProviderNotice = false
-                    onGoogleClick()
-                }
+                onClick = onGoogleClick
             ) {
                 if (state.pending == LoginProvider.Google) {
                     ProgressMark(color = NmColor.Primary.C500)

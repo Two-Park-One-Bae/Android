@@ -1,5 +1,6 @@
 package app.nursemate.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -81,12 +82,17 @@ private fun NmNavHost(session: AuthSession) {
             val viewModel: LoginViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val context = LocalContext.current
+            val activity = LocalActivity.current
             LoginScreen(
                 state = state,
                 // 자격 증명 선택 UI 를 띄우려면 **Activity** 컨텍스트여야 한다.
                 // Compose 의 LocalContext 는 호스팅 Activity 를 준다.
                 // 카카오도 마찬가지다 — 카카오톡 전환·웹 로그인 모두 Activity 를 요구한다.
                 onGoogleClick = { viewModel.signInWithGoogle(context) },
+                // 애플만 Context 가 아니라 Activity 자체를 요구한다 — Firebase 가 웹 플로우를
+                // 직접 띄우기 때문이다. Compose 밖(프리뷰 등)에서는 null 이라 그때는 아무 일도
+                // 하지 않는다. 실기기에서는 항상 있다.
+                onAppleClick = { activity?.let(viewModel::signInWithApple) },
                 onKakaoClick = { viewModel.signInWithKakao(context) }
             )
         }
