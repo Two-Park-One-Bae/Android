@@ -77,6 +77,7 @@ fun PillResultScreen(
     onRemovePill: (String) -> Unit,
     onEditPill: (String) -> Unit,
     onAddPill: () -> Unit,
+    onConfirm: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
@@ -95,10 +96,10 @@ fun PillResultScreen(
     //
     // 수동 추가 알약은 검출 결과 **뒤에** 붙고 사진에 대응 영역이 없다 — 그래서 목록은
     // 이렇게 한 줄로 합쳐 두고, 오버레이만 [ResultPill.detected] 가 있는 것에만 그린다.
-    val detected = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
-        .mapIndexed { index, pill -> ResultPill(id = pillId(index), detected = pill) }
-        .filterNot { it.id in state.removedPillIds }
-    val pills = detected + state.manualPillIds.map { ResultPill(id = it, detected = null) }
+    val detectedById = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+        .mapIndexed { index, pill -> pillId(index) to pill }
+        .toMap()
+    val pills = state.pillIds().map { ResultPill(id = it, detected = detectedById[it]) }
 
     // 어느 카드의 ⋮ 를 눌렀는가. null 이면 메뉴가 닫힌 상태다.
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -183,7 +184,11 @@ fun PillResultScreen(
                 }
             }
 
-            ResultFooter(identified = pills.count { (id, _) -> id in state.selections }, total = pills.size)
+            ResultFooter(
+                identified = pills.count { it.id in state.selections },
+                total = pills.size,
+                onConfirm = onConfirm
+            )
         }
 
         if (menuFor != null) {
@@ -386,7 +391,7 @@ private fun PillRow(
  * `total > 0` 을 함께 본다.
  */
 @Composable
-private fun ResultFooter(identified: Int, total: Int) {
+private fun ResultFooter(identified: Int, total: Int, onConfirm: () -> Unit) {
     val colors = NmTheme.semanticColors
     val done = total > 0 && identified == total
 
@@ -412,10 +417,9 @@ private fun ResultFooter(identified: Int, total: Int) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
-                .background(
-                    color = if (done) NmColor.Primary.C500 else NmColor.Neutral.C200,
-                    shape = RoundedCornerShape(14.dp)
-                ),
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (done) NmColor.Primary.C500 else NmColor.Neutral.C200)
+                .clickable(enabled = done, onClick = onConfirm),
             contentAlignment = Alignment.Center
         ) {
             Text(

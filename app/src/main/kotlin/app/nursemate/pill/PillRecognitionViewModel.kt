@@ -348,6 +348,20 @@ fun PillUiState.editOf(pillId: String): PillEdit {
     return PillEdit(attribute = attribute, faces = FaceInputs.from(attribute))
 }
 
+/**
+ * 화면에 보이는 순서대로의 알약 키.
+ *
+ * 검출 결과에서 지운 것을 빼고, 수동 추가를 뒤에 붙인다. ⑤ 목록·카드 번호·⑨ 최종 결과가
+ * **모두 이 하나를 따라야** 번호와 차례가 어긋나지 않는다.
+ */
+fun PillUiState.pillIds(): List<String> {
+    val detected = (detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+    return detected.indices.map(::pillId).filterNot { it in removedPillIds } + manualPillIds
+}
+
+/** 확정한 후보만, 보이는 순서대로. 최종 결과(⑨)가 읽는다. */
+fun PillUiState.finalPills(): List<PillCandidate> = pillIds().mapNotNull { selections[it] }
+
 private fun PillUiState.extracted(pillId: String): PillAttribute? =
     (attributes as? AttributePhase.Done)?.byPillId?.get(pillId)
 

@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
@@ -25,13 +26,16 @@ import app.nursemate.pill.PillAnalysisFailedScreen
 import app.nursemate.pill.PillCandidateViewModel
 import app.nursemate.pill.PillCaptureRoute
 import app.nursemate.pill.PillEditScreen
+import app.nursemate.pill.PillFinalScreen
 import app.nursemate.pill.PillLimitAlert
 import app.nursemate.pill.PillLoadingScreen
 import app.nursemate.pill.PillNotFoundScreen
 import app.nursemate.pill.PillPreviewScreen
 import app.nursemate.pill.PillRecognitionViewModel
 import app.nursemate.pill.PillResultScreen
+import app.nursemate.pill.copyPillResult
 import app.nursemate.pill.editOf
+import app.nursemate.pill.finalPills
 import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
 
@@ -50,6 +54,7 @@ fun NavGraphBuilder.pillNavGraph(navController: NavController) {
         capture(navController)
         edit(navController)
         detail(navController)
+        finalResult(navController)
         preview(navController)
         loading(navController)
         result(navController)
@@ -123,6 +128,28 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
             )
         },
         onLoadMore = candidateViewModel::loadMore
+    )
+}
+
+private fun NavGraphBuilder.finalResult(navController: NavController) = composable(NmRoute.PILL_FINAL) { entry ->
+    val viewModel = entry.pillViewModel(navController)
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // 확정한 후보만, 목록에 보이는 순서 그대로 모은다.
+    val pills = state.finalPills()
+
+    PillFinalScreen(
+        pills = pills,
+        // 뒤로 가면 인식 결과에서 이어서 고칠 수 있다(spec §최종 결과·공유).
+        onBack = { navController.popBackStack() },
+        onDetail = { candidate ->
+            navController.navigate(
+                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+            )
+        },
+        onShare = { context.copyPillResult(pills) },
+        onDone = { navController.switchTab(NmTab.Home) }
     )
 }
 
@@ -221,6 +248,7 @@ private fun NavGraphBuilder.result(navController: NavController) = composable(Nm
         onBack = { navController.restartCapture(viewModel) },
         onRemovePill = viewModel.corrections::removePill,
         onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
+        onConfirm = { navController.navigate(NmRoute.PILL_FINAL) },
         // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
         onAddPill = { navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId())) }
     )

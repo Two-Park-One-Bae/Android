@@ -31,6 +31,9 @@ object NmRoute {
 
     fun pillEdit(pillId: String): String = "pill/edit/$pillId"
 
+    /** 최종 결과 리스트. 확정한 알약만 모아 보여준다. */
+    const val PILL_FINAL = "pill/final"
+
     /**
      * 세부정보.
      *
