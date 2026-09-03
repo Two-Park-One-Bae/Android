@@ -239,10 +239,9 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
         val usage by viewModel.usage.collectAsStateWithLifecycle()
         PillLimitAlert(
             usage = usage,
-            onConfirm = {
-                viewModel.discardPhoto()
-                navController.switchTab(NmTab.Home)
-            }
+            // spec §한도 안내 팝업: 확인 시 현재 화면에 머무른다. 로딩까지 온 사진을 버리고
+            // 홈으로 내보내지 않는다 — 자정에 한도가 풀리면 같은 사진으로 바로 재시도할 수 있다.
+            onConfirm = { navController.popBackStack(NmRoute.PILL_PREVIEW, inclusive = false) }
         )
     }
 }
