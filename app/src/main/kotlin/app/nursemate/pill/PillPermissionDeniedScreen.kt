@@ -59,6 +59,7 @@ fun PillPermissionDeniedScreen(onBack: () -> Unit, onPickFromGallery: (Uri) -> U
         modifier = modifier
             .fillMaxSize()
             .background(colors.bgApp)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         NmNavBar(title = "알약 촬영", onBack = onBack)
 
