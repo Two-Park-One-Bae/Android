@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+            디자인시스템 갤러리 — 개발 확인용. debug 빌드에만 병합된다.
+            런처에는 두지 않는다(아이콘이 둘로 보이면 헷갈린다). adb 로 직접 띄운다:
+              adb shell am start -n app.nursemate.debug/app.nursemate.gallery.DesignGalleryActivity
+        -->
+        <activity
+            android:name="app.nursemate.gallery.DesignGalleryActivity"
+            android:theme="@style/Theme.NurseMate"
+            android:exported="true" />
+    </application>
+</manifest>
