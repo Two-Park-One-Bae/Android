@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
@@ -41,9 +42,14 @@ fun NmListRow(
     onClick: (() -> Unit)? = null
 ) {
     val colors = NmTheme.semanticColors
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = modifier
-            .background(colors.surface, RoundedCornerShape(14.dp))
+            // ⚠️ clip 이 clickable 보다 **앞**에 와야 한다. 없으면 눌렀을 때 리플이 둥근 모서리를
+            //    무시하고 사각형으로 번져 나간다 — background(shape) 는 배경만 깎을 뿐
+            //    자식 인디케이션까지 잘라 주지 않는다.
+            .clip(shape)
+            .background(colors.surface, shape)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = NmSpacing.md, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -101,9 +107,14 @@ fun NmFeatureCard(
     onClick: (() -> Unit)? = null
 ) {
     val colors = NmTheme.semanticColors
+    val shape = RoundedCornerShape(20.dp)
     Row(
         modifier = modifier
-            .background(colors.surface, RoundedCornerShape(20.dp))
+            // ⚠️ clip 이 clickable 보다 **앞**에 와야 한다. 없으면 눌렀을 때 리플이 둥근 모서리를
+            //    무시하고 사각형으로 번져 나간다 — background(shape) 는 배경만 깎을 뿐
+            //    자식 인디케이션까지 잘라 주지 않는다.
+            .clip(shape)
+            .background(colors.surface, shape)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             // 20dp — spacing 토큰(16/24) 사이 값이라 명시한다.
             .padding(20.dp),
@@ -167,6 +178,10 @@ fun NmChip(
     val shape = RoundedCornerShape(20.dp)
     Row(
         modifier = modifier
+            // ⚠️ clip 이 clickable 보다 **앞**에 와야 한다. 없으면 눌렀을 때 리플이 둥근 모서리를
+            //    무시하고 사각형으로 번져 나간다 — background(shape) 는 배경만 깎을 뿐
+            //    자식 인디케이션까지 잘라 주지 않는다.
+            .clip(shape)
             .background(containerColor, shape)
             .border(1.dp, borderColor, shape)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }

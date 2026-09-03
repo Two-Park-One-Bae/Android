@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,16 +44,25 @@ fun NmNavBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)?
         horizontalArrangement = Arrangement.spacedBy(NmSpacing.sm)
     ) {
         if (onBack != null) {
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_chevron_left),
-                contentDescription = "뒤로",
-                tint = colors.textPrimary,
+            // ⚠️ 아이콘에 바로 clickable 을 걸면 터치 타깃이 아이콘 크기(26)와 같아진다.
+            //    정본이 정한 건 **꺾쇠의 크기**지 누를 수 있는 넓이가 아니다 — 그림은 26 으로
+            //    두고 과녁만 넓힌다(같은 모듈의 NmIconButton 도 40 이다).
+            Box(
                 modifier = Modifier
-                    .size(SideSlot)
-                    .clickable(onClick = onBack)
-            )
+                    .size(TouchSlot)
+                    .clip(CircleShape)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.nm_ic_chevron_left),
+                    contentDescription = "뒤로",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(SideSlot)
+                )
+            }
         } else {
-            Box(modifier = Modifier.size(SideSlot))
+            Box(modifier = Modifier.size(TouchSlot))
         }
 
         Text(
@@ -63,9 +74,15 @@ fun NmNavBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)?
             modifier = Modifier.weight(1f)
         )
 
-        Box(modifier = Modifier.size(SideSlot))
+        // 왼쪽 과녁과 같은 폭이라야 제목이 정중앙에 온다.
+        Box(modifier = Modifier.size(TouchSlot))
     }
 }
 
 private val NavBarHeight = 56.dp
+
+/** 정본이 정한 꺾쇠 크기. */
 private val SideSlot = 26.dp
+
+/** 누를 수 있는 넓이. Material 권장 최소는 48 이지만 56 높이 바 안이라 40 으로 둔다. */
+private val TouchSlot = 40.dp
