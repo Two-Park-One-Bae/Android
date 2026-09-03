@@ -194,8 +194,18 @@ class PillRecognitionViewModel @Inject constructor(
             }
     }
 
+    /**
+     * 목록에서 알약 하나를 뺀다 (spec NM-134).
+     *
+     * 오탐이거나 인식 대상이 아닌 알약을 지우는 용도다. 사진 위 영역 표시도 함께 사라지고
+     * 번호가 다시 매겨진다 — 화면이 알아서 하도록 여기서는 id 만 기록한다.
+     */
+    fun removePill(pillId: String) {
+        _state.update { it.copy(removedPillIds = it.removedPillIds + pillId) }
+    }
+
     /** 세션 안에서만 쓰는 키. 화면의 번호(1부터)와 같게 둬서 로그를 대조하기 쉽게 한다. */
-    private fun pillIdOf(index: Int): String = (index + 1).toString()
+    private fun pillIdOf(index: Int): String = pillId(index)
 
     /**
      * 원본 사진을 학습데이터로 올린다 (NM-348).
@@ -241,7 +251,14 @@ data class PillUiState(
     val isLoadingPhoto: Boolean = false,
     val errorMessage: String? = null,
     val detection: DetectionPhase = DetectionPhase.Idle,
-    val attributes: AttributePhase = AttributePhase.Idle
+    val attributes: AttributePhase = AttributePhase.Idle,
+    /**
+     * 사용자가 목록에서 뺀 알약의 pillId.
+     *
+     * 검출 결과 자체를 고치지 않고 가려서 보여준다 — 원본을 지우면 되돌릴 수 없고,
+     * 서버에 이미 보낸 속성과 짝이 어긋난다. 번호는 남은 것들로 다시 매긴다.
+     */
+    val removedPillIds: Set<String> = emptySet()
 )
 
 /**
@@ -287,3 +304,11 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
     compress(Bitmap.CompressFormat.PNG, 100, out)
     out.toByteArray()
 }
+
+/**
+ * 검출 순서(0부터)로 정하는 세션 로컬 키.
+ *
+ * 서버 요청에 실어 보낸 값이라 **삭제로 번호가 바뀌어도 이 키는 그대로다** —
+ * 화면의 표시 번호와 헷갈리지 않게 둘을 나눠 둔다.
+ */
+internal fun pillId(index: Int): String = (index + 1).toString()

@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -39,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmConfirmDialog
 import app.nursemate.core.designsystem.NmNavBar
@@ -61,7 +63,12 @@ import app.nursemate.ui.SystemBarIcons
  * ⋮ 메뉴(수정·삭제)와 '+ 알약 추가'도 후보 선택이 가능해진 뒤에 붙인다.
  */
 @Composable
-fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun PillResultScreen(
+    state: PillUiState,
+    onBack: () -> Unit,
+    onRemovePill: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
@@ -71,9 +78,17 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
     var confirmingExit by remember { mutableStateOf(false) }
     BackHandler { confirmingExit = true }
 
-    val pills = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
-    // pillId 는 화면 번호(1부터)와 같게 보냈다 — PillRecognitionViewModel.pillIdOf 참고.
     val attributes = (state.attributes as? AttributePhase.Done)?.byPillId.orEmpty()
+
+    // 지운 알약은 목록·사진 표시·번호에서 함께 빠진다. pillId 는 검출 순서로 고정돼 있어
+    // 번호가 다시 매겨져도 서버에 보낸 키와 어긋나지 않는다.
+    val pills = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+        .mapIndexed { index, pill -> pillId(index) to pill }
+        .filterNot { (id, _) -> id in state.removedPillIds }
+
+    // 어느 카드의 ⋮ 를 눌렀는가. null 이면 메뉴가 닫힌 상태다.
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    var deletingFor by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -97,7 +112,7 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     PillPhotoCard(photo = state.photo) {
-                        pills.forEachIndexed { index, pill ->
+                        pills.forEachIndexed { index, (_, pill) ->
                             DetectionMarker(pill = pill, number = index + 1)
                         }
                     }
@@ -116,8 +131,13 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
                                 style = ListTitle,
                                 color = colors.textPrimary
                             )
-                            pills.forEachIndexed { index, pill ->
-                                PillRow(pill = pill, number = index + 1, attribute = attributes[(index + 1).toString()])
+                            pills.forEachIndexed { index, (id, pill) ->
+                                PillRow(
+                                    pill = pill,
+                                    number = index + 1,
+                                    attribute = attributes[id],
+                                    onMenuClick = { menuFor = id }
+                                )
                             }
                         }
 
@@ -141,6 +161,31 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
             }
 
             ResultFooter(identified = 0, total = pills.size)
+        }
+
+        if (menuFor != null) {
+            PillCardMenu(
+                // 수정 화면은 ⑧(NM-395)에서 붙인다. 지금 눌러도 갈 곳이 없어 메뉴만 닫는다.
+                onEdit = { menuFor = null },
+                onDelete = {
+                    deletingFor = menuFor
+                    menuFor = null
+                },
+                onDismiss = { menuFor = null }
+            )
+        }
+
+        deletingFor?.let { target ->
+            NmConfirmDialog(
+                title = "이 알약을 삭제할까요?",
+                confirmLabel = "삭제",
+                confirmContainer = NmColor.Error.C500,
+                onConfirm = {
+                    deletingFor = null
+                    onRemovePill(target)
+                },
+                onDismiss = { deletingFor = null }
+            )
         }
 
         if (confirmingExit) {
@@ -202,7 +247,7 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
  *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
  */
 @Composable
-private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?) {
+private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, onMenuClick: () -> Unit) {
     val colors = NmTheme.semanticColors
     Column(
         modifier = Modifier
@@ -246,11 +291,18 @@ private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?) 
                 modifier = Modifier.weight(1f)
             )
 
+            // 정본 카드에는 chevron 이 그려져 있지만, 스펙(§수정·삭제)은 수정·삭제 **둘 다**
+            // ⋮ 메뉴로만 들어간다고 못박는다("수정 진입도 동일 ⋮ 메뉴 경유"). 둘을 함께 두면
+            // 좁은 행에 서로 다른 동작을 하는 과녁이 두 개 생긴다 — 스펙을 따른다.
             Icon(
-                painter = painterResource(DsR.drawable.nm_ic_chevron_right),
-                contentDescription = null,
+                painter = painterResource(R.drawable.nm_ic_more_vertical),
+                contentDescription = "메뉴",
                 tint = colors.textTertiary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onMenuClick)
+                    .padding(5.dp)
             )
         }
 

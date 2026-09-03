@@ -122,7 +122,11 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
 private fun NavGraphBuilder.result(navController: NavController) = composable(NmRoute.PILL_RESULT) { entry ->
     val viewModel = entry.pillViewModel(navController)
     val state by viewModel.state.collectAsStateWithLifecycle()
-    PillResultScreen(state = state, onBack = { navController.restartCapture(viewModel) })
+    PillResultScreen(
+        state = state,
+        onBack = { navController.restartCapture(viewModel) },
+        onRemovePill = viewModel::removePill
+    )
 }
 
 private fun NavGraphBuilder.notFound(navController: NavController) = composable(NmRoute.PILL_NOT_FOUND) { entry ->

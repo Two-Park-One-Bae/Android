@@ -135,3 +135,55 @@ data class Usage(
 /** 전송용 이미지. `data` 는 base64 다 — 크롭은 알파를 살려야 하므로 PNG 로 인코딩한다. */
 @Serializable
 data class Image(val mimeType: String, val data: String)
+
+/** 허가 상태. `REVOKED` 는 취하·취소·유효기간만료·폐업을 묶은 값이다(spec §LicenseStatus). */
+@Serializable(with = LicenseStatusSerializer::class)
+enum class LicenseStatus { NORMAL, REVOKED, UNKNOWN }
+
+object LicenseStatusSerializer : FallbackEnumSerializer<LicenseStatus>(
+    "LicenseStatus",
+    LicenseStatus.entries.toTypedArray(),
+    LicenseStatus.UNKNOWN
+)
+
+/**
+ * 후보 검색의 **면 필터** — `POST /api/v0/pill-candidates` 요청 전용.
+ *
+ * ⚠️ **응답 [PillFace] 와 null 의미가 정반대다.** 응답에서 null 은 "그 알약에 없다" 지만,
+ * 요청에서 null 은 **"조건에서 빼라"** 다. 없음을 조건으로 걸려면 값을 명시해야 한다:
+ * - 각인 없음 → `imprint = ""` (null 이 아니다)
+ * - 분할선 없음 → `dividingLine = NONE`
+ * - 마크 없음 → `hasMark = false`
+ *
+ * 둘을 뒤섞으면 "각인 없는 알약"을 찾으려다 조건이 통째로 빠져 엉뚱한 후보가 나온다.
+ */
+@Serializable
+data class PillFaceRequest(
+    val imprint: String? = null,
+    val dividingLine: DividingLine? = null,
+    val hasMark: Boolean? = null
+)
+
+/**
+ * 후보 알약 하나.
+ *
+ * @param pillCode 품목기준코드. 후보 선택을 확정하는 키다.
+ * @param licenseStatus [LicenseStatus.REVOKED] 면 '허가 종료' 배지를 달고 뒤로 밀린다.
+ *                      **선택은 막지 않는다** — 지참약이 허가 종료 품목일 수 있어서
+ *                      허가상태는 판단 보조 정보지 차단 조건이 아니다(spec §수정·후보 선택).
+ * @param pillThumbnailUrl 서버가 pillCode 로 **항상** 조립해 준다. 다만 낱알 이미지가 없는
+ *                         품목은 CDN 이 404 를 주므로 로드 실패 시 플레이스홀더로 처리한다.
+ */
+@Serializable
+data class PillCandidate(
+    val pillCode: String,
+    val licenseStatus: LicenseStatus,
+    val pillName: String? = null,
+    val companyName: String? = null,
+    val pillThumbnailUrl: String? = null,
+    val pillImageUrl: String? = null
+)
+
+/** 커서 페이지네이션. [nextCursor] 가 null 이면 마지막 장이다. */
+@Serializable
+data class PillCandidatePage(val candidates: List<PillCandidate>, val hasNext: Boolean, val nextCursor: String? = null)

@@ -2,6 +2,11 @@ package app.nursemate.core.network.api
 
 import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
+import app.nursemate.core.model.PillCandidatePage
+import app.nursemate.core.model.PillColor
+import app.nursemate.core.model.PillFaceRequest
+import app.nursemate.core.model.PillFormulation
+import app.nursemate.core.model.PillShape
 import app.nursemate.core.model.Usage
 import kotlinx.serialization.Serializable
 import retrofit2.http.Body
@@ -42,6 +47,20 @@ interface PillApi {
     suspend fun attributes(@Body request: PillAttributesRequest): PillAttributesResponse
 
     /**
+     * 수정한 속성으로 후보를 조회한다.
+     *
+     * **하드 필터 AND** 다 — 넣은 조건만 적용되고, 넣을수록 좁아진다. 조건이 좁으면
+     * 후보 0개가 정상 응답이다(빈 목록). 속성을 고칠 때마다 다시 부른다.
+     *
+     * 정렬은 서버가 한다: 허가 정상 우선 → 색 정확 일치 우선 → pillCode 오름차순.
+     * 앱이 다시 정렬하면 그 규칙이 어긋난다.
+     *
+     * 식별 횟수를 **차감하지 않는다**(Gemini 미사용).
+     */
+    @POST("api/v0/pill-candidates")
+    suspend fun candidates(@Body request: PillCandidatesRequest): PillCandidatePage
+
+    /**
      * 원본 이미지 업로드용 presigned PUT URL.
      *
      * 학습데이터 축적용이고 **식별과 완전히 분리**돼 있다 — 키를 식별 요청에 넘기지 않고,
@@ -64,6 +83,28 @@ data class PillAttributesResponse(
     /** 이번 차감이 반영된 사용량. 화면의 남은 횟수는 이 값으로 갱신한다. */
     val usage: Usage
 )
+
+/**
+ * 후보 조회 요청.
+ *
+ * ⚠️ 면 필터([front]·[back])의 null 은 **"조건 제외"** 다 — 응답의 [app.nursemate.core.model.PillFace]
+ * 와 뜻이 반대라는 걸 [PillFaceRequest] 주석에 적어 뒀다.
+ *
+ * @param size 1~50. 범위를 벗어나면 서버가 400 `INVALID_PAGINATION` 을 준다(clamp 없음).
+ */
+@Serializable
+data class PillCandidatesRequest(
+    val colors: List<PillColor> = emptyList(),
+    val isTransparent: Boolean? = null,
+    val shape: PillShape? = null,
+    val formulation: PillFormulation? = null,
+    val front: PillFaceRequest? = null,
+    val back: PillFaceRequest? = null,
+    val cursor: String? = null,
+    val size: Int = DEFAULT_PAGE_SIZE
+)
+
+private const val DEFAULT_PAGE_SIZE = 20
 
 @Serializable
 data class UploadUrlResponse(val uploadUrl: String, val expiresAt: String)

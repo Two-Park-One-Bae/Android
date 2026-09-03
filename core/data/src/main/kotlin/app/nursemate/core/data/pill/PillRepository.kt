@@ -2,10 +2,12 @@ package app.nursemate.core.data.pill
 
 import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
+import app.nursemate.core.model.PillCandidatePage
 import app.nursemate.core.model.Usage
 import app.nursemate.core.network.api.PillApi
 import app.nursemate.core.network.api.PillAttributeItem
 import app.nursemate.core.network.api.PillAttributesRequest
+import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.network.api.PillErrorReader
 import app.nursemate.core.network.error.ApiErrorCode
 import app.nursemate.core.network.error.ApiFailure
@@ -68,6 +70,17 @@ class PillRepository @Inject constructor(
             throw throwable
         }
     }
+
+    /**
+     * 수정한 속성으로 후보를 조회한다.
+     *
+     * 속성이 바뀔 때마다 불린다 — 호출부가 이전 요청을 취소해야 타이핑 중에 응답이
+     * 뒤섞이지 않는다(코루틴 취소로 처리한다).
+     *
+     * 조건이 좁아 후보가 0개인 것은 **오류가 아니다.** 빈 목록으로 온다.
+     */
+    suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidatePage> =
+        runCatching { pillApi.candidates(request) }
 
     /**
      * 원본 사진을 학습데이터로 올린다. **결과를 기다릴 필요가 없다** —
