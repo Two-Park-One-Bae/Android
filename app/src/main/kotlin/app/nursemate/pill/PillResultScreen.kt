@@ -25,6 +25,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmConfirmDialog
 import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
@@ -59,77 +64,98 @@ import app.nursemate.ui.SystemBarIcons
 fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
-    BackHandler(onBack = onBack)
+
+    // 여기서 나가면 **이미 차감된 식별 1회**와 사용자가 고친 속성이 함께 사라진다.
+    // 미리보기②는 "다시 찍으면 됨"이라 확인 없이 보내지만, 이 화면은 대가가 다르다.
+    // iOS 도 같은 자리에 확인을 둔다(DrugIdentificationVC "지금 나가면 식별한 내용이 사라져요").
+    var confirmingExit by remember { mutableStateOf(false) }
+    BackHandler { confirmingExit = true }
 
     val pills = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
     // pillId 는 화면 번호(1부터)와 같게 보냈다 — PillRecognitionViewModel.pillIdOf 참고.
     val attributes = (state.attributes as? AttributePhase.Done)?.byPillId.orEmpty()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        NmNavBar(title = "인식 결과", onBack = onBack)
-
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxSize()
+                .background(colors.bgApp)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                PillPhotoCard(photo = state.photo) {
-                    pills.forEachIndexed { index, pill ->
-                        DetectionMarker(pill = pill, number = index + 1)
-                    }
-                }
-            }
+            NmNavBar(title = "인식 결과", onBack = { confirmingExit = true })
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
             ) {
-                when (val phase = state.detection) {
-                    is DetectionPhase.Success -> {
-                        Text(
-                            text = "알약 ${pills.size}개를 찾았어요",
-                            style = ListTitle,
-                            color = colors.textPrimary
-                        )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    PillPhotoCard(photo = state.photo) {
                         pills.forEachIndexed { index, pill ->
-                            PillRow(pill = pill, number = index + 1, attribute = attributes[(index + 1).toString()])
+                            DetectionMarker(pill = pill, number = index + 1)
                         }
                     }
+                }
 
-                    // 탐지 0개는 `⑥ 결과 없음`, 실패는 `⑦ 분석 실패`로 갈라져야 한다.
-                    // 그 화면들을 만들기 전까지는 여기서 사실만 알린다.
-                    DetectionPhase.Empty -> Text(
-                        text = "알약을 찾지 못했어요",
-                        style = ListTitle,
-                        color = colors.textSecondary
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    when (val phase = state.detection) {
+                        is DetectionPhase.Success -> {
+                            Text(
+                                text = "알약 ${pills.size}개를 찾았어요",
+                                style = ListTitle,
+                                color = colors.textPrimary
+                            )
+                            pills.forEachIndexed { index, pill ->
+                                PillRow(pill = pill, number = index + 1, attribute = attributes[(index + 1).toString()])
+                            }
+                        }
 
-                    is DetectionPhase.Failed -> Text(
-                        text = phase.message,
-                        style = NmTypography.body,
-                        color = NmColor.Error.C600
-                    )
+                        // 탐지 0개는 `⑥ 결과 없음`, 실패는 `⑦ 분석 실패`로 갈라져야 한다.
+                        // 그 화면들을 만들기 전까지는 여기서 사실만 알린다.
+                        DetectionPhase.Empty -> Text(
+                            text = "알약을 찾지 못했어요",
+                            style = ListTitle,
+                            color = colors.textSecondary
+                        )
 
-                    else -> Unit
+                        is DetectionPhase.Failed -> Text(
+                            text = phase.message,
+                            style = NmTypography.body,
+                            color = NmColor.Error.C600
+                        )
+
+                        else -> Unit
+                    }
                 }
             }
+
+            ResultFooter(identified = 0, total = pills.size)
         }
 
-        ResultFooter(identified = 0, total = pills.size)
+        if (confirmingExit) {
+            NmConfirmDialog(
+                title = "지금 나가면 식별한 내용이 사라져요",
+                message = "사용한 식별 횟수는 돌아오지 않아요",
+                confirmLabel = "나가기",
+                confirmContainer = NmColor.Error.C500,
+                onConfirm = {
+                    confirmingExit = false
+                    onBack()
+                },
+                onDismiss = { confirmingExit = false }
+            )
+        }
     }
 }
 
