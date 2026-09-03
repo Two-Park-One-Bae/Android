@@ -19,11 +19,31 @@
 - 주입 경로: `secrets.properties`(gitignored) > 환경변수 — `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` (`secrets.properties.sample` 참고).
 - 서명 정보가 없으면 release 빌드는 **미서명**으로 산출된다 (PR CI가 여기 해당 — 빌드는 성공하되 Play 업로드 불가).
 
+## 검출 모델 (필수 · 저장소에 없음)
+
+알약 식별용 ONNX 모델은 **저장소에 넣지 않는다.** 119MB 바이너리라 한 번 커밋하면 이후 모든
+clone 이 영구히 그 비용을 낸다(git 은 큰 파일을 되돌려 지우지 못한다).
+
+릴리스 빌드 전에 직접 둔다:
+
+```bash
+cp <모델 보관처>/rfdetr_seg_small.onnx app/src/main/assets/
+```
+
+- 파일이 없으면 `bundleRelease`·`assembleRelease` 가 **실패한다**(`app/build.gradle.kts` 의 가드).
+  조용히 모델 없는 AAB 가 나가면 사용자는 식별할 때마다 '분석 실패'만 본다.
+- ⚠️ **그래서 릴리스 AAB 는 CI 가 아니라 로컬에서 만든다.** `release.yml` 이 만드는 산출물에는
+  모델이 없다 — Play 에 올리지 말 것.
+- 앱은 첫 식별 때 asset 을 앱 전용 저장소로 꺼내 쓴다(`PillModelFile`). 저장소를 두 배 쓰므로,
+  Play Asset Delivery 나 원격 다운로드로 옮기는 건 NM-396 ADR 에서 정한다.
+- 디버그 빌드는 `getExternalFilesDir()` 에 파일이 있으면 그쪽을 먼저 쓴다(양자화 비교용).
+
 ## 로컬 릴리스 빌드
 
 ```bash
 # 사전: certificates 레포가 Android 레포와 같은 부모 폴더에 클론돼 있고,
 #       secrets.properties에 RELEASE_* 4개 키가 채워져 있어야 한다.
+#       app/src/main/assets/rfdetr_seg_small.onnx 가 있어야 한다(위 참고).
 ./gradlew :app:bundleRelease
 # 산출물: app/build/outputs/bundle/release/app-release.aab
 # 서명 확인: jarsigner -verify app/build/outputs/bundle/release/app-release.aab

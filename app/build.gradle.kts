@@ -41,8 +41,8 @@ android {
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     signingConfigs {
@@ -126,4 +126,30 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+}
+
+// 릴리스 산출물에 검출 모델이 빠지지 않게 막는다.
+//
+// 모델(119MB)은 저장소에 넣지 않으므로(.gitignore) 파일이 없어도 빌드는 그냥 성공한다 —
+// 그 AAB 를 올리면 사용자는 알약 식별을 시도할 때마다 '분석 실패'만 본다.
+// 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
+//
+// 디버그는 막지 않는다 — adb 로 밀어 넣은 파일로 돌릴 수 있다.
+// `run { }` 으로 감싸 **진짜 지역 변수**로 만든다. 스크립트 최상위 val 로 두면 그것도
+// 스크립트 프로퍼티라, doFirst 가 스크립트 객체를 붙들어 설정 캐시가 직렬화하지 못한다.
+run {
+    val detectionModel = layout.projectDirectory.file("src/main/assets/rfdetr_seg_small.onnx").asFile
+
+    tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
+        doFirst {
+            check(detectionModel.isFile) {
+                """
+                검출 모델이 없습니다: $detectionModel
+
+                저장소에 넣지 않는 파일이라 릴리스 빌드 전에 직접 두어야 합니다.
+                자세한 절차는 docs/RELEASE.md 참고.
+                """.trimIndent()
+            }
+        }
+    }
 }

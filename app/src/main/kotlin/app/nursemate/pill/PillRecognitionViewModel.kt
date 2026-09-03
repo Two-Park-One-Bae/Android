@@ -16,7 +16,6 @@ import app.nursemate.core.vision.PillDetector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
-import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +37,7 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class PillRecognitionViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val modelFile: PillModelFile,
     private val pillRepository: PillRepository,
     private val usageHolder: UsageHolder
 ) : ViewModel() {
@@ -217,18 +217,11 @@ class PillRecognitionViewModel @Inject constructor(
     }
 
     /**
-     * 모델을 읽어 세션을 만든다.
-     *
-     * ⚠️ 모델(119 MB)은 APK에 넣지 않는다. 개발 중에는 앱 전용 외부 저장소에 adb push 해서 쓴다:
-     * ```
-     * adb push rfdetr_seg_small.onnx /sdcard/Android/data/app.nursemate.debug/files/
-     * ```
-     * 릴리스 배포 방식(Play Asset Delivery vs 다운로드)은 아직 정하지 않았다.
+     * 모델을 읽어 세션을 만든다. 파일을 어디서 가져오는지는 [PillModelFile] 이 정한다 —
+     * 릴리스는 APK asset, 디버그는 adb 로 밀어 넣은 파일이 있으면 그쪽.
      */
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
-        val file = File(context.getExternalFilesDir(null), PillDetector.MODEL_FILE_NAME)
-        require(file.isFile) { "모델 파일이 없습니다:\n${file.absolutePath}" }
-        PillDetector(file).also { detector = it }
+        PillDetector(modelFile.prepare()).also { detector = it }
     }
 
     override fun onCleared() {
