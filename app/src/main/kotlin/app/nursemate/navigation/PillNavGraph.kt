@@ -12,9 +12,11 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import app.nursemate.home.NmTab
+import app.nursemate.pill.AttributePhase
 import app.nursemate.pill.DetectionPhase
 import app.nursemate.pill.PillAnalysisFailedScreen
 import app.nursemate.pill.PillCaptureRoute
+import app.nursemate.pill.PillLimitAlert
 import app.nursemate.pill.PillLoadingScreen
 import app.nursemate.pill.PillNotFoundScreen
 import app.nursemate.pill.PillPreviewScreen
@@ -57,8 +59,10 @@ private fun NavGraphBuilder.capture(navController: NavController) = composable(N
 private fun NavGraphBuilder.preview(navController: NavController) = composable(NmRoute.PILL_PREVIEW) { entry ->
     val viewModel = entry.pillViewModel(navController)
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val usage by viewModel.usage.collectAsStateWithLifecycle()
     PillPreviewScreen(
         state = state,
+        usage = usage,
         onRetake = {
             viewModel.discardPhoto()
             navController.popBackStack()
@@ -77,14 +81,24 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
     // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
     //
     // 검출 0개는 실패가 아니라 정상 결과라 ⑥으로, 모델·추론이 깨진 것만 ⑦로 간다.
-    LaunchedEffect(state.detection) {
-        val destination = when (state.detection) {
-            is DetectionPhase.Success -> NmRoute.PILL_RESULT
-            DetectionPhase.Empty -> NmRoute.PILL_NOT_FOUND
-            is DetectionPhase.Failed -> NmRoute.PILL_FAILED
+    // 로딩 화면은 **온디바이스 검출과 서버 속성 추출을 함께** 덮는다(spec §한도 도달 플로우의 B).
+    // 검출만 끝났다고 결과로 보내면 속성 칸이 빈 채로 한 번 그려진다.
+    LaunchedEffect(state.detection, state.attributes) {
+        val destination = when {
+            state.detection == DetectionPhase.Empty -> NmRoute.PILL_NOT_FOUND
+
+            state.detection is DetectionPhase.Failed -> NmRoute.PILL_FAILED
+
+            state.attributes is AttributePhase.Done -> NmRoute.PILL_RESULT
+
+            state.attributes is AttributePhase.Failed -> NmRoute.PILL_FAILED
+
+            // 한도 도달은 화면을 옮기지 않고 이 위에 안내를 덮는다.
             else -> null
         }
         if (destination != null) {
+            // 결과 화면으로 **갈아탄다**(로딩을 스택에서 뺀다). 그냥 쌓으면 결과에서
+            // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
             navController.navigate(destination) {
                 popUpTo(NmRoute.PILL_LOADING) { inclusive = true }
             }
@@ -92,6 +106,17 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
     }
 
     PillLoadingScreen(state = state)
+
+    if (state.attributes == AttributePhase.LimitReached) {
+        val usage by viewModel.usage.collectAsStateWithLifecycle()
+        PillLimitAlert(
+            usage = usage,
+            onConfirm = {
+                viewModel.discardPhoto()
+                navController.switchTab(NmTab.Home)
+            }
+        )
+    }
 }
 
 private fun NavGraphBuilder.result(navController: NavController) = composable(NmRoute.PILL_RESULT) { entry ->
@@ -121,7 +146,9 @@ private fun NavGraphBuilder.failed(navController: NavController) = composable(Nm
     val viewModel = entry.pillViewModel(navController)
     val state by viewModel.state.collectAsStateWithLifecycle()
     PillAnalysisFailedScreen(
-        message = (state.detection as? DetectionPhase.Failed)?.message,
+        // 검출(모델)과 속성 추출(네트워크) 중 실제로 실패한 쪽의 사유를 보여준다.
+        message = (state.detection as? DetectionPhase.Failed)?.message
+            ?: (state.attributes as? AttributePhase.Failed)?.message,
         onRetry = {
             viewModel.retryDetection()
             navController.navigate(NmRoute.PILL_LOADING) {
