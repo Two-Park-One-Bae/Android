@@ -10,6 +10,7 @@ import app.nursemate.core.data.pill.DailyLimitReached
 import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
+import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
 import app.nursemate.core.vision.PillDetector
@@ -160,9 +161,22 @@ class PillRecognitionViewModel @Inject constructor(
         _state.update { it.copy(attributes = AttributePhase.Running) }
 
         // 원본 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
-        uploadOriginal()
+        //
+        // JPEG 일 때만 보낸다 — presigned 서명에 image/jpeg 가 박혀 있어 갤러리에서 고른
+        // HEIC·PNG 를 그 타입으로 올리면 깨진 파일이 쌓인다. 촬영 결과는 항상 JPEG 다.
+        // **화면이 쓰는 비트맵이 아니라 원본 URI 에서 읽는다** — 그 비트맵은 축소·크롭됐다.
+        sourceUri?.let { uri ->
+            viewModelScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        if (context.contentResolver.getType(uri) != JPEG_MIME) return@withContext null
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    }
+                }.getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
+            }
+        }
 
-        val pillIds = result.pills.indices.map(::pillIdOf)
+        val pillIds = result.pills.indices.map(::pillId)
 
         // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 Gemini 를
         // 부르면 5~8초씩 기다리고 하루 15회 한도가 오후에 바닥난다. 릴리스에서는 늘 null 이다.
@@ -172,7 +186,7 @@ class PillRecognitionViewModel @Inject constructor(
         }
 
         val crops = result.pills.mapIndexed { index, pill ->
-            pillIdOf(index) to pill.crop.toPngBytes()
+            pillId(index) to pill.crop.toPngBytes()
         }.toMap()
 
         pillRepository.attributes(crops)
@@ -205,6 +219,16 @@ class PillRecognitionViewModel @Inject constructor(
             }
     }
 
+    /** 사용자가 고친 속성·각인을 갈무리한다. 서버가 준 원본은 건드리지 않는다. */
+    fun updateEdit(pillId: String, edit: PillEdit) {
+        _state.update { it.copy(edits = it.edits + (pillId to edit)) }
+    }
+
+    /** 후보를 확정한다. 취소하면 부르지 않으므로 여기 오면 사용자가 확인을 누른 것이다. */
+    fun selectCandidate(pillId: String, candidate: PillCandidate) {
+        _state.update { it.copy(selections = it.selections + (pillId to candidate)) }
+    }
+
     /**
      * 목록에서 알약 하나를 뺀다 (spec NM-134).
      *
@@ -215,32 +239,6 @@ class PillRecognitionViewModel @Inject constructor(
         _state.update { it.copy(removedPillIds = it.removedPillIds + pillId) }
     }
 
-    /** 세션 안에서만 쓰는 키. 화면의 번호(1부터)와 같게 둬서 로그를 대조하기 쉽게 한다. */
-    private fun pillIdOf(index: Int): String = pillId(index)
-
-    /**
-     * 원본 사진을 학습데이터로 올린다 (NM-348).
-     *
-     * **JPEG 일 때만 보낸다.** presigned 서명에 `image/jpeg` 가 박혀 있어 다른 형식을 그
-     * 타입으로 올리면 파일이 깨진 채 쌓인다 — 갤러리에서 HEIC·PNG 를 고를 수 있다.
-     * 촬영 결과는 항상 JPEG 라 정상 경로에서는 늘 올라간다.
-     */
-    private fun uploadOriginal() {
-        val uri = sourceUri ?: return
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    if (context.contentResolver.getType(uri) != JPEG_MIME) return@withContext null
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }
-            }.getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
-        }
-    }
-
-    /**
-     * 모델을 읽어 세션을 만든다. 파일을 어디서 가져오는지는 [PillModelFile] 이 정한다 —
-     * 릴리스는 APK asset, 디버그는 adb 로 밀어 넣은 파일이 있으면 그쪽.
-     */
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
         PillDetector(modelFile.prepare()).also { detector = it }
     }
@@ -269,7 +267,17 @@ data class PillUiState(
      * 검출 결과 자체를 고치지 않고 가려서 보여준다 — 원본을 지우면 되돌릴 수 없고,
      * 서버에 이미 보낸 속성과 짝이 어긋난다. 번호는 남은 것들로 다시 매긴다.
      */
-    val removedPillIds: Set<String> = emptySet()
+    val removedPillIds: Set<String> = emptySet(),
+    /**
+     * 사용자가 고친 속성·각인. 서버가 뽑은 값 위에 덮어쓴다.
+     *
+     * 서버 응답을 직접 수정하지 않고 따로 둔다 — 어디까지가 자동값이고 어디부터 사람이
+     * 고친 것인지 구분되어야, 나중에 추출 품질을 되짚을 수 있다.
+     * 손대기 전에는 항목이 없고, 그때는 추출값에서 만들어 쓴다([editOf]).
+     */
+    val edits: Map<String, PillEdit> = emptyMap(),
+    /** 확정한 후보. 카드 제목이 '알약을 선택해주세요'에서 품목명으로 바뀐다. */
+    val selections: Map<String, PillCandidate> = emptyMap()
 )
 
 /**
@@ -323,3 +331,18 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
  * 화면의 표시 번호와 헷갈리지 않게 둘을 나눠 둔다.
  */
 internal fun pillId(index: Int): String = (index + 1).toString()
+
+/**
+ * 수정 화면이 들고 고칠 값.
+ *
+ * 아직 안 건드린 알약은 서버 추출값에서 만들어 준다 — 추출까지 실패했으면 빈 값에서 시작한다
+ * (spec §개별 추출 실패 — 그때도 사용자가 직접 채워 후보를 찾을 수 있어야 한다).
+ */
+fun PillUiState.editOf(pillId: String): PillEdit {
+    edits[pillId]?.let { return it }
+    val attribute = extracted(pillId) ?: PillAttribute(pillId = pillId)
+    return PillEdit(attribute = attribute, faces = FaceInputs.from(attribute))
+}
+
+private fun PillUiState.extracted(pillId: String): PillAttribute? =
+    (attributes as? AttributePhase.Done)?.byPillId?.get(pillId)

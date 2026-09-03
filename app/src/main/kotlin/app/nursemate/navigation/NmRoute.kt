@@ -25,4 +25,9 @@ object NmRoute {
     const val PILL_RESULT = "pill/result"
     const val PILL_NOT_FOUND = "pill/not-found"
     const val PILL_FAILED = "pill/failed"
+
+    /** 수정·후보 선택. 어느 알약인지 pillId 로 받는다. */
+    const val PILL_EDIT = "pill/edit/{pillId}"
+
+    fun pillEdit(pillId: String): String = "pill/edit/$pillId"
 }

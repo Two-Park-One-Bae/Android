@@ -9,19 +9,25 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import androidx.navigation.navArgument
 import app.nursemate.home.NmTab
 import app.nursemate.pill.AttributePhase
 import app.nursemate.pill.DetectionPhase
 import app.nursemate.pill.PillAnalysisFailedScreen
+import app.nursemate.pill.PillCandidateViewModel
 import app.nursemate.pill.PillCaptureRoute
+import app.nursemate.pill.PillEditScreen
 import app.nursemate.pill.PillLimitAlert
 import app.nursemate.pill.PillLoadingScreen
 import app.nursemate.pill.PillNotFoundScreen
 import app.nursemate.pill.PillPreviewScreen
 import app.nursemate.pill.PillRecognitionViewModel
 import app.nursemate.pill.PillResultScreen
+import app.nursemate.pill.editOf
+import app.nursemate.pill.pillId
 
 /**
  * 알약 식별 플로우 — 촬영① → 미리보기② → 로딩④ → 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
@@ -36,6 +42,7 @@ import app.nursemate.pill.PillResultScreen
 fun NavGraphBuilder.pillNavGraph(navController: NavController) {
     navigation(startDestination = NmRoute.PILL_CAPTURE, route = NmRoute.PILL_GRAPH) {
         capture(navController)
+        edit(navController)
         preview(navController)
         loading(navController)
         result(navController)
@@ -53,6 +60,42 @@ private fun NavGraphBuilder.capture(navController: NavController) = composable(N
         },
         // 촬영이 알약 탭의 첫 화면이라 뒤로 갈 곳이 없다. 닫으면 홈으로 보낸다.
         onClose = { navController.switchTab(NmTab.Home) }
+    )
+}
+
+private fun NavGraphBuilder.edit(navController: NavController) = composable(
+    route = NmRoute.PILL_EDIT,
+    arguments = listOf(navArgument("pillId") { type = NavType.StringType })
+) { entry ->
+    val viewModel = entry.pillViewModel(navController)
+    val candidateViewModel: PillCandidateViewModel = hiltViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val candidates by candidateViewModel.state.collectAsStateWithLifecycle()
+
+    val pillId = entry.arguments?.getString("pillId").orEmpty()
+    val edit = state.editOf(pillId)
+
+    // 속성·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
+    LaunchedEffect(edit) { candidateViewModel.search(edit.attribute, edit.faces) }
+
+    val detected = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+    val index = state.detection.let { detected.indices.firstOrNull { i -> pillId(i) == pillId } }
+
+    PillEditScreen(
+        number = (index ?: 0) + 1,
+        crop = index?.let { detected.getOrNull(it)?.crop },
+        attribute = edit.attribute,
+        onAttributeChange = { viewModel.updateEdit(pillId, edit.copy(attribute = it)) },
+        faces = edit.faces,
+        onFacesChange = { viewModel.updateEdit(pillId, edit.copy(faces = it)) },
+        candidates = candidates,
+        selected = state.selections[pillId],
+        onBack = { navController.popBackStack() },
+        // 확인 버튼(⑧-f)은 다음 단계다. 지금은 고르면 바로 기억해 둔다.
+        onSelect = { viewModel.selectCandidate(pillId, it) },
+        // 세부정보(⑩)는 다음 단계다. 지금은 아무 데도 가지 않는다.
+        onDetail = { },
+        onLoadMore = candidateViewModel::loadMore
     )
 }
 
@@ -125,7 +168,8 @@ private fun NavGraphBuilder.result(navController: NavController) = composable(Nm
     PillResultScreen(
         state = state,
         onBack = { navController.restartCapture(viewModel) },
-        onRemovePill = viewModel::removePill
+        onRemovePill = viewModel::removePill,
+        onEditPill = { navController.navigate(NmRoute.pillEdit(it)) }
     )
 }
 
@@ -162,28 +206,4 @@ private fun NavGraphBuilder.failed(navController: NavController) = composable(Nm
         // 사진은 살려 둔다 — 미리보기에서 '이 사진 사용'을 다시 누를 수 있어야 한다.
         onBack = { navController.popBackStack() }
     )
-}
-
-/**
- * 알약 플로우가 공유하는 ViewModel.
- *
- * 화면(`entry`)이 아니라 **`pill` 그래프**에 스코프한다. 화면마다 새로 만들면 미리보기에서
- * 고른 사진이 로딩 화면으로 넘어가지 않는다.
- */
-@Composable
-private fun NavBackStackEntry.pillViewModel(navController: NavController): PillRecognitionViewModel {
-    val graphEntry = remember(this) { navController.getBackStackEntry(NmRoute.PILL_GRAPH) }
-    return hiltViewModel(graphEntry)
-}
-
-/** 사진을 버리고 촬영 화면으로 되돌아간다. */
-private fun NavController.restartCapture(viewModel: PillRecognitionViewModel) {
-    viewModel.discardPhoto()
-    popBackStack(NmRoute.PILL_CAPTURE, inclusive = false)
-}
-
-/** 알약 플로우를 접고 홈으로 나간다. 촬영이 그래프 시작점이라 단순 pop 으로는 못 나간다. */
-private fun NavController.exitToHome(viewModel: PillRecognitionViewModel) {
-    viewModel.discardPhoto()
-    switchTab(NmTab.Home)
 }

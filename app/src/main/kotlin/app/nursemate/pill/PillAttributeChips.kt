@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -44,16 +45,23 @@ import app.nursemate.core.model.PillShape
  * 각인계열은 MVP 에서 서버가 뽑지 않아 **항상 미인식**이다(수동 입력 — spec §개별 추출 실패).
  */
 @Composable
-fun PillAttributeChips(attribute: PillAttribute?, modifier: Modifier = Modifier) {
+fun PillAttributeChips(attribute: PillAttribute?, faces: FaceInputs, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             ColorGroup(colors = attribute?.colors, transparent = attribute?.isTransparent == true)
             ShapeGroup(shape = attribute?.shape)
             FormulationGroup(formulation = attribute?.formulation)
         }
-        FaceRow(face = "앞", value = attribute?.front)
-        FaceRow(face = "뒤", value = attribute?.back)
+        // 정본에서 앞뒤 두 줄은 `표기값` 프레임 하나로 묶여 간격이 5 다(칩 줄과는 6).
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) { ImprintValues(faces) }
     }
+}
+
+/** 앞뒤 표기값 두 줄. ⑤ 인식 결과 카드와 ⑧ 수정 카드가 같은 모양을 쓴다. */
+@Composable
+internal fun ImprintValues(faces: FaceInputs) {
+    FaceRow(face = "앞", input = faces.front)
+    FaceRow(face = "뒤", input = faces.back)
 }
 
 @Composable
@@ -88,7 +96,7 @@ private fun FormulationGroup(formulation: PillFormulation?) = AttributeGroup(lab
         return@AttributeGroup
     }
     FormulationIcon(formulation)
-    ChipText(formulation.label)
+    ChipText(formulation.chipLabel)
 }
 
 /** 라벨 + 회색 칩 한 쌍. 정본의 `색상 G` · `모양 G` · `제형 G` 가 같은 모양이다. */
@@ -96,7 +104,8 @@ private fun FormulationGroup(formulation: PillFormulation?) = AttributeGroup(lab
 private fun AttributeGroup(label: String, content: @Composable () -> Unit) {
     val colors = NmTheme.semanticColors
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = FieldLabel, color = colors.textTertiary)
+        // 정본이 라벨 폭을 24 로 못박는다 — 색상·모양·제형 칩의 시작선이 흔들리지 않게 한다.
+        Text(text = label, style = FieldLabel, color = colors.textTertiary, modifier = Modifier.width(24.dp))
         Row(
             modifier = Modifier
                 .background(NmColor.Neutral.C100, RoundedCornerShape(NmChipRadius))
@@ -108,37 +117,46 @@ private fun AttributeGroup(label: String, content: @Composable () -> Unit) {
     }
 }
 
-/** 한 면의 각인·구분선·마크. 셋 다 같은 폭을 나눠 가져 앞뒤 줄이 세로로 맞는다. */
+/**
+ * 한 면의 각인·구분선·마크. 셋 다 같은 폭을 나눠 가져 앞뒤 줄이 세로로 맞는다.
+ *
+ * ## '없음'과 '미인식'은 필터와 같은 뜻이어야 한다
+ * ⚠️ [PillFace] 를 받아 그리면 안 된다 — 거기서는 null 이 '없음' 하나뿐이라, 사용자가 각인만
+ * 적은 면의 구분선·마크까지 '없음'이라고 단언하게 된다. 정작 후보 조회는 그 둘을 조건에서
+ * 빼고 있어 화면과 필터가 어긋난다. 그래서 화면 입력값([FaceInput])을 그대로 읽는다.
+ */
 @Composable
-private fun FaceRow(face: String, value: PillFace?) {
+private fun FaceRow(face: String, input: FaceInput) {
     val colors = NmTheme.semanticColors
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text = face, style = FaceLabel, color = colors.textTertiary, modifier = Modifier.width(16.dp))
-        FaceField(label = "각인", value = value?.imprint, missing = value != null, size = 13.sp)
-        FaceField(label = "구분선", value = value?.dividingLine?.label, missing = value != null, size = 14.sp)
+        FaceField(label = "각인", value = input.imprint.ifBlank { null }, blank = input.blank, size = 13.sp)
+        FaceField(
+            label = "구분선",
+            // NONE 은 사용자가 '없음'을 고른 것이라 값이 있는 셈이다 — 아래 blank 와 결과가 같다.
+            value = input.dividingLine?.label,
+            blank = input.blank,
+            size = 14.sp
+        )
         FaceField(
             label = "마크",
-            value = if (value == null) {
-                null
-            } else if (value.hasMark) {
-                "있음"
-            } else {
-                null
-            },
-            missing = value != null,
+            value = "있음".takeIf { input.hasMark },
+            blank = input.blank,
             size = 12.sp
         )
     }
 }
 
 /**
- * @param missing 면 정보 자체는 받았고 이 항목만 비었는가. true 면 '없음', false 면 '미인식'.
- *                각인계열은 MVP 에서 서버가 아예 안 보내므로 지금은 늘 '미인식'이다.
+ * @param blank 이 면이 통째로 '해당 없음'인가. true 면 값이 비었을 때 '없음', false 면 '미인식'.
+ *              둘을 뒤섞으면 후보 조회가 조건으로 걸지도 않은 것을 화면이 단언하게 된다.
  */
 @Composable
-private fun FaceField(label: String, value: String?, missing: Boolean, size: androidx.compose.ui.unit.TextUnit) {
+private fun RowScope.FaceField(label: String, value: String?, blank: Boolean, size: androidx.compose.ui.unit.TextUnit) {
     val colors = NmTheme.semanticColors
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // 정본에서 각인·구분선·마크 칸이 모두 fill_container 다 — 셋이 폭을 균등하게 나눠 가져야
+    // 앞줄과 뒷줄의 칩이 세로로 맞는다. weight 를 빼면 글자 길이대로 밀려 어긋난다.
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text = label, style = FieldLabel, color = colors.textTertiary)
         Box(
             modifier = Modifier
@@ -146,7 +164,7 @@ private fun FaceField(label: String, value: String?, missing: Boolean, size: and
                 .padding(horizontal = 7.dp, vertical = 1.dp)
         ) {
             Text(
-                text = value ?: if (missing) "없음" else "미인식",
+                text = value ?: if (blank) "없음" else "미인식",
                 style = FieldValue.copy(fontSize = size),
                 color = if (value != null) colors.textPrimary else colors.textTertiary
             )

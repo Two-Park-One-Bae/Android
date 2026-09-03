@@ -53,6 +53,7 @@ import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillFace
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
+import app.nursemate.pill.FaceInputs
 import app.nursemate.pill.PillAttributeChips
 
 /**
@@ -244,7 +245,8 @@ private fun AttributeChipStates() {
 
     cases.forEach { (label, attribute) ->
         Text(text = label, style = NmTypography.caption, color = NmTheme.semanticColors.textTertiary)
-        PillAttributeChips(attribute = attribute)
+        // 각인 표기값은 화면 입력([FaceInputs])이 정본이라 따로 넣는다 — 서버는 MVP 에서 안 보낸다.
+        PillAttributeChips(attribute = attribute, faces = attribute?.let(FaceInputs::from) ?: FaceInputs())
     }
 }
 

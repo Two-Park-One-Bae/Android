@@ -1,0 +1,268 @@
+package app.nursemate.pill
+
+import android.graphics.Bitmap
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.nursemate.R
+import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmNavBar
+import app.nursemate.core.designsystem.NmTheme
+import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.PillAttribute
+import app.nursemate.core.model.PillCandidate
+import app.nursemate.ui.SystemBarIcons
+
+/**
+ * 수정·후보 선택 — 디자인 `⑧-a 진입 (선택 전)`.
+ *
+ * 위에 속성 카드, 아래에 그 속성으로 조회한 후보. **속성을 고치면 후보가 곧바로 바뀐다.**
+ *
+ * ## 후보 0개는 오류가 아니다
+ * 하드 필터 AND 라 조건이 좁으면 아무것도 안 걸린다. 그때는 조건을 풀라고 안내한다
+ * (spec §수정·후보 선택 — NM-246).
+ *
+ * ## 허가 종료 품목도 고를 수 있다
+ * 지참약이 허가 종료 품목일 수 있어 허가상태는 **판단 보조 정보지 차단 조건이 아니다.**
+ * 배지만 달고 서버가 정한 순서(뒤쪽)를 그대로 따른다.
+ */
+@Composable
+fun PillEditScreen(
+    number: Int,
+    crop: Bitmap?,
+    attribute: PillAttribute,
+    onAttributeChange: (PillAttribute) -> Unit,
+    faces: FaceInputs,
+    onFacesChange: (FaceInputs) -> Unit,
+    candidates: CandidateUiState,
+    selected: PillCandidate?,
+    onBack: () -> Unit,
+    onSelect: (PillCandidate) -> Unit,
+    onDetail: (PillCandidate) -> Unit,
+    onLoadMore: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = NmTheme.semanticColors
+    SystemBarIcons(darkIcons = true)
+
+    // 어느 선택판을 펼쳐 뒀는지는 화면만의 사정이라 뷰모델에 두지 않는다. 회전해도 남게 Saveable.
+    var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
+
+    // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
+    // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
+    var frontText by remember { mutableStateOf(TextFieldValue(faces.front.imprint)) }
+    var backText by remember { mutableStateOf(TextFieldValue(faces.back.imprint)) }
+    var focusedSide by remember { mutableStateOf<FaceSide?>(null) }
+
+    // ⚠️ 포커스만 보고 기호 바를 띄우면 안 된다. 뒤로 키로 키보드를 내려도 각인 칸은 포커스를
+    //    쥔 채라 바가 화면 아래에 홀로 남는다. 키보드가 실제로 떠 있는지를 함께 본다.
+    //    (safeDrawing 을 먹은 Column 안이어도 WindowInsets.ime 는 창 원본 값을 준다.)
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(imeVisible) {
+        if (!imeVisible) {
+            focusedSide = null
+            // 포커스까지 풀어야 각인 칸 테두리가 파란 채로 남지 않는다. 키보드를 내린 것은
+            // "다 적었다"는 뜻인데 칸만 열려 있으면 아직 입력 중처럼 보인다.
+            focusManager.clearFocus()
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.bgApp)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
+        NmNavBar(title = "수정", onBack = onBack)
+
+        // LazyColumn 이라야 목록 끝에 닿았는지 알 수 있다 — 무한 스크롤의 전제다.
+        // verticalScroll Column 안에 넣으면 높이가 무한이라 그 판단을 못 한다.
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                PillEditAttributeCard(
+                    number = number,
+                    crop = crop,
+                    attribute = attribute,
+                    faces = faces,
+                    open = open,
+                    onToggle = { panel ->
+                        open = panel.takeIf { it != open }
+                        if (open != AttributePanel.Imprint) focusedSide = null
+                    },
+                    onColorToggle = { color ->
+                        val current = attribute.colors.orEmpty()
+                        onAttributeChange(
+                            attribute.copy(colors = if (color in current) current - color else current + color)
+                        )
+                    },
+                    onTransparentChange = { onAttributeChange(attribute.copy(isTransparent = it)) },
+                    onChange = onAttributeChange,
+                    imprint = {
+                        ImprintPanel(
+                            faces = faces,
+                            frontText = frontText,
+                            backText = backText,
+                            onChange = onFacesChange,
+                            onTextChange = { side, value ->
+                                if (side == FaceSide.Front) frontText = value else backText = value
+                            },
+                            onFocus = { side -> focusedSide = side }
+                        )
+                    },
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "후보", style = SectionTitle, color = colors.textPrimary)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.nm_ic_zap),
+                            contentDescription = null,
+                            tint = NmColor.Primary.C500,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(text = "실시간", style = HintLabel, color = NmColor.Primary.C600)
+                    }
+                }
+            }
+
+            if (candidates.candidates.isEmpty()) {
+                item { EmptyNote(candidates.emptyMessage()) }
+            } else {
+                itemsIndexed(candidates.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
+                    // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
+                    if (index == candidates.candidates.lastIndex && candidates.hasMore) {
+                        LaunchedEffect(candidate.pillCode) { onLoadMore() }
+                    }
+                    PillCandidateRow(
+                        candidate = candidate,
+                        selected = candidate.pillCode == selected?.pillCode,
+                        onClick = { onSelect(candidate) },
+                        onDetailClick = { onDetail(candidate) }
+                    )
+                }
+
+                if (candidates.loadingMore) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                color = NmColor.Primary.C500,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "후보를 선택하면 확인 버튼이 나타나요",
+                        style = SelectHint,
+                        color = colors.textTertiary,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                    )
+                }
+            }
+
+            item {
+                Text(
+                    text = "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
+                        "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
+                    style = Disclaimer,
+                    color = colors.textTertiary,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                )
+            }
+        }
+
+        val side = focusedSide
+        if (side != null && open == AttributePanel.Imprint && imeVisible) {
+            PillSymbolBar(
+                onSymbol = { symbol ->
+                    val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
+                    if (side == FaceSide.Front) {
+                        frontText = next
+                        onFacesChange(faces.copy(front = faces.front.copy(imprint = next.text)))
+                    } else {
+                        backText = next
+                        onFacesChange(faces.copy(back = faces.back.copy(imprint = next.text)))
+                    }
+                }
+            )
+        }
+    }
+}
+
+/** 후보가 없을 때의 안내 — 왜 없는지에 따라 할 말이 다르다. */
+private fun CandidateUiState.emptyMessage(): String = when {
+    loading -> "후보를 찾고 있어요"
+
+    failed -> "후보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"
+
+    // 조회는 했는데 0개 = 조건이 좁은 것. 조회 전과 구분해서 다른 말을 한다.
+    searched -> "조건에 맞는 알약이 없어요. 속성을 하나 풀어 보세요"
+
+    else -> "속성을 고르면 후보를 찾아드려요"
+}
+
+@Composable
+private fun EmptyNote(text: String) {
+    Text(
+        text = text,
+        style = SelectHint,
+        color = NmTheme.semanticColors.textTertiary,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp)
+    )
+}
+
+// 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
+private val SectionTitle = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
+private val HintLabel = NmTypography.caption.copy(fontWeight = FontWeight.Medium)
+private val SelectHint = NmTypography.body.copy(fontSize = 13.sp)
+private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal)

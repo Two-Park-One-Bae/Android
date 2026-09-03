@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
@@ -52,8 +53,7 @@ internal fun TransparentTag() {
 
 /** 모양 아이콘 — 정본이 도형 자체로 알려 준다. 이름만 있으면 훑을 때 눈에 안 들어온다. */
 @Composable
-internal fun ShapeIcon(shape: PillShape) {
-    val tint = NmTheme.semanticColors.textTertiary
+internal fun ShapeIcon(shape: PillShape, tint: Color = NmTheme.semanticColors.textTertiary) {
     when (shape) {
         PillShape.ROUND -> Box(Modifier.size(13.dp).background(tint, CircleShape))
 
@@ -69,8 +69,7 @@ internal fun ShapeIcon(shape: PillShape) {
 
 /** 제형 아이콘 — 정제는 분할선 있는 원, 캡슐은 이음매 있는 알약 모양. */
 @Composable
-internal fun FormulationIcon(formulation: PillFormulation) {
-    val tint = NmTheme.semanticColors.textTertiary
+internal fun FormulationIcon(formulation: PillFormulation, tint: Color = NmTheme.semanticColors.textTertiary) {
     Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
         when (formulation) {
             PillFormulation.HARD_CAPSULE, PillFormulation.SOFT_CAPSULE -> {

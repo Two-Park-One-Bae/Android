@@ -52,7 +52,6 @@ import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.vision.DetectedPill
 import app.nursemate.ui.SystemBarIcons
 
@@ -72,6 +71,7 @@ fun PillResultScreen(
     state: PillUiState,
     onBack: () -> Unit,
     onRemovePill: (String) -> Unit,
+    onEditPill: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
@@ -83,7 +83,7 @@ fun PillResultScreen(
     var confirmingExit by remember { mutableStateOf(false) }
     BackHandler { confirmingExit = true }
 
-    val attributes = (state.attributes as? AttributePhase.Done)?.byPillId.orEmpty()
+    // ⚠️ 추출 결과 맵을 직접 읽지 않는다 — 수정 화면에서 고친 값이 여기 반영돼야 한다.
 
     // 지운 알약은 목록·사진 표시·번호에서 함께 빠진다. pillId 는 검출 순서로 고정돼 있어
     // 번호가 다시 매겨져도 서버에 보낸 키와 어긋나지 않는다.
@@ -142,7 +142,7 @@ fun PillResultScreen(
                                 PillRow(
                                     pill = pill,
                                     number = index + 1,
-                                    attribute = attributes[id],
+                                    edit = state.editOf(id),
                                     onMenuClick = { topEnd ->
                                         menuTopEnd = topEnd
                                         menuFor = id
@@ -176,8 +176,11 @@ fun PillResultScreen(
         if (menuFor != null) {
             PillCardMenu(
                 topEnd = menuTopEnd,
-                // 수정 화면은 ⑧(NM-395)에서 붙인다. 지금 눌러도 갈 곳이 없어 메뉴만 닫는다.
-                onEdit = { menuFor = null },
+                onEdit = {
+                    val target = menuFor
+                    menuFor = null
+                    target?.let(onEditPill)
+                },
                 onDelete = {
                     deletingFor = menuFor
                     menuFor = null
@@ -258,7 +261,7 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
  *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
  */
 @Composable
-private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, onMenuClick: (IntOffset) -> Unit) {
+private fun PillRow(pill: DetectedPill, number: Int, edit: PillEdit, onMenuClick: (IntOffset) -> Unit) {
     val colors = NmTheme.semanticColors
     // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
     var cardRight by remember { mutableIntStateOf(0) }
@@ -298,7 +301,7 @@ private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, 
             )
 
             // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다.
-            val failed = attribute?.failed == true
+            val failed = edit.attribute.failed
             Text(
                 text = if (failed) "정보 인식 실패 · 직접 입력해 주세요" else "알약을 선택해주세요",
                 style = RowTitle,
@@ -322,7 +325,7 @@ private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, 
             )
         }
 
-        PillAttributeChips(attribute = attribute)
+        PillAttributeChips(attribute = edit.attribute, faces = edit.faces)
     }
 }
 
