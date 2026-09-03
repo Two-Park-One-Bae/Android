@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
@@ -39,18 +42,28 @@ import app.nursemate.core.designsystem.NmTypography
  * 계속 보여주면서** 바깥을 눌러 닫으라는 신호이기 때문이다. 같은 농도로 두면 모달처럼
  * 읽혀서 바깥을 누를 생각을 안 하게 된다.
  *
+ * @param topEnd 메뉴의 **우측 상단이 놓일 화면 좌표**(px).
+ *               가로는 카드 오른쪽 끝(⋮ 버튼에 맞추면 카드 안쪽 여백만큼 들어가 보인다),
+ *               세로는 ⋮ 버튼 바로 아래다(버튼을 가리지 않는다). 계산은 카드가 한다.
  * @param onDismiss 스크림을 눌렀을 때. 메뉴는 선택 없이 닫힐 수 있다.
  */
 @Composable
-fun PillCardMenu(onEdit: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun PillCardMenu(
+    topEnd: IntOffset,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
+    val density = LocalDensity.current
 
     Box(modifier = modifier.fillMaxSize().background(Scrim).clickable(onClick = onDismiss)) {
         Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 20.dp, top = MenuTop)
-                .width(150.dp)
+                // 우측 상단을 받은 지점에 맞춘다 — 폭만큼 왼쪽으로 민다.
+                .offset { IntOffset(x = topEnd.x - with(density) { MenuWidth.roundToPx() }, y = topEnd.y) }
+                .width(MenuWidth)
                 .clip(RoundedCornerShape(12.dp))
                 .background(colors.surface)
                 .border(1.dp, colors.border, RoundedCornerShape(12.dp))
@@ -94,14 +107,7 @@ private fun MenuItem(icon: Int, label: String, tint: Color, labelColor: Color, o
     }
 }
 
-/**
- * 메뉴가 내려오는 높이.
- *
- * 정본은 눌린 카드의 우측 상단에 붙지만, 여기서는 화면 위쪽 고정 위치에 띄운다 —
- * 카드마다 좌표를 재서 띄우려면 각 카드의 화면상 위치를 위로 올려야 하고, 스크롤되는
- * 목록에서 그 값이 계속 흔들린다. 어느 카드의 메뉴인지는 스크림 뒤로 보이는 카드가 알려 준다.
- */
-private val MenuTop = 100.dp
+private val MenuWidth = 150.dp
 
 /** 정본 `#0F172A4D` — 확인 모달(60%)보다 옅다. */
 private val Scrim = Color(0x4D0F172A)

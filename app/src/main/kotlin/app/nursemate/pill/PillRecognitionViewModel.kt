@@ -38,6 +38,7 @@ import kotlinx.coroutines.withContext
 class PillRecognitionViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val modelFile: PillModelFile,
+    private val attributeCache: PillAttributeCache,
     private val pillRepository: PillRepository,
     private val usageHolder: UsageHolder
 ) : ViewModel() {
@@ -161,6 +162,15 @@ class PillRecognitionViewModel @Inject constructor(
         // 원본 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
         uploadOriginal()
 
+        val pillIds = result.pills.indices.map(::pillIdOf)
+
+        // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 Gemini 를
+        // 부르면 5~8초씩 기다리고 하루 15회 한도가 오후에 바닥난다. 릴리스에서는 늘 null 이다.
+        attributeCache.load(pillIds)?.let { cached ->
+            _state.update { it.copy(attributes = AttributePhase.Done(cached.associateBy(PillAttribute::pillId))) }
+            return
+        }
+
         val crops = result.pills.mapIndexed { index, pill ->
             pillIdOf(index) to pill.crop.toPngBytes()
         }.toMap()
@@ -168,6 +178,7 @@ class PillRecognitionViewModel @Inject constructor(
         pillRepository.attributes(crops)
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
+                attributeCache.save(extracted.items)
                 _state.update {
                     it.copy(attributes = AttributePhase.Done(extracted.items.associateBy(PillAttribute::pillId)))
                 }

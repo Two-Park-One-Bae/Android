@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,9 +37,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
@@ -88,6 +93,8 @@ fun PillResultScreen(
 
     // 어느 카드의 ⋮ 를 눌렀는가. null 이면 메뉴가 닫힌 상태다.
     var menuFor by remember { mutableStateOf<String?>(null) }
+    // 메뉴 우측 상단이 놓일 지점 — 가로는 카드 오른쪽 끝, 세로는 ⋮ 버튼 아래.
+    var menuTopEnd by remember { mutableStateOf(IntOffset.Zero) }
     var deletingFor by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -136,7 +143,10 @@ fun PillResultScreen(
                                     pill = pill,
                                     number = index + 1,
                                     attribute = attributes[id],
-                                    onMenuClick = { menuFor = id }
+                                    onMenuClick = { topEnd ->
+                                        menuTopEnd = topEnd
+                                        menuFor = id
+                                    }
                                 )
                             }
                         }
@@ -165,6 +175,7 @@ fun PillResultScreen(
 
         if (menuFor != null) {
             PillCardMenu(
+                topEnd = menuTopEnd,
                 // 수정 화면은 ⑧(NM-395)에서 붙인다. 지금 눌러도 갈 곳이 없어 메뉴만 닫는다.
                 onEdit = { menuFor = null },
                 onDelete = {
@@ -247,11 +258,15 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
  *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
  */
 @Composable
-private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, onMenuClick: () -> Unit) {
+private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, onMenuClick: (IntOffset) -> Unit) {
     val colors = NmTheme.semanticColors
+    // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
+    var cardRight by remember { mutableIntStateOf(0) }
+    var menuTop by remember { mutableIntStateOf(0) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { cardRight = it.positionInRoot().round().x + it.size.width }
             .background(colors.surface, RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -300,8 +315,9 @@ private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?, 
                 tint = colors.textTertiary,
                 modifier = Modifier
                     .size(28.dp)
+                    .onGloballyPositioned { menuTop = it.positionInRoot().round().y + it.size.height }
                     .clip(CircleShape)
-                    .clickable(onClick = onMenuClick)
+                    .clickable { onMenuClick(IntOffset(cardRight, menuTop)) }
                     .padding(5.dp)
             )
         }
