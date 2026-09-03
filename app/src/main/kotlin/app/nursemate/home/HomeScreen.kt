@@ -22,6 +22,7 @@ import app.nursemate.core.designsystem.NmFeatureCard
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.Usage
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -34,6 +35,7 @@ import java.util.Locale
  */
 @Composable
 fun HomeScreen(
+    usage: Usage?,
     onPillClick: () -> Unit,
     onTimerClick: () -> Unit,
     onActiveTimerClick: () -> Unit,
@@ -79,9 +81,10 @@ fun HomeScreen(
                 description = "환자 지참약을 한 번에 식별하고 정보를 확인하세요.",
                 iconBackground = NmColor.Primary.C50,
                 iconTint = NmColor.Primary.C500,
-                // 디자인상 이 자리는 "오늘 남은 횟수 12/15"다. 조회에 Bearer 토큰이 필요해서
-                // (GET /pill-attributes/usage) 인증이 붙기 전까지는 비워 둔다 — 지어내지 않는다.
-                captionColor = NmColor.Primary.C600,
+                // 아직 조회 전이면 비워 둔다 — 0/0 같은 값을 지어내면 한도에 걸린 것처럼 보인다.
+                caption = usage?.let { "오늘 남은 횟수 ${it.remaining}/${it.limit}" },
+                // 소진되면 정본이 색으로 알린다(primary-600 → error-600).
+                captionColor = if (usage?.exhausted == true) NmColor.Error.C600 else NmColor.Primary.C600,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onPillClick
             )

@@ -14,7 +14,8 @@
       생긴다 — 라이트 고정 결정과 정면으로 어긋난다.
     -->
     <style name="Theme.NurseMate.Splash" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/nm_splash_background</item>
+        <!-- API 31 미만에는 스플래시 API 가 없다. 배경에 로고를 얹어 같은 그림을 낸다. -->
+        <item name="android:windowBackground">@drawable/nm_splash_window</item>
     </style>
 
     <style name="Theme.NurseMate" parent="android:Theme.Material.Light.NoActionBar" />

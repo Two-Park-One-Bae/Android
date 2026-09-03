@@ -44,7 +44,7 @@ class AuthPipelineTest {
     }
 
     private fun clientWith(tokens: BearerTokenProvider) = OkHttpClient.Builder()
-        .addInterceptor(AuthHeaderInterceptor(tokens))
+        .addInterceptor(AuthHeaderInterceptor(tokens, ApiHost(server.hostName)))
         .addInterceptor(ErrorInterceptor(Json { ignoreUnknownKeys = true }))
         .authenticator(TokenRefreshAuthenticator(tokens))
         .build()

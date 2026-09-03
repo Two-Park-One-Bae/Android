@@ -26,7 +26,7 @@ class AppCheckInterceptorTest {
     }
 
     private fun clientWith(tokens: AppCheckTokenProvider) =
-        OkHttpClient.Builder().addInterceptor(AppCheckInterceptor(tokens)).build()
+        OkHttpClient.Builder().addInterceptor(AppCheckInterceptor(tokens, ApiHost(server.hostName))).build()
 
     private fun call(client: OkHttpClient, path: String) =
         client.newCall(Request.Builder().url(server.url(path)).build()).execute()

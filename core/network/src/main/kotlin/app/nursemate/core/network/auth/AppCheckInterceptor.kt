@@ -19,12 +19,15 @@ import okhttp3.Response
  * 토큰을 못 얻어도 요청은 그대로 보낸다 — 여기서 막으면 서버가 줄 401 `APP_CHECK_FAILED` 를
  * 못 받아 원인을 알 수 없다.
  */
-class AppCheckInterceptor @Inject constructor(private val tokens: AppCheckTokenProvider) : Interceptor {
+class AppCheckInterceptor @Inject constructor(private val tokens: AppCheckTokenProvider, private val apiHost: ApiHost) :
+    Interceptor {
 
     // 붙일 이유가 없는 경우와 못 붙이는 경우를 나눠 두는 편이 읽기 쉽다.
     @Suppress("ReturnCount")
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
+        // 우리 서버가 아니면 붙이지 않는다 — 경로만 보면 외부 호스트에도 토큰이 실린다.
+        if (!apiHost.matches(request.url)) return chain.proceed(request)
         if (request.url.encodedPath !in APP_CHECK_PATHS) return chain.proceed(request)
 
         val token = runBlocking { tokens.token() } ?: return chain.proceed(request)

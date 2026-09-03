@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31 미만 스플래시 — 흰 배경 + 가운데 로고.
+
+  31+ 는 시스템이 그려 주지만(values-v31), 그 아래에서는 windowBackground 가 전부다.
+  로고 없이 흰 화면만 두면 앱이 멈춘 것처럼 보인다.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/nm_splash_background" />
+    <item
+        android:width="240dp"
+        android:height="240dp"
+        android:drawable="@drawable/nm_splash_icon"
+        android:gravity="center" />
+</layer-list>

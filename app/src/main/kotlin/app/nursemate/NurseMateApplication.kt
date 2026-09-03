@@ -2,12 +2,36 @@ package app.nursemate
 
 import android.app.Application
 import app.nursemate.appcheck.appCheckProviderFactory
+import app.nursemate.core.network.di.PlainClient
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.kakao.sdk.common.KakaoSdk
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
+import okhttp3.OkHttpClient
 
 @HiltAndroidApp
-class NurseMateApplication : Application() {
+class NurseMateApplication :
+    Application(),
+    SingletonImageLoader.Factory {
+
+    /**
+     * 낱알 이미지(CDN)를 받아 오는 클라이언트.
+     *
+     * ⚠️ **인터셉터가 없는 클라이언트를 쓴다.** 기본 클라이언트에는 Bearer·App Check 가
+     * 붙는데, 이미지는 우리 API 서버가 아니라 `img.nursemate.app` 에서 온다 —
+     * 토큰을 그쪽으로 보낼 이유가 없다.
+     */
+    @Inject
+    @PlainClient
+    lateinit var imageClient: dagger.Lazy<OkHttpClient>
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
+        .components { add(OkHttpNetworkFetcherFactory(callFactory = { imageClient.get() })) }
+        .build()
 
     override fun onCreate() {
         super.onCreate()

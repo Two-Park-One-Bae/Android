@@ -30,6 +30,7 @@ import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.Usage
 import app.nursemate.ui.SystemBarIcons
 
 /**
@@ -48,7 +49,13 @@ import app.nursemate.ui.SystemBarIcons
  * (스펙 NM-143 도 미리보기의 분기를 `재촬영` / `이 사진 사용` 둘로만 규정한다.)
  */
 @Composable
-fun PillPreviewScreen(state: PillUiState, onRetake: () -> Unit, onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+fun PillPreviewScreen(
+    state: PillUiState,
+    usage: Usage?,
+    onRetake: () -> Unit,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
@@ -82,9 +89,14 @@ fun PillPreviewScreen(state: PillUiState, onRetake: () -> Unit, onConfirm: () ->
                 .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 디자인에는 여기 "오늘 남은 횟수 12/15"가 있다. 조회에 Bearer 토큰이 필요해
-            // (GET /pill-attributes/usage) 인증이 붙기 전까지는 줄 자체를 두지 않는다.
-            // iOS 도 usage 를 모르면 라벨을 숨기므로 동작이 어긋나지 않는다.
+            // 모르면 줄 자체를 두지 않는다 — 숫자를 지어내면 남은 횟수를 오해하게 한다.
+            if (usage != null) {
+                Text(
+                    text = "오늘 남은 횟수 ${usage.remaining}/${usage.limit}",
+                    style = RemainingLabel,
+                    color = colors.textTertiary
+                )
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NmButtonSecondary(
@@ -138,3 +150,6 @@ private fun PhotoArea(state: PillUiState) {
         }
     }
 }
+
+/** 정본 12·500. 스케일에 없는 크기라 여기 명시한다. */
+private val RemainingLabel = NmTypography.caption

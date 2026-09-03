@@ -47,6 +47,14 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.DividingLine
+import app.nursemate.core.model.PillAttribute
+import app.nursemate.core.model.PillColor
+import app.nursemate.core.model.PillFace
+import app.nursemate.core.model.PillFormulation
+import app.nursemate.core.model.PillShape
+import app.nursemate.pill.FaceInputs
+import app.nursemate.pill.PillAttributeChips
 
 /**
  * 디자인시스템 컴포넌트 갤러리 — **debug 빌드 전용**.
@@ -172,6 +180,10 @@ private fun Gallery() {
             )
         }
 
+        Section("Pill Attribute Chips — ⑤ 인식 결과 카드") {
+            AttributeChipStates()
+        }
+
         Section("Loading — 스피너 40 · 간격 14 · 라벨 14/500") {
             NmLoading(label = "알약을 찾고 있어요")
             NmLoading()
@@ -193,6 +205,48 @@ private fun Gallery() {
                 tone = NmBannerTone.Info
             )
         }
+    }
+}
+
+/**
+ * 인식 결과 카드의 속성 칩 — 서버 없이 대표 상태를 눈으로 확인한다.
+ *
+ * 실제 값은 `POST /pill-attributes` 가 채우는데, 그걸 받으려면 촬영·검출·App Check 가
+ * 모두 맞아떨어져야 한다. 레이아웃만 보려고 매번 그 과정을 거칠 수는 없다.
+ */
+@Composable
+private fun AttributeChipStates() {
+    val cases = listOf(
+        "단색 · 정제" to PillAttribute(
+            pillId = "1",
+            colors = listOf(PillColor.WHITE),
+            shape = PillShape.ROUND,
+            formulation = PillFormulation.TABLET,
+            front = PillFace(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
+            back = PillFace()
+        ),
+        "다색 · 투명 캡슐" to PillAttribute(
+            pillId = "2",
+            colors = listOf(PillColor.GREEN, PillColor.YELLOW),
+            isTransparent = true,
+            shape = PillShape.OBLONG,
+            formulation = PillFormulation.HARD_CAPSULE,
+            front = PillFace(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true)
+        ),
+        "부분 미인식 (모양만 못 뽑음)" to PillAttribute(
+            pillId = "3",
+            colors = listOf(PillColor.ORANGE),
+            shape = null,
+            formulation = PillFormulation.TABLET
+        ),
+        "추출 실패 (EXTRACTION_FAILED)" to PillAttribute(pillId = "4", error = "EXTRACTION_FAILED"),
+        "아직 못 받음 (null)" to null
+    )
+
+    cases.forEach { (label, attribute) ->
+        Text(text = label, style = NmTypography.caption, color = NmTheme.semanticColors.textTertiary)
+        // 각인 표기값은 화면 입력([FaceInputs])이 정본이라 따로 넣는다 — 서버는 MVP 에서 안 보낸다.
+        PillAttributeChips(attribute = attribute, faces = attribute?.let(FaceInputs::from) ?: FaceInputs())
     }
 }
 

@@ -4,7 +4,9 @@ import app.nursemate.core.network.BuildConfig
 import app.nursemate.core.network.NetworkConfig
 import app.nursemate.core.network.api.AuthApi
 import app.nursemate.core.network.api.ConsentApi
+import app.nursemate.core.network.api.PillApi
 import app.nursemate.core.network.api.UserApi
+import app.nursemate.core.network.auth.ApiHost
 import app.nursemate.core.network.auth.AppCheckInterceptor
 import app.nursemate.core.network.auth.AuthHeaderInterceptor
 import app.nursemate.core.network.auth.TokenRefreshAuthenticator
@@ -71,6 +73,21 @@ internal object NetworkModule {
         .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * 인터셉터가 하나도 없는 클라이언트.
+     *
+     * S3 presigned 업로드처럼 **우리 서버가 아닌 곳**으로 나가는 요청에 쓴다. 기본 클라이언트를
+     * 쓰면 인증 헤더(호스트로 걸러지긴 하지만)·에러 변환·401 재시도가 모두 딸려 오는데,
+     * presigned URL 에는 어느 것도 맞지 않는다.
+     */
+    @Provides
+    @Singleton
+    @PlainClient
+    fun providePlainOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(UPLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+
     @Provides
     @Singleton
     fun provideRetrofit(client: OkHttpClient, json: Json): Retrofit = Retrofit.Builder()
@@ -93,7 +110,19 @@ internal object NetworkModule {
     @Singleton
     fun provideConsentApi(retrofit: Retrofit): ConsentApi = retrofit.create(ConsentApi::class.java)
 
+    /** 인증 헤더를 붙여도 되는 호스트. 외부(S3 presigned 등)로는 붙이지 않는다. */
+    @Provides
+    @Singleton
+    fun provideApiHost(): ApiHost = ApiHost.Default
+
+    @Provides
+    @Singleton
+    fun providePillApi(retrofit: Retrofit): PillApi = retrofit.create(PillApi::class.java)
+
     private const val CONNECT_TIMEOUT_SECONDS = 10L
+
+    /** 원본 사진(수 MB)을 셀룰러로 올릴 수 있다. 베스트 에포트라 넉넉히 준다. */
+    private const val UPLOAD_TIMEOUT_SECONDS = 60L
 
     /** 알약 분석은 서버가 외부 AI 를 부르느라 오래 걸린다. 기본 10초로는 모자란다. */
     private const val READ_TIMEOUT_SECONDS = 60L

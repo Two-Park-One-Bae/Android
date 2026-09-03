@@ -46,5 +46,21 @@
                     android:scheme="${kakaoScheme}" />
             </intent-filter>
         </activity>
+
+        <!--
+          결과 PDF 를 다른 앱에 넘기는 통로. file:// 를 그대로 주면 FileUriExposedException 이다.
+          authorities 에 applicationId 를 쓴다 — 디버그(.debug)와 릴리스가 같은 기기에
+          함께 설치돼도 부딪히지 않아야 한다.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/nm_share_paths" />
+        </provider>
+
     </application>
 </manifest>

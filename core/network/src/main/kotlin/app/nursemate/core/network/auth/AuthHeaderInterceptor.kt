@@ -8,6 +8,9 @@ import okhttp3.Response
 /**
  * 인증이 필요한 요청에 `Authorization: Bearer <Firebase ID 토큰>` 을 붙인다.
  *
+ * **우리 API 서버가 아니면 붙이지 않는다** — 그러지 않으면 S3 presigned 업로드 같은 외부
+ * 요청에 Firebase ID 토큰이 실려 나간다([ApiHost]).
+ *
  * 공개 경로([PUBLIC_PATHS])는 건너뛴다. 붙여 보내도 서버가 무시하겠지만, 카카오 교환처럼
  * **로그인 전에** 부르는 경로가 섞여 있어 토큰을 얻으려다 헛돌게 된다.
  *
@@ -17,13 +20,15 @@ import okhttp3.Response
  * `runBlocking` 을 쓰는 건 OkHttp 인터셉터가 이미 워커 스레드에서 돌기 때문이다.
  * 메인 스레드를 막지 않는다.
  */
-class AuthHeaderInterceptor @Inject constructor(private val tokens: BearerTokenProvider) : Interceptor {
+class AuthHeaderInterceptor @Inject constructor(private val tokens: BearerTokenProvider, private val apiHost: ApiHost) :
+    Interceptor {
 
-    // 건너뛸 이유가 둘(공개 경로 · 토큰 없음)이라 조기 반환이 가장 읽기 쉽다.
+    // 건너뛸 이유가 셋(외부 호스트 · 공개 경로 · 토큰 없음)이라 조기 반환이 가장 읽기 쉽다.
     // 하나로 합치면 조건이 뭉쳐서 왜 건너뛰는지가 흐려진다.
     @Suppress("ReturnCount")
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
+        if (!apiHost.matches(request.url)) return chain.proceed(request)
         if (isPublicPath(request.url.encodedPath)) return chain.proceed(request)
 
         val token = runBlocking { tokens.token() } ?: return chain.proceed(request)

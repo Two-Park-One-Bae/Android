@@ -2,5 +2,7 @@
 <resources>
     <!-- 시스템 리소스(런처 아이콘·스플래시)용. Compose 토큰은 NmColor가 정본 -->
     <color name="ic_launcher_background">#FFFFFF</color>
-    <color name="nm_splash_background">#EEF2F7</color>
+    <!-- 정본 `스플래시 · hand (NM-358)` 배경은 $neutral-0(흰색)이다. bg-app(#EEF2F7)을
+         쓰면 스플래시에서 로그인 화면(흰색)으로 넘어갈 때 배경이 한 번 바뀐다. -->
+    <color name="nm_splash_background">#FFFFFF</color>
 </resources>
