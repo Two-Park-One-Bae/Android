@@ -37,6 +37,8 @@ import coil3.compose.AsyncImage
  *
  * 라디오 20 · 썸네일 72×38 · 품목명 14/600 + 업체명 12 · 세부정보 버튼 28.
  *
+ * 과녁이 셋이다 — **카드**는 선택, **썸네일**은 이미지 비교, **ⓘ**는 세부정보.
+ *
  * ## 허가 종료 배지
  * `REVOKED` 는 취하·취소·유효기간만료·폐업을 묶은 값이라 통칭 '허가 종료'로만 알린다
  * (spec NM-341). **선택을 막지 않는다** — 지참약이 허가 종료 품목일 수 있고, 허가상태는
@@ -52,6 +54,7 @@ fun PillCandidateRow(
     selected: Boolean,
     onClick: () -> Unit,
     onDetailClick: () -> Unit,
+    onThumbnailClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
@@ -83,6 +86,8 @@ fun PillCandidateRow(
                 .size(width = 72.dp, height = 38.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(NmColor.Neutral.C100)
+                // 썸네일만 비교 뷰어를 연다 — 카드 탭(선택)·세부정보는 그대로다(spec NM-354).
+                .clickable(onClick = onThumbnailClick)
         )
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

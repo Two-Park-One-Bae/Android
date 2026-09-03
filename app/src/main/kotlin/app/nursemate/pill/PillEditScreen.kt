@@ -1,6 +1,7 @@
 package app.nursemate.pill
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
+import app.nursemate.core.designsystem.NmButtonPrimary
+import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
@@ -70,8 +73,9 @@ fun PillEditScreen(
     onFacesChange: (FaceInputs) -> Unit,
     candidates: CandidateUiState,
     selected: PillCandidate?,
-    onBack: () -> Unit,
     onSelect: (PillCandidate) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
     onDetail: (PillCandidate) -> Unit,
     onLoadMore: () -> Unit,
     modifier: Modifier = Modifier
@@ -88,6 +92,9 @@ fun PillEditScreen(
     var backText by remember { mutableStateOf(TextFieldValue(faces.back.imprint)) }
     var focusedSide by remember { mutableStateOf<FaceSide?>(null) }
 
+    // 이미지 비교 뷰어에 띄울 후보. null 이면 안 열려 있다.
+    var comparing by remember { mutableStateOf<PillCandidate?>(null) }
+
     // ⚠️ 포커스만 보고 기호 바를 띄우면 안 된다. 뒤로 키로 키보드를 내려도 각인 칸은 포커스를
     //    쥔 채라 바가 화면 아래에 홀로 남는다. 키보드가 실제로 떠 있는지를 함께 본다.
     //    (safeDrawing 을 먹은 Column 안이어도 WindowInsets.ime 는 창 원본 값을 준다.)
@@ -102,84 +109,97 @@ fun PillEditScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        NmNavBar(title = "수정", onBack = onBack)
-
-        // LazyColumn 이라야 목록 끝에 닿았는지 알 수 있다 — 무한 스크롤의 전제다.
-        // verticalScroll Column 안에 넣으면 높이가 무한이라 그 판단을 못 한다.
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
-            // 정본에서 후보 행 사이는 8, 블록(카드·헤더·목록) 사이는 14 다. 좁은 쪽을 기본으로
-            // 두고 넓혀야 하는 자리에만 [BlockGap] 을 더한다 — LazyColumn 은 간격을 하나만 받는다.
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    // 비교 뷰어는 상태 표시줄까지 덮어야 해서 Column 밖 Box 에 얹는다(정본 Dim 이 전체 화면이다).
+    Box(modifier = modifier.fillMaxSize().background(colors.bgApp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            item {
-                PillEditAttributeCard(
-                    number = number,
-                    crop = crop,
-                    attribute = attribute,
-                    faces = faces,
-                    open = open,
-                    onToggle = { panel ->
-                        open = panel.takeIf { it != open }
-                        if (open != AttributePanel.Imprint) focusedSide = null
-                    },
-                    onColorToggle = { color ->
-                        val current = attribute.colors.orEmpty()
-                        onAttributeChange(
-                            attribute.copy(colors = if (color in current) current - color else current + color)
-                        )
-                    },
-                    onTransparentChange = { onAttributeChange(attribute.copy(isTransparent = it)) },
-                    onChange = onAttributeChange,
-                    imprint = {
-                        ImprintPanel(
-                            faces = faces,
-                            frontText = frontText,
-                            backText = backText,
-                            onChange = onFacesChange,
-                            onTextChange = { side, value ->
-                                if (side == FaceSide.Front) frontText = value else backText = value
-                            },
-                            onFocus = { side -> focusedSide = side }
-                        )
-                    }
+            NmNavBar(title = "수정", onBack = onCancel)
+
+            // LazyColumn 이라야 목록 끝에 닿았는지 알 수 있다 — 무한 스크롤의 전제다.
+            // verticalScroll Column 안에 넣으면 높이가 무한이라 그 판단을 못 한다.
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                // 정본에서 후보 행 사이는 8, 블록(카드·헤더·목록) 사이는 14 다. 좁은 쪽을 기본으로
+                // 두고 넓혀야 하는 자리에만 [BlockGap] 을 더한다 — LazyColumn 은 간격을 하나만 받는다.
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    PillEditAttributeCard(
+                        number = number,
+                        crop = crop,
+                        attribute = attribute,
+                        faces = faces,
+                        open = open,
+                        onToggle = { panel ->
+                            open = panel.takeIf { it != open }
+                            if (open != AttributePanel.Imprint) focusedSide = null
+                        },
+                        onColorToggle = { color ->
+                            val current = attribute.colors.orEmpty()
+                            onAttributeChange(
+                                attribute.copy(colors = if (color in current) current - color else current + color)
+                            )
+                        },
+                        onTransparentChange = { onAttributeChange(attribute.copy(isTransparent = it)) },
+                        onChange = onAttributeChange,
+                        imprint = {
+                            ImprintPanel(
+                                faces = faces,
+                                frontText = frontText,
+                                backText = backText,
+                                onChange = onFacesChange,
+                                onTextChange = { side, value ->
+                                    if (side == FaceSide.Front) frontText = value else backText = value
+                                },
+                                onFocus = { side -> focusedSide = side }
+                            )
+                        }
+                    )
+                }
+
+                item { CandidateHeader() }
+
+                candidateSection(
+                    state = candidates,
+                    selected = selected,
+                    actions = CandidateActions(
+                        onSelect = onSelect,
+                        onDetail = onDetail,
+                        onThumbnail = { comparing = it },
+                        onLoadMore = onLoadMore
+                    )
                 )
             }
 
-            item { CandidateHeader() }
+            // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
+            EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
 
-            candidateSection(
-                state = candidates,
-                selected = selected,
-                onSelect = onSelect,
-                onDetail = onDetail,
-                onLoadMore = onLoadMore
-            )
+            val side = focusedSide
+            if (side != null && open == AttributePanel.Imprint && imeVisible) {
+                PillSymbolBar(
+                    onSymbol = { symbol ->
+                        val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
+                        if (side == FaceSide.Front) {
+                            frontText = next
+                            onFacesChange(faces.copy(front = faces.front.copy(imprint = next.text)))
+                        } else {
+                            backText = next
+                            onFacesChange(faces.copy(back = faces.back.copy(imprint = next.text)))
+                        }
+                    }
+                )
+            }
         }
 
-        DisclaimerFooter()
-
-        val side = focusedSide
-        if (side != null && open == AttributePanel.Imprint && imeVisible) {
-            PillSymbolBar(
-                onSymbol = { symbol ->
-                    val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
-                    if (side == FaceSide.Front) {
-                        frontText = next
-                        onFacesChange(faces.copy(front = faces.front.copy(imprint = next.text)))
-                    } else {
-                        backText = next
-                        onFacesChange(faces.copy(back = faces.back.copy(imprint = next.text)))
-                    }
-                }
-            )
+        val compare = comparing
+        if (compare != null) {
+            // 뒤로 가면 화면이 아니라 뷰어부터 닫는다.
+            BackHandler { comparing = null }
+            PillImageCompare(candidate = compare, crop = crop, onClose = { comparing = null })
         }
     }
 }
@@ -213,9 +233,7 @@ private fun CandidateHeader() {
 private fun LazyListScope.candidateSection(
     state: CandidateUiState,
     selected: PillCandidate?,
-    onSelect: (PillCandidate) -> Unit,
-    onDetail: (PillCandidate) -> Unit,
-    onLoadMore: () -> Unit
+    actions: CandidateActions
 ) {
     if (state.candidates.isEmpty()) {
         item { CandidateEmpty(state, modifier = Modifier.padding(top = BlockGap)) }
@@ -225,13 +243,14 @@ private fun LazyListScope.candidateSection(
     itemsIndexed(state.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
         // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
         if (index == state.candidates.lastIndex && state.hasMore) {
-            LaunchedEffect(candidate.pillCode) { onLoadMore() }
+            LaunchedEffect(candidate.pillCode) { actions.onLoadMore() }
         }
         PillCandidateRow(
             candidate = candidate,
             selected = candidate.pillCode == selected?.pillCode,
-            onClick = { onSelect(candidate) },
-            onDetailClick = { onDetail(candidate) },
+            onClick = { actions.onSelect(candidate) },
+            onDetailClick = { actions.onDetail(candidate) },
+            onThumbnailClick = { actions.onThumbnail(candidate) },
             // 헤더와 첫 행 사이만 블록 간격(14)이고, 행끼리는 8 이다.
             modifier = if (index == 0) Modifier.padding(top = BlockGap) else Modifier
         )
@@ -249,14 +268,17 @@ private fun LazyListScope.candidateSection(
         }
     }
 
-    item {
-        Text(
-            text = "후보를 선택하면 확인 버튼이 나타나요",
-            style = SelectHint,
-            color = NmTheme.semanticColors.textTertiary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
-        )
+    // 고르고 나면 이 안내가 사라지고 푸터에 확인·취소가 뜬다(정본 ⑧-a → ⑧-f).
+    if (selected == null) {
+        item {
+            Text(
+                text = "후보를 선택하면 확인 버튼이 나타나요",
+                style = SelectHint,
+                color = NmTheme.semanticColors.textTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+            )
+        }
     }
 }
 
@@ -267,7 +289,26 @@ private fun LazyListScope.candidateSection(
  * 정작 고를 때 안 보인다.
  */
 @Composable
-private fun DisclaimerFooter() {
+private fun EditFooter(confirmEnabled: Boolean, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(NmTheme.semanticColors.bgApp)
+            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (confirmEnabled) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                NmButtonSecondary(text = "취소", onClick = onCancel, modifier = Modifier.weight(1f))
+                NmButtonPrimary(text = "확인", onClick = onConfirm, modifier = Modifier.weight(1f))
+            }
+        }
+        DisclaimerText()
+    }
+}
+
+@Composable
+private fun DisclaimerText() {
     val colors = NmTheme.semanticColors
     Text(
         text = "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
@@ -275,10 +316,7 @@ private fun DisclaimerFooter() {
         style = Disclaimer,
         color = colors.textTertiary,
         textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.bgApp)
-            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp)
+        modifier = Modifier.fillMaxWidth()
     )
 }
 

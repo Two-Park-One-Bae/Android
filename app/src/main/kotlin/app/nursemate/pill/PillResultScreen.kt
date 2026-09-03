@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
@@ -52,6 +53,7 @@ import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.vision.DetectedPill
 import app.nursemate.ui.SystemBarIcons
 
@@ -143,6 +145,7 @@ fun PillResultScreen(
                                     pill = pill,
                                     number = index + 1,
                                     edit = state.editOf(id),
+                                    selected = state.selections[id],
                                     onMenuClick = { topEnd ->
                                         menuTopEnd = topEnd
                                         menuFor = id
@@ -170,7 +173,7 @@ fun PillResultScreen(
                 }
             }
 
-            ResultFooter(identified = 0, total = pills.size)
+            ResultFooter(identified = pills.count { (id, _) -> id in state.selections }, total = pills.size)
         }
 
         if (menuFor != null) {
@@ -261,7 +264,13 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
  *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
  */
 @Composable
-private fun PillRow(pill: DetectedPill, number: Int, edit: PillEdit, onMenuClick: (IntOffset) -> Unit) {
+private fun PillRow(
+    pill: DetectedPill,
+    number: Int,
+    edit: PillEdit,
+    selected: PillCandidate?,
+    onMenuClick: (IntOffset) -> Unit
+) {
     val colors = NmTheme.semanticColors
     // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
     var cardRight by remember { mutableIntStateOf(0) }
@@ -270,7 +279,18 @@ private fun PillRow(pill: DetectedPill, number: Int, edit: PillEdit, onMenuClick
         modifier = Modifier
             .fillMaxWidth()
             .onGloballyPositioned { cardRight = it.positionInRoot().round().x + it.size.width }
-            .background(colors.surface, RoundedCornerShape(14.dp))
+            // 확정한 카드는 배경째로 바뀐다 — 목록을 훑을 때 남은 것이 몇 개인지 한눈에 들어와야 한다.
+            .background(
+                color = if (selected != null) NmColor.Secondary.C50 else colors.surface,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .let {
+                if (selected == null) {
+                    it
+                } else {
+                    it.border(1.5.dp, NmColor.Secondary.C300, RoundedCornerShape(14.dp))
+                }
+            }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -303,9 +323,19 @@ private fun PillRow(pill: DetectedPill, number: Int, edit: PillEdit, onMenuClick
             // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다.
             val failed = edit.attribute.failed
             Text(
-                text = if (failed) "정보 인식 실패 · 직접 입력해 주세요" else "알약을 선택해주세요",
-                style = RowTitle,
-                color = if (failed) NmColor.Error.C600 else colors.textSecondary,
+                text = when {
+                    selected != null -> selected.pillName ?: selected.pillCode
+                    failed -> "정보 인식 실패 · 직접 입력해 주세요"
+                    else -> "알약을 선택해주세요"
+                },
+                style = if (selected != null) RowTitleDone else RowTitle,
+                color = when {
+                    selected != null -> colors.textPrimary
+                    failed -> NmColor.Error.C600
+                    else -> colors.textSecondary
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
@@ -350,9 +380,14 @@ private fun ResultFooter(identified: Int, total: Int) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = if (done) "모든 알약을 식별했어요" else "알약을 모두 식별해주세요 · $identified/$total",
+            // 정본이 세 갈래로 말한다 — 아직 하나도 못 골랐을 때 / 남은 개수를 셀 때 / 다 됐을 때.
+            text = when {
+                done -> "${total}개 모두 식별 완료"
+                identified == 0 -> "알약을 모두 식별해주세요 · $identified/$total"
+                else -> "${total - identified}개 더 식별해주세요 · $identified/$total"
+            },
             style = ProgressLabel,
-            color = if (done) NmColor.Primary.C500 else colors.textTertiary
+            color = if (done) NmColor.Secondary.C600 else colors.textTertiary
         )
         Box(
             modifier = Modifier
@@ -378,6 +413,7 @@ private val BadgeHeight = 18.dp
 
 // 정본 스케일에 없는 크기들이다. 화면이 요구하는 값이라 여기 명시한다.
 private val ListTitle = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
+private val RowTitleDone = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold)
 private val RowTitle = NmTypography.body.copy(fontWeight = FontWeight.SemiBold)
 private val NumberBadge = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 private val BadgeLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)

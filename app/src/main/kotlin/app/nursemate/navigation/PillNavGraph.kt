@@ -3,7 +3,9 @@ package app.nursemate.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
@@ -75,6 +77,14 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     val pillId = entry.arguments?.getString("pillId").orEmpty()
     val edit = state.editOf(pillId)
 
+    // 취소하면 진입 시점으로 되돌린다 — 스펙이 "선택·확인 시 갱신, 취소 시 폐기"다.
+    // 속성·각인은 후보를 실시간으로 조회해야 해서 고치는 즉시 뷰모델에 들어간다. 그래서
+    // 되돌릴 값을 여기서 붙잡아 둔다.
+    val original = remember(pillId) { state.editOf(pillId) }
+
+    // 확인 전까지는 화면 안에만 둔다. 취소하고 나가면 결과 카드는 그대로여야 한다.
+    var pending by remember(pillId) { mutableStateOf(state.selections[pillId]) }
+
     // 속성·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
     LaunchedEffect(edit) { candidateViewModel.search(edit.attribute, edit.faces) }
 
@@ -89,10 +99,16 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
         faces = edit.faces,
         onFacesChange = { viewModel.updateEdit(pillId, edit.copy(faces = it)) },
         candidates = candidates,
-        selected = state.selections[pillId],
-        onBack = { navController.popBackStack() },
-        // 확인 버튼(⑧-f)은 다음 단계다. 지금은 고르면 바로 기억해 둔다.
-        onSelect = { viewModel.selectCandidate(pillId, it) },
+        selected = pending,
+        onSelect = { pending = it },
+        onConfirm = {
+            pending?.let { viewModel.selectCandidate(pillId, it) }
+            navController.popBackStack()
+        },
+        onCancel = {
+            viewModel.updateEdit(pillId, original)
+            navController.popBackStack()
+        },
         // 세부정보(⑩)는 다음 단계다. 지금은 아무 데도 가지 않는다.
         onDetail = { },
         onLoadMore = candidateViewModel::loadMore
