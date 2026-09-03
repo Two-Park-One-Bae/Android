@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.nursemate.BuildConfig
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmButtonPrimary
 import app.nursemate.core.designsystem.NmButtonSecondary
@@ -43,8 +44,9 @@ import app.nursemate.ui.SystemBarIcons
  * **iOS는 둘 다 스펙과 다르다** — '다시 시도'가 `popViewController` 라 미리보기로 가고(사용자가
  * '이 사진 사용'을 한 번 더 눌러야 재시도가 된다), '뒤로'는 홈으로 나간다. 여기서는 스펙을 따른다.
  *
- * @param message 실패 사유. 정본은 고정 문구만 보여주지만, 개발 중에는 원인을 알아야 해서
- *                (예: "모델 파일이 없습니다") 설명 아래에 함께 띄운다.
+ * @param message 실패 사유. **디버그 빌드에서만** 설명 아래에 띄운다 — 예외 메시지에는
+ *                모델 파일 절대 경로 같은 내부 사정이 담긴다. 정본에도 이 자리가 없다.
+ *                릴리스에서는 로그(태그 `NM394`)로만 남는다.
  */
 @Composable
 fun PillAnalysisFailedScreen(message: String?, onRetry: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -100,7 +102,7 @@ fun PillAnalysisFailedScreen(message: String?, onRetry: () -> Unit, onBack: () -
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center
                 )
-                if (message != null) {
+                if (message != null && BuildConfig.DEBUG) {
                     Text(
                         text = message,
                         style = PillOutcomeDetail,
