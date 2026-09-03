@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # ⚠️ base 를 main·develop 으로 좁히지 않는다. 스택 PR 은 base 가 feature 브랜치라
+  #    그 필터에 걸려 **한 번도 돌지 않는다** — 실제로 #9·#10·#12·#13 이 검증 없이
+  #    올라가 있었다. 스택 아래가 머지되며 base 가 develop 으로 바뀔 때야 처음 도는데,
+  #    그때는 이미 리뷰가 끝난 뒤다.
   pull_request:
-    branches: [main, develop]
 
 concurrency:
   group: ci-${{ github.ref }}
