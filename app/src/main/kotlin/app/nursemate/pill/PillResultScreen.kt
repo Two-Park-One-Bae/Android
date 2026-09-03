@@ -40,6 +40,7 @@ import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.vision.DetectedPill
 import app.nursemate.ui.SystemBarIcons
 
@@ -61,6 +62,8 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
     BackHandler(onBack = onBack)
 
     val pills = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+    // pillId 는 화면 번호(1부터)와 같게 보냈다 — PillRecognitionViewModel.pillIdOf 참고.
+    val attributes = (state.attributes as? AttributePhase.Done)?.byPillId.orEmpty()
 
     Column(
         modifier = modifier
@@ -103,7 +106,7 @@ fun PillResultScreen(state: PillUiState, onBack: () -> Unit, modifier: Modifier 
                             color = colors.textPrimary
                         )
                         pills.forEachIndexed { index, pill ->
-                            PillRow(pill = pill, number = index + 1)
+                            PillRow(pill = pill, number = index + 1, attribute = attributes[(index + 1).toString()])
                         }
                     }
 
@@ -166,52 +169,66 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
     }
 }
 
-/** 알약 카드 — 번호 · 크롭 썸네일 · 제목 · 이동 표시. 속성 칩은 서버 연동 후 붙인다. */
+/**
+ * 알약 카드 — 번호 · 크롭 썸네일 · 제목 · 속성 칩.
+ *
+ * @param attribute 서버가 뽑은 속성. null 이면 아직 못 받은 것이고, `failed` 면 이 알약만
+ *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
+ */
 @Composable
-private fun PillRow(pill: DetectedPill, number: Int) {
+private fun PillRow(pill: DetectedPill, number: Int, attribute: PillAttribute?) {
     val colors = NmTheme.semanticColors
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surface, RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .background(NmColor.Primary.C50, CircleShape)
-                .border(1.dp, NmColor.Primary.C100, CircleShape),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(text = "$number", style = NumberBadge, color = NmColor.Primary.C600)
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .background(NmColor.Primary.C50, CircleShape)
+                    .border(1.dp, NmColor.Primary.C100, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "$number", style = NumberBadge, color = NmColor.Primary.C600)
+            }
+
+            Image(
+                bitmap = pill.crop.asImageBitmap(),
+                contentDescription = null,
+                // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(NmColor.Neutral.C100)
+            )
+
+            // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다.
+            val failed = attribute?.failed == true
+            Text(
+                text = if (failed) "정보 인식 실패 · 직접 입력해 주세요" else "알약을 선택해주세요",
+                style = RowTitle,
+                color = if (failed) NmColor.Error.C600 else colors.textSecondary,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                painter = painterResource(DsR.drawable.nm_ic_chevron_right),
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
         }
 
-        Image(
-            bitmap = pill.crop.asImageBitmap(),
-            contentDescription = null,
-            // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(NmColor.Neutral.C100)
-        )
-
-        Text(
-            text = "알약을 선택해주세요",
-            style = RowTitle,
-            color = colors.textSecondary,
-            modifier = Modifier.weight(1f)
-        )
-
-        Icon(
-            painter = painterResource(DsR.drawable.nm_ic_chevron_right),
-            contentDescription = null,
-            tint = colors.textTertiary,
-            modifier = Modifier.size(18.dp)
-        )
+        PillAttributeChips(attribute = attribute)
     }
 }
 
