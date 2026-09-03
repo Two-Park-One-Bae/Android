@@ -41,6 +41,7 @@ include(":wear")
 include(":core:model")
 include(":core:data")
 include(":core:network")
+include(":core:vision")
 include(":core:datalayer")
 include(":core:designsystem")
 
