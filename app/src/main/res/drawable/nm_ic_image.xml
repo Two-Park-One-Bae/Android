@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  갤러리(이미지) 아이콘
+  출처: Lucide "image" (ISC License) https://lucide.dev
+  디자인 정본이 Lucide를 쓴다(spec/design/DESIGN.pen). 선(stroke) 기반이라
+  기존 Material Symbols 아이콘(면 기반)과 형태 언어가 다르다 — 통일은 별도 과제.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,3 L19,3 a2,2 0 0,1 2,2 L21,19 a2,2 0 0,1 -2,2 L5,21 a2,2 0 0,1 -2,-2 L3,5 a2,2 0 0,1 2,-2 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9,7 a2,2 0 1,0 0,4 a2,2 0 1,0 0,-4 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M21,15 L17.914,11.914 a2,2 0 0,0 -2.828,0 L6,21"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
