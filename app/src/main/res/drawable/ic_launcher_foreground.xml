@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?><!--
   런처 아이콘 전경 — 브랜드 로고 마크.
-  adaptive icon은 108dp 캔버스 중 가운데 72dp만 항상 보이므로(바깥은 마스크에 잘림),
-  로고를 그 안전 영역에 맞춰 배치한다. viewport를 1080으로 두고 scale로 축소.
+
+  adaptive icon은 108dp 캔버스 중 **가운데 66dp만 안전 영역**이다(72dp까지 보이지만
+  런처·기기마다 마스크가 달라 그 바깥은 잘릴 수 있다). 예전 값(0.62)에서는 로고 폭이
+  보이는 원의 92%까지 차서 손 좌우 끝과 아래가 마스크에 닿았다 — 정본 아이콘
+  (spec/design/assets/app-icon-1024.png)은 캔버스의 78%다.
+
+  세로 보정도 뺐다. 로고를 아래로 18 내려 두었는데, 원형 마스크에서는 아래쪽이
+  좁아져 손이 먼저 잘린다.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -11,10 +17,10 @@
     <group
         android:pivotX="540"
         android:pivotY="540"
-        android:scaleX="0.62"
-        android:scaleY="0.62"
+        android:scaleX="0.52"
+        android:scaleY="0.52"
         android:translateX="-2"
-        android:translateY="18">
+        android:translateY="0">
         <group
             android:scaleX="1.875"
             android:scaleY="1.875">

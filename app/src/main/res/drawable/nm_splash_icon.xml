@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  스플래시 아이콘 — 로고를 캔버스 가운데에 넣고 여백을 둔다.
+
+  ⚠️ 로고 벡터(`nm_logo`)를 그대로 넣으면 **잘린다.** Android 12+ 스플래시는 아이콘을
+  240dp 캔버스에 그리고 **가운데 160dp 원만 보여준다**(= 2/3). 캔버스를 꽉 채우는
+  벡터를 주면 십자가 아래와 손 끝이 마스크에 먹힌다.
+
+  런처 아이콘 전경과 마스크 비율이 같아(72/108 = 160/240) 같은 배치를 그대로 쓴다.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_launcher_foreground" />
