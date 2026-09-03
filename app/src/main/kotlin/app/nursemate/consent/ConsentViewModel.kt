@@ -51,8 +51,13 @@ class ConsentViewModel @Inject constructor(
         load()
     }
 
-    fun load() {
-        _state.update { ConsentUiState(loading = true) }
+    /**
+     * @param pendingMessage 재조회 뒤에도 남겨 둘 안내. 예를 들어 저장 중 약관이 개정돼
+     *   다시 부르는 경우([submit] 참고) — 그 안내를 여기서 지우면 사용자는 화면이
+     *   이유 없이 다시 그려지는 것만 보고 왜 그런지 모른다.
+     */
+    fun load(pendingMessage: String? = null) {
+        _state.update { ConsentUiState(loading = true, message = pendingMessage) }
         viewModelScope.launch {
             consentRepository.definitions()
                 .onSuccess { definitions ->
@@ -65,7 +70,7 @@ class ConsentViewModel @Inject constructor(
                             definitions = definitions,
                             loading = false,
                             blocked = unknown,
-                            message = if (unknown) UPDATE_REQUIRED else null
+                            message = if (unknown) UPDATE_REQUIRED else pendingMessage
                         )
                     }
                 }
@@ -105,9 +110,10 @@ class ConsentViewModel @Inject constructor(
                     val failure = throwable as? ApiFailure
                     if (failure?.httpStatus == HTTP_BAD_REQUEST) {
                         // 저장하는 사이 서버가 약관을 개정했다. 오류로 끝내지 않고
-                        // 새 버전으로 화면을 다시 그린다(spec §동의 온보딩).
-                        load()
-                        _state.update { it.copy(message = VERSION_CHANGED) }
+                        // 새 버전으로 화면을 다시 그린다(spec §동의 온보딩). 안내 문구는
+                        // load() 가 재조회를 마친 뒤에도 남아 있어야 해서 인자로 넘긴다 —
+                        // 여기서 따로 _state.update 하면 재조회 완료 시 그대로 덮여 사라진다.
+                        load(pendingMessage = VERSION_CHANGED)
                     } else {
                         _state.update { it.copy(submitting = false, message = throwable.toMessage()) }
                     }

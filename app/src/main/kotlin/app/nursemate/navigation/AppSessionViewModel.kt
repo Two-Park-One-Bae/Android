@@ -130,15 +130,23 @@ class AppSessionViewModel @Inject constructor(
             }
             .onFailure { throwable ->
                 val failure = throwable as? ApiFailure
-                // 이미 받아 둔 회원 정보가 있으면 건드리지 않는다 — 홈에 있던 사용자를
-                // 일시 장애 때문에 재시도 화면으로 끌어내리지 않는다.
-                if (currentUser.value == null) initialLoadFailed.value = true
                 Log.w(
                     TAG,
                     "users/me 실패 · status=${failure?.httpStatus} code=${failure?.code} " +
                         "retryable=${failure?.isRetryable} requiresSignIn=${failure?.requiresSignIn}",
                     throwable
                 )
+                if (failure?.requiresSignIn == true) {
+                    // 401 — 갱신까지 실패한 진짜 세션 만료다(spec §토큰·세션). 예를 들어 다른
+                    // 기기에서 탈퇴하면 서버가 리프레시 토큰을 폐기하는데, 이 기기의 Firebase
+                    // 세션은 로컬에 남아 있어 SignedIn 인 채로 401 만 반복된다 — 재시도 화면에
+                    // 머무르게 두지 않고 로그아웃해 로그인으로 돌려보낸다.
+                    authRepository.signOut()
+                    return@onFailure
+                }
+                // 이미 받아 둔 회원 정보가 있으면 건드리지 않는다 — 홈에 있던 사용자를
+                // 일시 장애 때문에 재시도 화면으로 끌어내리지 않는다.
+                if (currentUser.value == null) initialLoadFailed.value = true
             }
     }
 

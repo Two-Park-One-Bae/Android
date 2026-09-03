@@ -3,7 +3,15 @@
     <!--
       Compose 전용 앱 — 시스템 테마는 최소만. 실제 테마는 NurseMateTheme(Compose)이 담당.
       런치 테마는 Splash. API 31+ 스플래시 속성은 values-v31에서 얹는다.
-      MainActivity가 onCreate에서 Theme.NurseMate로 되돌린다.
+
+      ⚠️ MainActivity 는 onCreate 에서 Theme.NurseMate 로 되돌리지 **않는다** — setContent
+      한 줄이 그 자리를 대신한다. Compose 가 첫 프레임을 그리는 순간 시스템 테마는 화면에
+      더 이상 관여하지 않으므로 별도 setTheme 호출이 필요 없다.
+
+      values-night 를 두지 않는다 — NurseMateTheme(Theme.kt)이 시스템 설정과 무관하게
+      항상 LightColorScheme 을 쓰기로 했다(#8). 다크 값을 남겨 두면 시스템 설정이 어두운
+      기기에서 스플래시만 어둡게 뜨고 그 직후 Compose 가 밝은 화면으로 넘어가는 전환이
+      생긴다 — 라이트 고정 결정과 정면으로 어긋난다.
     -->
     <style name="Theme.NurseMate.Splash" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/nm_splash_background</item>
