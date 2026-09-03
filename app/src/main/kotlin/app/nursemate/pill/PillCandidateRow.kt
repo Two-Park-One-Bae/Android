@@ -62,7 +62,11 @@ fun PillCandidateRow(
             .fillMaxWidth()
             .clip(shape)
             .background(colors.surface)
-            .border(1.dp, if (selected) NmColor.Primary.C500 else colors.border, shape)
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) NmColor.Primary.C500 else colors.border,
+                shape = shape
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -73,8 +77,8 @@ fun PillCandidateRow(
         AsyncImage(
             model = candidate.pillThumbnailUrl,
             contentDescription = null,
-            // 낱알이 잘리면 대조가 안 되므로 채우지 않고 맞춘다.
-            contentScale = ContentScale.Fit,
+            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 72×38(1.89)이라 잘려 나가는 게 거의 없다.
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(width = 72.dp, height = 38.dp)
                 .clip(RoundedCornerShape(8.dp))
@@ -82,27 +86,28 @@ fun PillCandidateRow(
         )
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = candidate.pillName ?: candidate.pillCode,
-                style = NameStyle,
-                color = colors.textPrimary,
-                // 품목명은 길다("○○정 100밀리그램(염산○○○)"). 줄바꿈을 허용하면 카드마다
-                // 높이가 달라져 목록이 들쭉날쭉해진다 — 정본도 한 줄이다.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                candidate.companyName?.let {
-                    Text(
-                        text = it,
-                        style = SubStyle,
-                        color = colors.textTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                }
+                Text(
+                    text = candidate.pillName ?: candidate.pillCode,
+                    style = NameStyle,
+                    color = colors.textPrimary,
+                    // 품목명은 길다("○○정 100밀리그램(염산○○○)"). 줄바꿈을 허용하면 카드마다
+                    // 높이가 달라져 목록이 들쭉날쭉해진다 — 정본도 한 줄이다.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // 배지가 먼저 잘리지 않게 이름 쪽이 줄어든다.
+                    modifier = Modifier.weight(1f, fill = false)
+                )
                 if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
+            }
+            candidate.companyName?.let {
+                Text(
+                    text = it,
+                    style = SubStyle,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 
@@ -136,15 +141,18 @@ private fun Radio(selected: Boolean) {
 /** 통칭 라벨 하나로만 알린다 — 취하·취소·만료·폐업을 구분해 봐야 사용자의 판단이 달라지지 않는다. */
 @Composable
 private fun RevokedBadge() {
+    val shape = RoundedCornerShape(4.dp)
     Box(
         modifier = Modifier
-            .background(NmColor.Error.C50, RoundedCornerShape(6.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp)
+            .background(NmColor.Warning.C50, shape)
+            .border(1.dp, NmColor.Warning.C100, shape)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(text = "허가 종료", style = BadgeStyle, color = NmColor.Error.C600)
+        // 경고(warning)지 오류(error)가 아니다 — 고를 수 있는 품목이라 빨강으로 막아 세우지 않는다.
+        Text(text = "허가 종료", style = BadgeStyle, color = NmColor.Warning.C700)
     }
 }
 
 private val NameStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 private val SubStyle = NmTypography.caption
-private val BadgeStyle = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+private val BadgeStyle = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium)

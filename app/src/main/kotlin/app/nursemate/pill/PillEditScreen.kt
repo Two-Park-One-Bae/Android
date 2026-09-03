@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
@@ -112,7 +114,9 @@ fun PillEditScreen(
         // verticalScroll Column 안에 넣으면 높이가 무한이라 그 판단을 못 한다.
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+            // 정본에서 후보 행 사이는 8, 블록(카드·헤더·목록) 사이는 14 다. 좁은 쪽을 기본으로
+            // 두고 넓혀야 하는 자리에만 [BlockGap] 을 더한다 — LazyColumn 은 간격을 하나만 받는다.
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
@@ -145,81 +149,22 @@ fun PillEditScreen(
                             },
                             onFocus = { side -> focusedSide = side }
                         )
-                    },
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    }
                 )
             }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "후보", style = SectionTitle, color = colors.textPrimary)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.nm_ic_zap),
-                            contentDescription = null,
-                            tint = NmColor.Primary.C500,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(text = "실시간", style = HintLabel, color = NmColor.Primary.C600)
-                    }
-                }
-            }
+            item { CandidateHeader() }
 
-            if (candidates.candidates.isEmpty()) {
-                item { EmptyNote(candidates.emptyMessage()) }
-            } else {
-                itemsIndexed(candidates.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
-                    // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
-                    if (index == candidates.candidates.lastIndex && candidates.hasMore) {
-                        LaunchedEffect(candidate.pillCode) { onLoadMore() }
-                    }
-                    PillCandidateRow(
-                        candidate = candidate,
-                        selected = candidate.pillCode == selected?.pillCode,
-                        onClick = { onSelect(candidate) },
-                        onDetailClick = { onDetail(candidate) }
-                    )
-                }
-
-                if (candidates.loadingMore) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                color = NmColor.Primary.C500,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    Text(
-                        text = "후보를 선택하면 확인 버튼이 나타나요",
-                        style = SelectHint,
-                        color = colors.textTertiary,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
-                    )
-                }
-            }
-
-            item {
-                Text(
-                    text = "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
-                        "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
-                    style = Disclaimer,
-                    color = colors.textTertiary,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
-            }
+            candidateSection(
+                state = candidates,
+                selected = selected,
+                onSelect = onSelect,
+                onDetail = onDetail,
+                onLoadMore = onLoadMore
+            )
         }
+
+        DisclaimerFooter()
 
         val side = focusedSide
         if (side != null && open == AttributePanel.Imprint && imeVisible) {
@@ -239,25 +184,101 @@ fun PillEditScreen(
     }
 }
 
-/** 후보가 없을 때의 안내 — 왜 없는지에 따라 할 말이 다르다. */
-private fun CandidateUiState.emptyMessage(): String = when {
-    loading -> "후보를 찾고 있어요"
-
-    failed -> "후보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"
-
-    // 조회는 했는데 0개 = 조건이 좁은 것. 조회 전과 구분해서 다른 말을 한다.
-    searched -> "조건에 맞는 알약이 없어요. 속성을 하나 풀어 보세요"
-
-    else -> "속성을 고르면 후보를 찾아드려요"
+/** 후보 헤더 — '후보' + 번개 아이콘 '실시간'. 정본 padding=[4,2,0,2]. */
+@Composable
+private fun CandidateHeader() {
+    val colors = NmTheme.semanticColors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = BlockGap + 4.dp)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = "후보", style = SectionTitle, color = colors.textPrimary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(
+                painter = painterResource(R.drawable.nm_ic_zap),
+                contentDescription = null,
+                tint = NmColor.Primary.C500,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(text = "실시간", style = HintLabel, color = NmColor.Primary.C600)
+        }
+    }
 }
 
+/** 후보 목록 — 비었으면 왜 비었는지 알리고, 있으면 행과 다음 장 표시·선택 안내를 낸다. */
+private fun LazyListScope.candidateSection(
+    state: CandidateUiState,
+    selected: PillCandidate?,
+    onSelect: (PillCandidate) -> Unit,
+    onDetail: (PillCandidate) -> Unit,
+    onLoadMore: () -> Unit
+) {
+    if (state.candidates.isEmpty()) {
+        item { CandidateEmpty(state, modifier = Modifier.padding(top = BlockGap)) }
+        return
+    }
+
+    itemsIndexed(state.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
+        // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
+        if (index == state.candidates.lastIndex && state.hasMore) {
+            LaunchedEffect(candidate.pillCode) { onLoadMore() }
+        }
+        PillCandidateRow(
+            candidate = candidate,
+            selected = candidate.pillCode == selected?.pillCode,
+            onClick = { onSelect(candidate) },
+            onDetailClick = { onDetail(candidate) },
+            // 헤더와 첫 행 사이만 블록 간격(14)이고, 행끼리는 8 이다.
+            modifier = if (index == 0) Modifier.padding(top = BlockGap) else Modifier
+        )
+    }
+
+    if (state.loadingMore) {
+        item {
+            Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    color = NmColor.Primary.C500,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "후보를 선택하면 확인 버튼이 나타나요",
+            style = SelectHint,
+            color = NmTheme.semanticColors.textTertiary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+        )
+    }
+}
+
+/**
+ * 화면 아래 고정 고지.
+ *
+ * 정본은 이것을 Content 밖 푸터에 둔다. 목록과 함께 흘려보내면 후보를 훑는 동안 사라져
+ * 정작 고를 때 안 보인다.
+ */
 @Composable
-private fun EmptyNote(text: String) {
+private fun DisclaimerFooter() {
+    val colors = NmTheme.semanticColors
     Text(
-        text = text,
-        style = SelectHint,
-        color = NmTheme.semanticColors.textTertiary,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp)
+        text = "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
+            "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
+        style = Disclaimer,
+        color = colors.textTertiary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.bgApp)
+            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp)
     )
 }
 
@@ -265,4 +286,8 @@ private fun EmptyNote(text: String) {
 private val SectionTitle = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
 private val HintLabel = NmTypography.caption.copy(fontWeight = FontWeight.Medium)
 private val SelectHint = NmTypography.body.copy(fontSize = 13.sp)
+
+/** 정본 Content 의 블록 간격 14 에서 목록 간격 8 을 뺀 나머지. */
+private val BlockGap = 6.dp
+
 private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal)

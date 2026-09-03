@@ -65,10 +65,13 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
             return
         }
 
+        // ⚠️ 기다리기 **전에** 표시를 켠다. 뒤에 켜면 화면이 그 사이 "아직 조건이 없다"는
+        //    안내(⑧-h)를 잠깐 띄웠다 지운다 — 조회가 이미 예약된 상태인데 반대로 말하는 셈이다.
+        _state.update { it.copy(loading = true, failed = false) }
+
         searchJob = viewModelScope.launch {
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
-            _state.update { it.copy(loading = true, failed = false) }
 
             val request = attribute.toRequest(faces)
             lastRequest = request
