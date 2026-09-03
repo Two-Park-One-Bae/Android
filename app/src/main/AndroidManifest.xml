@@ -5,16 +5,39 @@
 
     <application
         android:name=".NurseMateApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="널스메이트"
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.NurseMate.Splash"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            카카오 로그인 리디렉션 — 카카오톡 앱(또는 계정 웹뷰)에서 돌아올 경로다.
+            스킴은 `kakao{네이티브앱키}` 로 고정이라 빌드 타입마다 다르다.
+            ${kakaoScheme} 는 app/build.gradle.kts 의 kakaoAppKey() 가 채운다.
+
+            액티비티는 SDK 가 제공하는 것을 그대로 쓴다 — 우리가 구현할 게 없다.
+        -->
+        <activity
+            android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth"
+                    android:scheme="${kakaoScheme}" />
             </intent-filter>
         </activity>
     </application>

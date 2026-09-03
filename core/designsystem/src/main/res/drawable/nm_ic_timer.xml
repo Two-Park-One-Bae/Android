@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  타이머 아이콘 — 타이머 탭·홈 카드·활성 타이머 칩에 쓴다
+  출처: Lucide "timer" (ISC License) https://lucide.dev
+  디자인 정본(spec/design/DESIGN.pen)이 아이콘을 전부 Lucide로 정의한다.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M10,2 L14,2"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M12,14 L15,11"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M12,6 a8,8 0 1,0 0,16 a8,8 0 1,0 0,-16 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

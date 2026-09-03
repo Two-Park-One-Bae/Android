@@ -30,6 +30,9 @@ import androidx.compose.ui.unit.sp
  * 제목 14·600 / 부제 12·400 `text-tertiary` / chevron 18.
  *
  * ⚠️ **홈의 기능 카드는 이것이 아니다** — 더 크고 캡션 자리가 따로 있다. [NmFeatureCard] 를 쓸 것.
+ *
+ * @param titleColor 제목 색. 기본은 `text-primary` 다. 파괴적인 항목(설정의 계정 삭제)만
+ *                   `error-600` 으로 올린다 — 정본이 그 행만 색으로 구분한다.
  */
 @Composable
 fun NmListRow(
@@ -39,6 +42,7 @@ fun NmListRow(
     iconBackground: Color,
     iconTint: Color,
     modifier: Modifier = Modifier,
+    titleColor: Color? = null,
     onClick: (() -> Unit)? = null
 ) {
     val colors = NmTheme.semanticColors
@@ -72,7 +76,7 @@ fun NmListRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(text = title, style = RowTitle, color = colors.textPrimary)
+            Text(text = title, style = RowTitle, color = titleColor ?: colors.textPrimary)
             Text(text = subtitle, style = RowSubtitle, color = colors.textTertiary)
         }
         if (onClick != null) {
