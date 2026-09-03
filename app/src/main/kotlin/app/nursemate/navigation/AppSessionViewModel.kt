@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.AuthSession
 import app.nursemate.core.data.auth.UserRepository
+import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.User
 import app.nursemate.core.network.error.ApiFailure
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,7 +55,8 @@ sealed interface AppEntry {
 @HiltViewModel
 class AppSessionViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val usageHolder: UsageHolder
 ) : ViewModel() {
 
     private val currentUser = MutableStateFlow<User?>(null)
@@ -90,9 +92,10 @@ class AppSessionViewModel @Inject constructor(
                 .collect { uid ->
                     if (uid == null) {
                         // 계정 스코프 캐시 폐기(spec §로그아웃·탈퇴) — 병동 공용 기기에서
-                        // 앞사람의 동의 상태가 남아 보이면 안 된다.
+                        // 앞사람의 동의 상태나 남은 식별 횟수가 보이면 안 된다.
                         currentUser.value = null
                         initialLoadFailed.value = false
+                        usageHolder.clear()
                     } else {
                         loadUser()
                     }

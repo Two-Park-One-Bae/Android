@@ -44,7 +44,9 @@ import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.User
 import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
+import app.nursemate.home.HomeViewModel
 import app.nursemate.home.NmTab
+import app.nursemate.pill.PillLimitAlert
 import app.nursemate.settings.SettingsConfirm
 import app.nursemate.settings.SettingsConfirmDialog
 import app.nursemate.settings.SettingsScreen
@@ -172,9 +174,30 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         }
 
         composable(NmRoute.HOME) {
-            TabRoot(navController, NmTab.Home) {
+            val viewModel: HomeViewModel = hiltViewModel()
+            val usage by viewModel.usage.collectAsStateWithLifecycle()
+            // 화면에 들어올 때마다 다시 받는다 — 다른 기기에서 썼거나 자정을 넘겼을 수 있다.
+            LifecycleResumeEffect(Unit) {
+                viewModel.refresh()
+                onPauseOrDispose {}
+            }
+            // 한도에 걸렸으면 촬영으로 보내지 않고 안내만 한다(spec §한도 도달 플로우).
+            var limitReached by remember { mutableStateOf(false) }
+
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Home,
+                overlay = if (limitReached) {
+                    { PillLimitAlert(usage = usage, onConfirm = { limitReached = false }) }
+                } else {
+                    null
+                }
+            ) {
                 HomeScreen(
-                    onPillClick = { navController.switchTab(NmTab.Pill) },
+                    usage = usage,
+                    onPillClick = {
+                        if (viewModel.blocked()) limitReached = true else navController.switchTab(NmTab.Pill)
+                    },
                     onTimerClick = { navController.switchTab(NmTab.Timer) },
                     onActiveTimerClick = { navController.switchTab(NmTab.Timer) }
                 )
