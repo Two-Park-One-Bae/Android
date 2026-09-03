@@ -15,6 +15,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
+import app.nursemate.core.model.LicenseStatus
+import app.nursemate.detail.PillDetailScreen
+import app.nursemate.detail.PillDetailViewModel
 import app.nursemate.home.NmTab
 import app.nursemate.pill.AttributePhase
 import app.nursemate.pill.DetectionPhase
@@ -45,6 +48,7 @@ fun NavGraphBuilder.pillNavGraph(navController: NavController) {
     navigation(startDestination = NmRoute.PILL_CAPTURE, route = NmRoute.PILL_GRAPH) {
         capture(navController)
         edit(navController)
+        detail(navController)
         preview(navController)
         loading(navController)
         result(navController)
@@ -109,9 +113,36 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
             viewModel.updateEdit(pillId, original)
             navController.popBackStack()
         },
-        // 세부정보(⑩)는 다음 단계다. 지금은 아무 데도 가지 않는다.
-        onDetail = { },
+        onDetail = { candidate ->
+            navController.navigate(
+                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+            )
+        },
         onLoadMore = candidateViewModel::loadMore
+    )
+}
+
+private fun NavGraphBuilder.detail(navController: NavController) = composable(
+    route = NmRoute.PILL_DETAIL,
+    arguments = listOf(
+        navArgument("pillCode") { type = NavType.StringType },
+        navArgument("revoked") {
+            type = NavType.BoolType
+            defaultValue = false
+        }
+    )
+) { entry ->
+    val viewModel: PillDetailViewModel = hiltViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    val pillCode = entry.arguments?.getString("pillCode").orEmpty()
+    val revoked = entry.arguments?.getBoolean("revoked") == true
+    LaunchedEffect(pillCode) { viewModel.load(pillCode, revoked) }
+
+    PillDetailScreen(
+        state = state,
+        onBack = { navController.popBackStack() },
+        onRetry = viewModel::retry
     )
 }
 

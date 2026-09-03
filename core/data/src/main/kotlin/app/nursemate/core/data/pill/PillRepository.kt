@@ -3,6 +3,7 @@ package app.nursemate.core.data.pill
 import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidatePage
+import app.nursemate.core.model.PillDetail
 import app.nursemate.core.model.Usage
 import app.nursemate.core.network.api.PillApi
 import app.nursemate.core.network.api.PillAttributeItem
@@ -81,6 +82,14 @@ class PillRepository @Inject constructor(
      */
     suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidatePage> =
         runCatching { pillApi.candidates(request) }
+
+    /**
+     * 확정한 알약의 세부정보.
+     *
+     * 404 는 '없음'이지 실패가 아니다 — 호출부가 [ApiFailure.httpStatus] 로 갈라 보도록
+     * 실패를 그대로 넘긴다. 여기서 성공/실패를 뭉개면 화면이 오류와 없음을 구분하지 못한다.
+     */
+    suspend fun detail(pillCode: String): Result<PillDetail> = runCatching { pillApi.pillDetail(pillCode) }
 
     /**
      * 원본 사진을 학습데이터로 올린다. **결과를 기다릴 필요가 없다** —

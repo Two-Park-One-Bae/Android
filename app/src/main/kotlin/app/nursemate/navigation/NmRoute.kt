@@ -30,4 +30,14 @@ object NmRoute {
     const val PILL_EDIT = "pill/edit/{pillId}"
 
     fun pillEdit(pillId: String): String = "pill/edit/$pillId"
+
+    /**
+     * 세부정보.
+     *
+     * 허가 종료 여부를 함께 실어 보낸다 — 그 품목은 **조회 없이** 안내로 끝내는데(NM-369)
+     * 화면이 그 판단을 하려면 후보의 허가상태를 알아야 한다.
+     */
+    const val PILL_DETAIL = "pill/detail/{pillCode}?revoked={revoked}"
+
+    fun pillDetail(pillCode: String, revoked: Boolean): String = "pill/detail/$pillCode?revoked=$revoked"
 }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  느낌표 원 — 세부정보 오류
+  출처: Lucide "circle-alert" (ISC License) https://lucide.dev
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M12,2a10,10 0,1 0,0 20a10,10 0,0 0,0 -20z"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M12,8v4"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M12,16h0.01"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

@@ -4,6 +4,7 @@ import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidatePage
 import app.nursemate.core.model.PillColor
+import app.nursemate.core.model.PillDetail
 import app.nursemate.core.model.PillFaceRequest
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
@@ -12,6 +13,7 @@ import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 
 /**
  * 알약 식별 API.
@@ -59,6 +61,22 @@ interface PillApi {
      */
     @POST("api/v0/pill-candidates")
     suspend fun candidates(@Body request: PillCandidatesRequest): PillCandidatePage
+
+    /**
+     * 확정한 알약의 세부정보.
+     *
+     * ## 404 는 오류가 아니다
+     * 미적재 품목·모르는 pillCode 모두 404 `PILL_DETAIL_NOT_FOUND` 하나로 온다. 화면은
+     * 오류가 아니라 **'세부정보 없음'** 으로 그리고 재시도 버튼을 두지 않는다(NM-309).
+     *
+     * ## 허가 종료 품목은 아예 부르지 않는다
+     * `licenseStatus = REVOKED` 는 조회 없이 안내로 끝낸다(NM-369). 허가정보가 남아 있는
+     * 품목도 마찬가지다.
+     *
+     * ⚠️ 허가문서에 base64 인라인 이미지가 섞여 있어 응답이 **수 MB** 에 이를 수 있다.
+     */
+    @GET("api/v0/pill-details/{pillCode}")
+    suspend fun pillDetail(@Path("pillCode") pillCode: String): PillDetail
 
     /**
      * 원본 이미지 업로드용 presigned PUT URL.
