@@ -38,6 +38,7 @@ import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillColor
 
@@ -57,6 +58,7 @@ import app.nursemate.core.model.PillColor
 @Composable
 fun PillEditAttributeCard(
     number: Int,
+    manual: Boolean,
     crop: Bitmap?,
     attribute: PillAttribute,
     faces: FaceInputs,
@@ -74,9 +76,9 @@ fun PillEditAttributeCard(
             .background(NmTheme.semanticColors.surface, RoundedCornerShape(16.dp))
             .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)
     ) {
-        PillHeader(number = number, crop = crop)
+        PillHeader(number = number, manual = manual, crop = crop)
         CardDivider()
-        AttributeRow(attribute = attribute, open = open, onToggle = onToggle)
+        AttributeRow(attribute = attribute, manual = manual, open = open, onToggle = onToggle)
 
         when (open) {
             AttributePanel.Color -> ColorPanel(selected = attribute.colors.orEmpty(), onToggle = onColorToggle)
@@ -102,6 +104,7 @@ fun PillEditAttributeCard(
         CardDivider()
         ImprintRow(
             faces = faces,
+            manual = manual,
             open = open == AttributePanel.Imprint,
             onClick = { onToggle(AttributePanel.Imprint) }
         )
@@ -110,27 +113,47 @@ fun PillEditAttributeCard(
 }
 
 @Composable
-private fun PillHeader(number: Int, crop: Bitmap?) {
+private fun PillHeader(number: Int, manual: Boolean, crop: Bitmap?) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 수동 추가 알약은 사진에 대응 영역이 없어 크롭이 없다. 빈 칸 대신 알약 아이콘을 둔다.
+        val thumbnail = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp))
         if (crop != null) {
             Image(
                 bitmap = crop.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(NmColor.Neutral.C100)
+                modifier = thumbnail.background(NmColor.Neutral.C100)
             )
+        } else {
+            Box(
+                modifier = thumbnail.background(NmColor.Primary.C50),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(DsR.drawable.nm_ic_pill),
+                    contentDescription = null,
+                    tint = NmColor.Primary.C500,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = "알약 $number", style = CardTitle, color = colors.textPrimary)
-            Text(text = "속성을 수정하면 후보가 바뀌어요", style = CardSubtitle, color = colors.textTertiary)
+            Text(
+                text = if (manual) "새 알약" else "알약 $number",
+                style = CardTitle,
+                color = colors.textPrimary
+            )
+            Text(
+                // 수동 추가는 고칠 자동값이 없다 — "수정하면"이라고 하면 없는 값을 찾게 된다.
+                text = if (manual) "속성을 입력하면 후보가 나타나요" else "속성을 수정하면 후보가 바뀌어요",
+                style = CardSubtitle,
+                color = colors.textTertiary
+            )
         }
     }
 }
@@ -142,7 +165,12 @@ private fun PillHeader(number: Int, crop: Bitmap?) {
  * 카드 높이가 들쭉날쭉해지고 아래 후보 목록이 흔들린다.
  */
 @Composable
-private fun AttributeRow(attribute: PillAttribute, open: AttributePanel?, onToggle: (AttributePanel) -> Unit) {
+private fun AttributeRow(
+    attribute: PillAttribute,
+    manual: Boolean,
+    open: AttributePanel?,
+    onToggle: (AttributePanel) -> Unit
+) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
@@ -158,19 +186,19 @@ private fun AttributeRow(attribute: PillAttribute, open: AttributePanel?, onTogg
             val selectedColors = attribute.colors.orEmpty()
             AttributeChip(
                 open = open == AttributePanel.Color,
-                label = selectedColors.chipLabel(attribute.isTransparent),
+                label = selectedColors.chipLabel(attribute.isTransparent, manual),
                 onClick = { onToggle(AttributePanel.Color) }
-            ) { ColorDots(selectedColors) }
+            ) { ColorDots(colors = selectedColors, placeholder = manual) }
 
             AttributeChip(
                 open = open == AttributePanel.Shape,
-                label = attribute.shape?.label ?: UNSET,
+                label = attribute.shape?.label ?: unset(manual, "모양"),
                 onClick = { onToggle(AttributePanel.Shape) }
             ) { tint -> attribute.shape?.let { ShapeIcon(shape = it, tint = tint) } }
 
             AttributeChip(
                 open = open == AttributePanel.Formulation,
-                label = attribute.formulation?.chipLabel ?: UNSET,
+                label = attribute.formulation?.chipLabel ?: unset(manual, "제형"),
                 onClick = { onToggle(AttributePanel.Formulation) }
             ) { tint -> attribute.formulation?.let { FormulationIcon(formulation = it, tint = tint) } }
         }
@@ -212,22 +240,6 @@ private fun AttributeChip(
             // 펼쳐지면 같은 꺾쇠를 뒤집는다. 정본의 chevron-up 과 같은 그림이 된다.
             modifier = Modifier.size(12.dp).rotate(if (open) 180f else 0f)
         )
-    }
-}
-
-/** 고른 색을 점으로 늘어놓는다. 하나도 없으면 칩이 텅 비지 않게 아무것도 그리지 않는다. */
-@Composable
-private fun ColorDots(colors: List<PillColor>) {
-    val border = NmTheme.semanticColors.border
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        colors.forEach { color ->
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .background(color.swatch, CircleShape)
-                    .let { if (color.needsOutline) it.border(1.dp, border, CircleShape) else it }
-            )
-        }
     }
 }
 
@@ -279,7 +291,7 @@ private fun NmSwitch(checked: Boolean) {
 
 /** 앞뒤 각인·구분선·마크. 줄 전체를 눌러 각인 입력판(⑧-e)을 펼친다. */
 @Composable
-private fun ImprintRow(faces: FaceInputs, open: Boolean, onClick: () -> Unit) {
+private fun ImprintRow(faces: FaceInputs, manual: Boolean, open: Boolean, onClick: () -> Unit) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
@@ -287,7 +299,7 @@ private fun ImprintRow(faces: FaceInputs, open: Boolean, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            ImprintValues(faces)
+            ImprintValues(faces = faces, manual = manual)
         }
         Icon(
             painter = painterResource(R.drawable.nm_ic_chevron_down),
@@ -309,14 +321,19 @@ private fun CardDivider() {
  * 다색이면 이름을 다 늘어놓는 대신 `파랑 외 1` 로 줄인다. 그래도 칩 셋이 한 줄을 넘길 수 있는데,
  * 그때는 [AttributeRow] 의 가로 스크롤로 넘긴다 — 이름을 지우는 쪽이 더 큰 손해다.
  */
-private fun List<PillColor>.chipLabel(transparent: Boolean): String = when {
-    isEmpty() -> if (transparent) "투명" else UNSET
+private fun List<PillColor>.chipLabel(transparent: Boolean, manual: Boolean): String = when {
+    isEmpty() -> if (transparent) "투명" else unset(manual, "색상")
     size == 1 -> first().label
     else -> "${first().label} 외 ${size - 1}"
 }
 
-/** 아직 고르지 않았다. '없음'이 아니라 '모른다'라서 이 말을 쓴다. */
-private const val UNSET = "미인식"
+/**
+ * 값이 없는 칩에 적을 말.
+ *
+ * 검출된 알약은 서버가 **읽어 보고 못 읽은** 것이라 '미인식'이다. 수동 추가는 읽은 적이
+ * 없으니 그 말이 성립하지 않는다 — 정본 ⑧-h 처럼 속성 이름만 흐리게 둔다.
+ */
+private fun unset(manual: Boolean, attribute: String): String = if (manual) attribute else "미인식"
 
 // 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
 private val CardTitle = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)

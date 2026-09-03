@@ -45,30 +45,39 @@ import app.nursemate.core.model.PillShape
  * 각인계열은 MVP 에서 서버가 뽑지 않아 **항상 미인식**이다(수동 입력 — spec §개별 추출 실패).
  */
 @Composable
-fun PillAttributeChips(attribute: PillAttribute?, faces: FaceInputs, modifier: Modifier = Modifier) {
+fun PillAttributeChips(
+    attribute: PillAttribute?,
+    faces: FaceInputs,
+    manual: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ColorGroup(colors = attribute?.colors, transparent = attribute?.isTransparent == true)
-            ShapeGroup(shape = attribute?.shape)
-            FormulationGroup(formulation = attribute?.formulation)
+            ColorGroup(
+                colors = attribute?.colors,
+                transparent = attribute?.isTransparent == true,
+                manual = manual
+            )
+            ShapeGroup(shape = attribute?.shape, manual = manual)
+            FormulationGroup(formulation = attribute?.formulation, manual = manual)
         }
         // 정본에서 앞뒤 두 줄은 `표기값` 프레임 하나로 묶여 간격이 5 다(칩 줄과는 6).
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) { ImprintValues(faces) }
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) { ImprintValues(faces, manual) }
     }
 }
 
 /** 앞뒤 표기값 두 줄. ⑤ 인식 결과 카드와 ⑧ 수정 카드가 같은 모양을 쓴다. */
 @Composable
-internal fun ImprintValues(faces: FaceInputs) {
-    FaceRow(face = "앞", input = faces.front)
-    FaceRow(face = "뒤", input = faces.back)
+internal fun ImprintValues(faces: FaceInputs, manual: Boolean = false) {
+    FaceRow(face = "앞", input = faces.front, manual = manual)
+    FaceRow(face = "뒤", input = faces.back, manual = manual)
 }
 
 @Composable
-private fun ColorGroup(colors: List<PillColor>?, transparent: Boolean) {
+private fun ColorGroup(colors: List<PillColor>?, transparent: Boolean, manual: Boolean) {
     AttributeGroup(label = "색상") {
         if (colors.isNullOrEmpty() && !transparent) {
-            UnrecognizedText()
+            UnrecognizedText(manual)
             return@AttributeGroup
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -80,9 +89,9 @@ private fun ColorGroup(colors: List<PillColor>?, transparent: Boolean) {
 }
 
 @Composable
-private fun ShapeGroup(shape: PillShape?) = AttributeGroup(label = "모양") {
+private fun ShapeGroup(shape: PillShape?, manual: Boolean) = AttributeGroup(label = "모양") {
     if (shape == null) {
-        UnrecognizedText()
+        UnrecognizedText(manual)
         return@AttributeGroup
     }
     ShapeIcon(shape)
@@ -90,9 +99,9 @@ private fun ShapeGroup(shape: PillShape?) = AttributeGroup(label = "모양") {
 }
 
 @Composable
-private fun FormulationGroup(formulation: PillFormulation?) = AttributeGroup(label = "제형") {
+private fun FormulationGroup(formulation: PillFormulation?, manual: Boolean) = AttributeGroup(label = "제형") {
     if (formulation == null) {
-        UnrecognizedText()
+        UnrecognizedText(manual)
         return@AttributeGroup
     }
     FormulationIcon(formulation)
@@ -126,33 +135,48 @@ private fun AttributeGroup(label: String, content: @Composable () -> Unit) {
  * 빼고 있어 화면과 필터가 어긋난다. 그래서 화면 입력값([FaceInput])을 그대로 읽는다.
  */
 @Composable
-private fun FaceRow(face: String, input: FaceInput) {
+private fun FaceRow(face: String, input: FaceInput, manual: Boolean) {
     val colors = NmTheme.semanticColors
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text = face, style = FaceLabel, color = colors.textTertiary, modifier = Modifier.width(16.dp))
-        FaceField(label = "각인", value = input.imprint.ifBlank { null }, blank = input.blank, size = 13.sp)
+        FaceField(
+            label = "각인",
+            value = input.imprint.ifBlank { null },
+            blank = input.blank,
+            manual = manual,
+            size = 13.sp
+        )
         FaceField(
             label = "구분선",
             // NONE 은 사용자가 '없음'을 고른 것이라 값이 있는 셈이다 — 아래 blank 와 결과가 같다.
             value = input.dividingLine?.label,
             blank = input.blank,
+            manual = manual,
             size = 14.sp
         )
         FaceField(
             label = "마크",
             value = "있음".takeIf { input.hasMark },
             blank = input.blank,
+            manual = manual,
             size = 12.sp
         )
     }
 }
 
 /**
+ * @param manual 수동 추가 알약인가. 값이 비었을 때 '미인식' 대신 '-' 로 둔다.
  * @param blank 이 면이 통째로 '해당 없음'인가. true 면 값이 비었을 때 '없음', false 면 '미인식'.
  *              둘을 뒤섞으면 후보 조회가 조건으로 걸지도 않은 것을 화면이 단언하게 된다.
  */
 @Composable
-private fun RowScope.FaceField(label: String, value: String?, blank: Boolean, size: androidx.compose.ui.unit.TextUnit) {
+private fun RowScope.FaceField(
+    label: String,
+    value: String?,
+    blank: Boolean,
+    manual: Boolean,
+    size: androidx.compose.ui.unit.TextUnit
+) {
     val colors = NmTheme.semanticColors
     // 정본에서 각인·구분선·마크 칸이 모두 fill_container 다 — 셋이 폭을 균등하게 나눠 가져야
     // 앞줄과 뒷줄의 칩이 세로로 맞는다. weight 를 빼면 글자 길이대로 밀려 어긋난다.
@@ -164,7 +188,12 @@ private fun RowScope.FaceField(label: String, value: String?, blank: Boolean, si
                 .padding(horizontal = 7.dp, vertical = 1.dp)
         ) {
             Text(
-                text = value ?: if (blank) "없음" else "미인식",
+                // 수동 추가는 읽어 본 적이 없어 '미인식'이 성립하지 않는다(정본 ⑧-h 는 '-').
+                text = value ?: when {
+                    blank -> "없음"
+                    manual -> "-"
+                    else -> "미인식"
+                },
                 style = FieldValue.copy(fontSize = size),
                 color = if (value != null) colors.textPrimary else colors.textTertiary
             )
@@ -178,8 +207,9 @@ private fun ChipText(text: String) {
 }
 
 @Composable
-private fun UnrecognizedText() {
-    Text(text = "미인식", style = ChipValue, color = NmTheme.semanticColors.textTertiary)
+private fun UnrecognizedText(manual: Boolean) {
+    // 수동 추가는 서버가 읽어 본 적이 없다 — '미인식'은 읽고도 못 읽었을 때만 쓴다.
+    Text(text = if (manual) "-" else "미인식", style = ChipValue, color = NmTheme.semanticColors.textTertiary)
 }
 
 private val NmChipRadius = 8.dp

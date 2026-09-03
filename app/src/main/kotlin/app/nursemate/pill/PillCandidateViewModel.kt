@@ -59,7 +59,11 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     fun search(attribute: PillAttribute?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
         moreJob?.cancel()
-        if (attribute == null) {
+
+        // ⚠️ 조건이 하나도 없으면 **부르지 않는다.** 서버가 400 을 주고 화면에는 오류가 뜨는데,
+        //    사용자는 아직 아무것도 입력하지 않았을 뿐이다(수동 추가 진입 직후 — 정본 ⑧-h).
+        val request = attribute?.toRequest(faces)?.takeIf { it.hasCondition }
+        if (request == null) {
             lastRequest = null
             _state.value = CandidateUiState()
             return
@@ -72,8 +76,6 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
         searchJob = viewModelScope.launch {
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
-
-            val request = attribute.toRequest(faces)
             lastRequest = request
 
             pillRepository.candidates(request)
@@ -149,3 +151,8 @@ private fun PillAttribute.toRequest(faces: FaceInputs) = PillCandidatesRequest(
     front = faces.front.toRequest(),
     back = faces.back.toRequest()
 )
+
+/** 서버에 물어볼 게 하나라도 있는가. 다 비어 있으면 400 이라 부르지 않는다. */
+private val PillCandidatesRequest.hasCondition: Boolean
+    get() = colors.isNotEmpty() || isTransparent != null || shape != null ||
+        formulation != null || front != null || back != null

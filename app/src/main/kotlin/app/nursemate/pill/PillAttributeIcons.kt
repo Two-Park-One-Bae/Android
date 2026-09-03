@@ -2,7 +2,9 @@ package app.nursemate.pill
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -86,3 +88,28 @@ internal fun FormulationIcon(formulation: PillFormulation, tint: Color = NmTheme
 }
 
 private val IconTagLabel = NmTypography.caption.copy(fontSize = 11.sp)
+
+/** 고른 색을 점으로 늘어놓는다. 하나도 없으면 칩이 텅 비지 않게 아무것도 그리지 않는다. */
+@Composable
+internal fun ColorDots(colors: List<PillColor>, placeholder: Boolean = false) {
+    val border = NmTheme.semanticColors.border
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 아직 아무 색도 안 고른 수동 추가 카드는 빈 점 하나로 자리를 잡는다(정본 ⑧-h).
+        if (colors.isEmpty() && placeholder) {
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .background(NmColor.Neutral.C200, CircleShape)
+                    .border(1.dp, border, CircleShape)
+            )
+        }
+        colors.forEach { color ->
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .background(color.swatch, CircleShape)
+                    .let { if (color.needsOutline) it.border(1.dp, border, CircleShape) else it }
+            )
+        }
+    }
+}

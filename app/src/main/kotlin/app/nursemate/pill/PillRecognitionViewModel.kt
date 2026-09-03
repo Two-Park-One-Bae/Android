@@ -219,25 +219,13 @@ class PillRecognitionViewModel @Inject constructor(
             }
     }
 
-    /** 사용자가 고친 속성·각인을 갈무리한다. 서버가 준 원본은 건드리지 않는다. */
-    fun updateEdit(pillId: String, edit: PillEdit) {
-        _state.update { it.copy(edits = it.edits + (pillId to edit)) }
-    }
-
-    /** 후보를 확정한다. 취소하면 부르지 않으므로 여기 오면 사용자가 확인을 누른 것이다. */
-    fun selectCandidate(pillId: String, candidate: PillCandidate) {
-        _state.update { it.copy(selections = it.selections + (pillId to candidate)) }
-    }
-
     /**
-     * 목록에서 알약 하나를 뺀다 (spec NM-134).
+     * 사용자 보정 — 수정·선택·삭제·수동 추가.
      *
-     * 오탐이거나 인식 대상이 아닌 알약을 지우는 용도다. 사진 위 영역 표시도 함께 사라지고
-     * 번호가 다시 매겨진다 — 화면이 알아서 하도록 여기서는 id 만 기록한다.
+     * 촬영·검출과 다른 일이라 갈라 뒀다. 앞쪽은 사진 한 장을 결과로 바꾸는 파이프라인이고,
+     * 이쪽은 그 결과를 사람이 고치는 것이다 — 서로 부르지 않는다.
      */
-    fun removePill(pillId: String) {
-        _state.update { it.copy(removedPillIds = it.removedPillIds + pillId) }
-    }
+    val corrections = PillCorrections(_state)
 
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
         PillDetector(modelFile.prepare()).also { detector = it }
@@ -276,6 +264,12 @@ data class PillUiState(
      * 손대기 전에는 항목이 없고, 그때는 추출값에서 만들어 쓴다([editOf]).
      */
     val edits: Map<String, PillEdit> = emptyMap(),
+    /**
+     * 사용자가 직접 넣은 알약. 검출 결과 **뒤에** 붙는다.
+     *
+     * 사진에 대응 영역이 없어 오버레이도 크롭 썸네일도 없다(spec NM-187).
+     */
+    val manualPillIds: List<String> = emptyList(),
     /** 확정한 후보. 카드 제목이 '알약을 선택해주세요'에서 품목명으로 바뀐다. */
     val selections: Map<String, PillCandidate> = emptyMap()
 )
@@ -333,6 +327,16 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
 internal fun pillId(index: Int): String = (index + 1).toString()
 
 /**
+ * 수동 추가 알약의 키.
+ *
+ * 검출 키가 "1"·"2"… 라 숫자만으로는 겹친다. 접두사로 갈라 두면 키만 보고도 사진에
+ * 대응 영역이 있는 알약인지 알 수 있다.
+ */
+internal fun manualPillId(index: Int): String = "m${index + 1}"
+
+internal val String.isManualPill: Boolean get() = startsWith("m")
+
+/**
  * 수정 화면이 들고 고칠 값.
  *
  * 아직 안 건드린 알약은 서버 추출값에서 만들어 준다 — 추출까지 실패했으면 빈 값에서 시작한다
@@ -346,3 +350,57 @@ fun PillUiState.editOf(pillId: String): PillEdit {
 
 private fun PillUiState.extracted(pillId: String): PillAttribute? =
     (attributes as? AttributePhase.Done)?.byPillId?.get(pillId)
+
+/**
+ * 인식 결과에 대한 사용자 보정.
+ *
+ * 상태를 [PillRecognitionViewModel] 과 나눠 갖는 게 아니라 **같은 흐름을 함께 쓴다** —
+ * 화면 하나가 두 상태를 합쳐 보는 일이 없도록.
+ */
+class PillCorrections internal constructor(private val state: MutableStateFlow<PillUiState>) {
+
+    /** 사용자가 고친 속성·각인을 갈무리한다. 서버가 준 원본은 건드리지 않는다. */
+    fun updateEdit(pillId: String, edit: PillEdit) {
+        state.update { it.copy(edits = it.edits + (pillId to edit)) }
+    }
+
+    /** 후보를 확정한다. 취소하면 부르지 않으므로 여기 오면 사용자가 확인을 누른 것이다. */
+    fun selectCandidate(pillId: String, candidate: PillCandidate) {
+        state.update { it.copy(selections = it.selections + (pillId to candidate)) }
+    }
+
+    /**
+     * 목록에서 알약 하나를 뺀다 (spec NM-134).
+     *
+     * 오탐이거나 인식 대상이 아닌 알약을 지우는 용도다. 사진 위 영역 표시도 함께 사라지고
+     * 번호가 다시 매겨진다 — 화면이 알아서 하도록 여기서는 id 만 기록한다.
+     */
+    fun removePill(pillId: String) {
+        // 수동 추가 알약은 사진에 대응 bbox 가 없어 목록에서만 빼면 된다(spec NM-134).
+        state.update {
+            if (pillId.isManualPill) {
+                it.copy(manualPillIds = it.manualPillIds - pillId)
+            } else {
+                it.copy(removedPillIds = it.removedPillIds + pillId)
+            }
+        }
+    }
+
+    /**
+     * 수동 추가 알약을 목록에 넣는다.
+     *
+     * ⚠️ **확인을 누른 뒤에만 부른다.** 진입할 때 넣으면 취소하고 나온 자리에 빈 카드가
+     * 남는다(spec NM-187 — "선택·확인 시에만 새 카드로 추가, 취소 시 미추가").
+     */
+    fun addManualPill(pillId: String) {
+        state.update {
+            if (pillId in it.manualPillIds) it else it.copy(manualPillIds = it.manualPillIds + pillId)
+        }
+    }
+
+    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다. */
+    fun nextManualPillId(): String = manualPillId(manualSequence++)
+
+    /** 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다. */
+    private var manualSequence = 0
+}

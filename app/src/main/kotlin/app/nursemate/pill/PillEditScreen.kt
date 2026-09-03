@@ -66,6 +66,7 @@ import app.nursemate.ui.SystemBarIcons
 @Composable
 fun PillEditScreen(
     number: Int,
+    manual: Boolean,
     crop: Bitmap?,
     attribute: PillAttribute,
     onAttributeChange: (PillAttribute) -> Unit,
@@ -135,6 +136,7 @@ fun PillEditScreen(
                 item {
                     PillEditAttributeCard(
                         number = number,
+                        manual = manual,
                         crop = crop,
                         attribute = attribute,
                         faces = faces,

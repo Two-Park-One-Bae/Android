@@ -32,6 +32,7 @@ import app.nursemate.pill.PillPreviewScreen
 import app.nursemate.pill.PillRecognitionViewModel
 import app.nursemate.pill.PillResultScreen
 import app.nursemate.pill.editOf
+import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
 
 /**
@@ -98,19 +99,22 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     PillEditScreen(
         number = (index ?: 0) + 1,
         crop = index?.let { detected.getOrNull(it)?.crop },
+        manual = pillId.isManualPill,
         attribute = edit.attribute,
-        onAttributeChange = { viewModel.updateEdit(pillId, edit.copy(attribute = it)) },
+        onAttributeChange = { viewModel.corrections.updateEdit(pillId, edit.copy(attribute = it)) },
         faces = edit.faces,
-        onFacesChange = { viewModel.updateEdit(pillId, edit.copy(faces = it)) },
+        onFacesChange = { viewModel.corrections.updateEdit(pillId, edit.copy(faces = it)) },
         candidates = candidates,
         selected = pending,
         onSelect = { pending = it },
         onConfirm = {
-            pending?.let { viewModel.selectCandidate(pillId, it) }
+            pending?.let { viewModel.corrections.selectCandidate(pillId, it) }
+            // 수동 추가는 여기서 비로소 목록에 들어간다 — 취소하고 나가면 빈 카드가 남지 않는다.
+            if (pillId.isManualPill) viewModel.corrections.addManualPill(pillId)
             navController.popBackStack()
         },
         onCancel = {
-            viewModel.updateEdit(pillId, original)
+            viewModel.corrections.updateEdit(pillId, original)
             navController.popBackStack()
         },
         onDetail = { candidate ->
@@ -215,8 +219,10 @@ private fun NavGraphBuilder.result(navController: NavController) = composable(Nm
     PillResultScreen(
         state = state,
         onBack = { navController.restartCapture(viewModel) },
-        onRemovePill = viewModel::removePill,
-        onEditPill = { navController.navigate(NmRoute.pillEdit(it)) }
+        onRemovePill = viewModel.corrections::removePill,
+        onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
+        // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
+        onAddPill = { navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId())) }
     )
 }
 

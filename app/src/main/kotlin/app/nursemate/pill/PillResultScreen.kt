@@ -1,5 +1,6 @@
 package app.nursemate.pill
 
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -56,6 +57,7 @@ import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.vision.DetectedPill
 import app.nursemate.ui.SystemBarIcons
+import coil3.compose.AsyncImage
 
 /**
  * 인식 결과 — 디자인 `⑤ 인식 결과`.
@@ -74,6 +76,7 @@ fun PillResultScreen(
     onBack: () -> Unit,
     onRemovePill: (String) -> Unit,
     onEditPill: (String) -> Unit,
+    onAddPill: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
@@ -89,9 +92,13 @@ fun PillResultScreen(
 
     // 지운 알약은 목록·사진 표시·번호에서 함께 빠진다. pillId 는 검출 순서로 고정돼 있어
     // 번호가 다시 매겨져도 서버에 보낸 키와 어긋나지 않는다.
-    val pills = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
-        .mapIndexed { index, pill -> pillId(index) to pill }
-        .filterNot { (id, _) -> id in state.removedPillIds }
+    //
+    // 수동 추가 알약은 검출 결과 **뒤에** 붙고 사진에 대응 영역이 없다 — 그래서 목록은
+    // 이렇게 한 줄로 합쳐 두고, 오버레이만 [ResultPill.detected] 가 있는 것에만 그린다.
+    val detected = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
+        .mapIndexed { index, pill -> ResultPill(id = pillId(index), detected = pill) }
+        .filterNot { it.id in state.removedPillIds }
+    val pills = detected + state.manualPillIds.map { ResultPill(id = it, detected = null) }
 
     // 어느 카드의 ⋮ 를 눌렀는가. null 이면 메뉴가 닫힌 상태다.
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -121,8 +128,8 @@ fun PillResultScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     PillPhotoCard(photo = state.photo) {
-                        pills.forEachIndexed { index, (_, pill) ->
-                            DetectionMarker(pill = pill, number = index + 1)
+                        pills.forEachIndexed { index, item ->
+                            item.detected?.let { DetectionMarker(pill = it, number = index + 1) }
                         }
                     }
                 }
@@ -140,18 +147,21 @@ fun PillResultScreen(
                                 style = ListTitle,
                                 color = colors.textPrimary
                             )
-                            pills.forEachIndexed { index, (id, pill) ->
+                            pills.forEachIndexed { index, item ->
                                 PillRow(
-                                    pill = pill,
+                                    manual = item.id.isManualPill,
+                                    crop = item.detected?.crop,
                                     number = index + 1,
-                                    edit = state.editOf(id),
-                                    selected = state.selections[id],
+                                    edit = state.editOf(item.id),
+                                    selected = state.selections[item.id],
                                     onMenuClick = { topEnd ->
                                         menuTopEnd = topEnd
-                                        menuFor = id
+                                        menuFor = item.id
                                     }
                                 )
                             }
+
+                            AddPillButton(onClick = onAddPill)
                         }
 
                         // 탐지 0개는 `⑥ 결과 없음`, 실패는 `⑦ 분석 실패`로 갈라져야 한다.
@@ -265,13 +275,20 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
  */
 @Composable
 private fun PillRow(
-    pill: DetectedPill,
+    manual: Boolean,
+    crop: Bitmap?,
     number: Int,
     edit: PillEdit,
     selected: PillCandidate?,
     onMenuClick: (IntOffset) -> Unit
 ) {
     val colors = NmTheme.semanticColors
+
+    // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다(spec §개별 추출 실패).
+    // 사용자가 직접 채워 넣기 시작하면 안내를 거두고 평소처럼 칩을 보여준다 — 다 채운 카드에
+    // "인식하지 못했어요"가 남아 있으면 아직 할 일이 있는 것처럼 읽힌다.
+    val showFailure = edit.attribute.failed && edit.attribute.isBlank
+
     // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
     var cardRight by remember { mutableIntStateOf(0) }
     var menuTop by remember { mutableIntStateOf(0) }
@@ -280,16 +297,12 @@ private fun PillRow(
             .fillMaxWidth()
             .onGloballyPositioned { cardRight = it.positionInRoot().round().x + it.size.width }
             // 확정한 카드는 배경째로 바뀐다 — 목록을 훑을 때 남은 것이 몇 개인지 한눈에 들어와야 한다.
-            .background(
-                color = if (selected != null) NmColor.Secondary.C50 else colors.surface,
-                shape = RoundedCornerShape(14.dp)
-            )
-            .let {
-                if (selected == null) {
-                    it
-                } else {
-                    it.border(1.5.dp, NmColor.Secondary.C300, RoundedCornerShape(14.dp))
-                }
+            // 추출에 실패한 카드도 마찬가지로 배경으로 알린다(경고지 오류가 아니다 — 사용자가
+            // 직접 채우면 되는 상태다).
+            .background(color = cardFill(selected, showFailure, colors.surface), shape = RoundedCornerShape(14.dp))
+            .let { base ->
+                val stroke = cardStroke(selected, showFailure) ?: return@let base
+                base.border(1.5.dp, stroke, RoundedCornerShape(14.dp))
             }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -309,31 +322,33 @@ private fun PillRow(
                 Text(text = "$number", style = NumberBadge, color = NmColor.Primary.C600)
             }
 
-            Image(
-                bitmap = pill.crop.asImageBitmap(),
-                contentDescription = null,
-                // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(NmColor.Neutral.C100)
-            )
+            val thumbnail = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(NmColor.Neutral.C100)
+            if (crop != null) {
+                Image(
+                    bitmap = crop.asImageBitmap(),
+                    contentDescription = null,
+                    // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
+                    contentScale = ContentScale.Fit,
+                    modifier = thumbnail
+                )
+            } else {
+                // 수동 추가 알약은 사진에 대응 영역이 없다. 확정 전에는 자리만, 확정 뒤에는
+                // 고른 후보의 낱알 이미지를 쓴다(spec NM-187).
+                AsyncImage(
+                    model = selected?.pillThumbnailUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = thumbnail
+                )
+            }
 
-            // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다.
-            val failed = edit.attribute.failed
             Text(
-                text = when {
-                    selected != null -> selected.pillName ?: selected.pillCode
-                    failed -> "정보 인식 실패 · 직접 입력해 주세요"
-                    else -> "알약을 선택해주세요"
-                },
+                text = selected?.let { it.pillName ?: it.pillCode } ?: "알약을 선택해주세요",
                 style = if (selected != null) RowTitleDone else RowTitle,
-                color = when {
-                    selected != null -> colors.textPrimary
-                    failed -> NmColor.Error.C600
-                    else -> colors.textSecondary
-                },
+                color = if (selected != null) colors.textPrimary else colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -355,7 +370,11 @@ private fun PillRow(
             )
         }
 
-        PillAttributeChips(attribute = edit.attribute, faces = edit.faces)
+        if (showFailure) {
+            ExtractionFailedNotice()
+        } else {
+            PillAttributeChips(attribute = edit.attribute, faces = edit.faces, manual = manual)
+        }
     }
 }
 
@@ -413,6 +432,71 @@ private val BadgeHeight = 18.dp
 
 // 정본 스케일에 없는 크기들이다. 화면이 요구하는 값이라 여기 명시한다.
 private val ListTitle = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
+
+/** 목록 한 줄. 수동 추가 알약은 [detected] 가 없어 사진 오버레이도 크롭도 없다. */
+private data class ResultPill(val id: String, val detected: DetectedPill?)
+
+/** 정본 `⑤ / 알약 추가 버튼`. 미탐지 누락을 사용자가 직접 메우는 자리다(spec NM-187). */
+@Composable
+private fun AddPillButton(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(NmColor.Primary.C50)
+            .border(1.5.dp, NmColor.Primary.C300, shape)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_plus),
+            contentDescription = null,
+            tint = NmColor.Primary.C600,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(text = "알약 추가", style = AddPillLabel, color = NmColor.Primary.C600)
+    }
+}
+
+/** 정본 `⑤ 일부 정보 인식 실패 / 실패 안내`. 경고(warning)지 오류(error)가 아니다. */
+@Composable
+private fun ExtractionFailedNotice() {
+    val colors = NmTheme.semanticColors
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(
+                painter = painterResource(R.drawable.nm_ic_triangle_alert),
+                contentDescription = null,
+                tint = NmColor.Warning.C600,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(text = "정보를 인식하지 못했어요", style = FailureTitle, color = NmColor.Warning.C700)
+        }
+        Text(text = "색·모양·제형·각인을 직접 입력하세요", style = FailureHint, color = colors.textSecondary)
+    }
+}
+
+private fun cardFill(selected: PillCandidate?, showFailure: Boolean, surface: Color) = when {
+    selected != null -> NmColor.Secondary.C50
+    showFailure -> NmColor.Warning.C50
+    else -> surface
+}
+
+private fun cardStroke(selected: PillCandidate?, showFailure: Boolean) = when {
+    selected != null -> NmColor.Secondary.C300
+    showFailure -> NmColor.Warning.C300
+    else -> null
+}
+
+private val AddPillLabel = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+private val FailureTitle = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+private val FailureHint = NmTypography.caption
 private val RowTitleDone = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold)
 private val RowTitle = NmTypography.body.copy(fontWeight = FontWeight.SemiBold)
 private val NumberBadge = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)

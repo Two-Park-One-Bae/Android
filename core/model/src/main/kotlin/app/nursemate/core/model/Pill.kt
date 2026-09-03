@@ -114,6 +114,9 @@ data class PillAttribute(
 ) {
     /** 이 알약은 아예 못 읽었는가. 카드 전체를 '정보 인식 실패'로 표시하는 기준이다. */
     val failed: Boolean get() = error != null
+
+    /** 색·모양·제형이 하나도 없다. 추출 실패 안내를 거둘지 정하는 기준이다(각인은 늘 수동이라 뺀다). */
+    val isBlank: Boolean get() = colors.isNullOrEmpty() && shape == null && formulation == null
 }
 
 /**
