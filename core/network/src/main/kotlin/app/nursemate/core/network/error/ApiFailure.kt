@@ -28,8 +28,11 @@ class ApiFailure(val httpStatus: Int, val problem: ProblemDetail?, val requestPa
     val isRetryable: Boolean
         get() = when (code) {
             ApiErrorCode.SERVICE_UNAVAILABLE,
-            ApiErrorCode.INTERNAL_ERROR,
-            ApiErrorCode.CLASSIFICATION_FAILED -> true
+            ApiErrorCode.INTERNAL_ERROR -> true
+
+            // 복구 불가 — 같은 이미지를 다시 보내도 같은 결과다. 화면은 재촬영을 유도한다
+            // (errors.md §POST /pill-attributes "클라이언트 대응").
+            ApiErrorCode.CLASSIFICATION_FAILED -> false
 
             // 정상 앱에선 발생하지 않고, 발생해도 다시 보내봐야 같은 결과다.
             ApiErrorCode.APP_CHECK_FAILED -> false

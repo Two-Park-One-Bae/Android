@@ -110,6 +110,13 @@ class ApiFailureTest {
     }
 
     @Test
+    fun `CLASSIFICATION_FAILED 는 500 이어도 재시도 대상이 아니다`() {
+        // 같은 이미지를 다시 보내도 같은 결과다(errors.md "클라이언트 대응" = 재촬영).
+        // HTTP status 폴백(5xx=재시도)보다 이 code 가 우선해야 한다.
+        assertFalse(failure(500, "CLASSIFICATION_FAILED").isRetryable)
+    }
+
+    @Test
     fun `401 UNAUTHORIZED 만 재로그인을 요구한다`() {
         assertTrue(failure(401, "UNAUTHORIZED").requiresSignIn)
         // App Check 실패는 재로그인해도 소용없다.

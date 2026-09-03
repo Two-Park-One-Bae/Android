@@ -8,5 +8,4 @@ package app.nursemate.core.network
  */
 object NetworkConfig {
     const val BASE_URL: String = BuildConfig.BASE_URL
-    const val API_PREFIX: String = "api/v0"
 }

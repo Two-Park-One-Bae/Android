@@ -55,6 +55,7 @@ internal object NetworkModule {
         }
         .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     @Provides
@@ -71,4 +72,7 @@ internal object NetworkModule {
 
     /** 알약 분석은 서버가 외부 AI 를 부르느라 오래 걸린다. 기본 10초로는 모자란다. */
     private const val READ_TIMEOUT_SECONDS = 60L
+
+    /** 크롭을 base64 로 실어 보내는 요청(NM-393)이 있다. 기본 10초로는 셀룰러에서 모자란다. */
+    private const val WRITE_TIMEOUT_SECONDS = 60L
 }
