@@ -18,6 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,12 +57,16 @@ fun PillFinalScreen(
     pills: List<PillCandidate>,
     onBack: () -> Unit,
     onDetail: (PillCandidate) -> Unit,
-    onShare: () -> Unit,
+    onCopyText: () -> Unit,
+    onSavePdf: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
+
+    // 공유는 방식을 먼저 고른다 — 텍스트냐 PDF냐.
+    var sharing by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -101,7 +109,7 @@ fun PillFinalScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NmButtonSecondary(text = "공유", onClick = onShare, modifier = Modifier.weight(1f))
+                NmButtonSecondary(text = "공유", onClick = { sharing = true }, modifier = Modifier.weight(1f))
                 NmButtonPrimary(text = "완료", onClick = onDone, modifier = Modifier.weight(1f))
             }
             Text(
@@ -113,6 +121,20 @@ fun PillFinalScreen(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+
+    if (sharing) {
+        PillShareSheet(
+            onCopyText = {
+                sharing = false
+                onCopyText()
+            },
+            onSavePdf = {
+                sharing = false
+                onSavePdf()
+            },
+            onDismiss = { sharing = false }
+        )
     }
 }
 

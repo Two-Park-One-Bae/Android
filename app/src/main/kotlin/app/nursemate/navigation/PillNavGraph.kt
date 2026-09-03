@@ -38,6 +38,7 @@ import app.nursemate.pill.editOf
 import app.nursemate.pill.finalPills
 import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
+import app.nursemate.pill.sharePillResultPdf
 
 /**
  * 알약 식별 플로우 — 촬영① → 미리보기② → 로딩④ → 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
@@ -148,7 +149,8 @@ private fun NavGraphBuilder.finalResult(navController: NavController) = composab
                 NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
             )
         },
-        onShare = { context.copyPillResult(pills) },
+        onCopyText = { context.copyPillResult(pills) },
+        onSavePdf = { context.sharePillResultPdf(pills) },
         onDone = { navController.switchTab(NmTab.Home) }
     )
 }

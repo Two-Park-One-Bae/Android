@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  공유용 파일이 놓이는 곳.
+
+  캐시 안의 `share/` 한 칸만 연다 — 앱 파일 전체를 열면 검출 모델·디버그 캐시까지
+  다른 앱이 읽을 수 있는 문이 생긴다.
+-->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>
