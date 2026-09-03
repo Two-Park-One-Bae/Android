@@ -117,6 +117,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    // 후보·세부정보의 낱알 이미지(CDN). 없는 품목은 404 가 오므로 폴백이 필요하다(NM-347).
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+
     // App Check provider 는 빌드 타입별로 하나씩만 넣는다.
     //   debug   → DebugAppCheckProvider  (Play 스토어 밖이라 Play Integrity 가 통하지 않는다)
     //   release → PlayIntegrityAppCheckProvider
