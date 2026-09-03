@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 다크 스플래시 배경 — NmSemanticColors.Dark.bgApp(Neutral C900)과 동일 -->
-    <color name="nm_splash_background">#0F172A</color>
-</resources>

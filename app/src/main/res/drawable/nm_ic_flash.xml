@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  플래시(손전등) 토글 아이콘
+  출처: Lucide "zap" (ISC License) https://lucide.dev
+  디자인 정본이 Lucide를 쓴다(spec/design/DESIGN.pen). 선(stroke) 기반이라
+  기존 Material Symbols 아이콘(면 기반)과 형태 언어가 다르다 — 통일은 별도 과제.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M15.914,4a1.5,1.5 0 0,0 -2.474,-1.561l-9,9A1.5,1.5 0 0,0 5.5,14h4.002a0.5,0.5 0 0,1 0.471,0.666L8.086,20a1.5,1.5 0 0,0 2.475,1.56l9,-9A1.5,1.5 0 0,0 18.5,10h-3.997a0.5,0.5 0 0,1 -0.472,-0.667z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

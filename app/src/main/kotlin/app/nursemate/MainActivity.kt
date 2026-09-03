@@ -1,96 +1,40 @@
 package app.nursemate
 
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmTheme
+import androidx.activity.enableEdgeToEdge
 import app.nursemate.core.designsystem.NurseMateTheme
-import app.nursemate.core.designsystem.R as DsR
-import app.nursemate.home.FeaturePreparingScreen
-import app.nursemate.home.HomeScreen
-import app.nursemate.home.NmBottomBar
-import app.nursemate.home.NmTab
+import app.nursemate.navigation.NurseMateApp
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // 런치 테마(스플래시)에서 앱 테마로 되돌린다 — Android 12+ SplashScreen API 패턴
-        setTheme(R.style.Theme_NurseMate)
         super.onCreate(savedInstanceState)
-        setContent {
-            // 디자인 정본이 라이트 단일이라 시스템 다크 설정을 따르지 않는다.
-            NurseMateTheme(darkTheme = false) {
-                NurseMateApp()
-            }
+
+        // 시스템 바 뒤까지 그린다. 없으면 상·하단에 회색 띠가 남는다.
+        //
+        // ⚠️ **인자 없이 부르면 안 된다.** 기본값이 내비게이션 바에 90% 흰색 스크림을 깐다.
+        // 밝은 화면에서는 티가 안 나지만, 어두운 화면 위에서는 아래쪽에 흰 띠가 생긴다 —
+        // 동의 온보딩의 dim 이 내비바 영역만 안 먹은 것처럼 보였고, 알약 촬영 화면의
+        // 뷰파인더에서는 더 크게 드러난다. 양쪽 다 완전 투명으로 둔다.
+        //
+        // 바 아이콘 색은 여기서 정하지 않는다 — 화면마다 다르므로 SystemBarIcons 가 맡는다.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
+        // Android 10+ 는 투명 내비바에 시스템이 자체 대비 스크림을 넣을 수 있다. 그것도 끈다.
+        // ⚠️ 이 속성 자체는 API 29 부터다 — minSdk 가 26 이라 가드 없이 부르면 lint 가
+        // NewApi 로 막는다(26~28 단말에서는 그냥 스크림이 남는다, 치명적이지 않다).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
         }
-    }
-}
 
-@Composable
-private fun NurseMateApp() {
-    var tab by remember { mutableStateOf(NmTab.Home) }
-    val colors = NmTheme.semanticColors
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        Box(modifier = Modifier.weight(1f)) {
-            when (tab) {
-                NmTab.Home -> HomeScreen(
-                    onPillClick = { tab = NmTab.Pill },
-                    onTimerClick = { tab = NmTab.Timer },
-                    onActiveTimerClick = { tab = NmTab.Timer }
-                )
-
-                NmTab.Pill -> FeaturePreparingScreen(
-                    title = "알약 식별",
-                    description = "알약을 촬영하면 후보 의약품을 찾아주는 기능을 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_pill),
-                    iconBackground = NmColor.Primary.C50,
-                    iconTint = NmColor.Primary.C500
-                )
-
-                NmTab.Timer -> FeaturePreparingScreen(
-                    title = "처치 타이머",
-                    description = "여러 처치 시간을 한 번에 관리하는 타이머를 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_timer),
-                    iconBackground = NmColor.Secondary.C50,
-                    iconTint = NmColor.Secondary.C500
-                )
-
-                // 설정 화면의 내용(로그아웃·탈퇴, 타이머 울림 방식)은 인증·타이머 스펙에 딸려 있다.
-                // 그 기능들이 붙기 전까지는 임의로 채우지 않는다 — spec/feature/auth·care-timer 참고.
-                NmTab.Settings -> FeaturePreparingScreen(
-                    title = "설정",
-                    description = "계정과 알림 설정을 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_settings),
-                    iconBackground = NmColor.Neutral.C100,
-                    iconTint = NmColor.Neutral.C500
-                )
-            }
-        }
-        NmBottomBar(selected = tab, onSelect = { tab = it })
+        setContent { NurseMateTheme { NurseMateApp() } }
     }
 }

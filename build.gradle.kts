@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.compose) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
+    alias(libs.plugins.google.services) apply false
     alias(libs.plugins.spotless)
     alias(libs.plugins.detekt)
 }
@@ -37,6 +38,7 @@ detekt {
             "core/model/src",
             "core/data/src",
             "core/network/src",
+            "core/vision/src",
             "core/datalayer/src",
             "core/designsystem/src",
             "build-logic/convention/src"

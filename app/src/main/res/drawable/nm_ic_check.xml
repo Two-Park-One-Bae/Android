@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  체크 — 동의 체크박스
+  출처: Lucide "check" (ISC License) https://lucide.dev
+  디자인시스템이 아니라 여기(app)에 둔다 — 체크박스는 DS 컴포넌트 목록
+  (spec/design/DESIGN.pen · Foundation / Components)에 없고 동의 화면에서만 쓴다.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M20,6 L9,17 L4,12"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

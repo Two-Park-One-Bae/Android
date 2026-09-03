@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-  설정(톱니) 아이콘 — 아웃라인. 하단 탭바용.
-  바깥 원 + 안쪽 원 + 8방향 톱니로 구성한다.
+  설정 탭 아이콘
+  출처: Lucide "settings" (ISC License) https://lucide.dev
+  디자인 정본(spec/design/DESIGN.pen)이 아이콘을 전부 Lucide로 정의한다.
   색은 Compose Icon(tint=)에서 지정한다.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,30 +10,15 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M12,8.4 A3.6,3.6 0 1 0 12,15.6 A3.6,3.6 0 1 0 12,8.4 Z"
+        android:pathData="M9.671,4.136a2.34,2.34 0 0,1 4.659,0 2.34,2.34 0 0,0 3.319,1.915 2.34,2.34 0 0,1 2.33,4.033 2.34,2.34 0 0,0 0,3.831 2.34,2.34 0 0,1 -2.33,4.033 2.34,2.34 0 0,0 -3.319,1.915 2.34,2.34 0 0,1 -4.659,0 2.34,2.34 0 0,0 -3.32,-1.915 2.34,2.34 0 0,1 -2.33,-4.033 2.34,2.34 0 0,0 0,-3.831A2.34,2.34 0 0,1 6.35,6.051a2.34,2.34 0 0,0 3.319,-1.915"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.8" />
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:pathData="M12,5.2 A6.8,6.8 0 1 0 12,18.8 A6.8,6.8 0 1 0 12,5.2 Z"
+        android:pathData="M12,9 a3,3 0 1,0 0,6 a3,3 0 1,0 0,-6 z"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.8" />
-    <group
-        android:pivotX="12"
-        android:pivotY="12">
-        <path
-            android:pathData="M12,2.4 L12,5.4 M12,18.6 L12,21.6 M2.4,12 L5.4,12 M18.6,12 L21.6,12"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="1.8"
-            android:strokeLineCap="round" />
-    </group>
-    <group
-        android:pivotX="12"
-        android:pivotY="12"
-        android:rotation="45">
-        <path
-            android:pathData="M12,2.4 L12,5.4 M12,18.6 L12,21.6 M2.4,12 L5.4,12 M18.6,12 L21.6,12"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="1.8"
-            android:strokeLineCap="round" />
-    </group>
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

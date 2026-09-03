@@ -1,0 +1,163 @@
+package app.nursemate.pill
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.nursemate.R
+import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmTheme
+import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.LicenseStatus
+import app.nursemate.core.model.PillCandidate
+import coil3.compose.AsyncImage
+
+/**
+ * 후보 한 줄 — 디자인 `⑧ 후보 리스트 / Row`.
+ *
+ * 라디오 20 · 썸네일 72×38 · 품목명 14/600 + 업체명 12 · 세부정보 버튼 28.
+ *
+ * 과녁이 셋이다 — **카드**는 선택, **썸네일**은 이미지 비교, **ⓘ**는 세부정보.
+ *
+ * ## 허가 종료 배지
+ * `REVOKED` 는 취하·취소·유효기간만료·폐업을 묶은 값이라 통칭 '허가 종료'로만 알린다
+ * (spec NM-341). **선택을 막지 않는다** — 지참약이 허가 종료 품목일 수 있고, 허가상태는
+ * 식별을 막는 조건이 아니라 판단 보조 정보다.
+ *
+ * ## 썸네일이 없는 품목이 있다
+ * 서버는 pillCode 로 URL 을 **항상** 조립해 주지만, 낱알 이미지가 없는 품목은 CDN 이
+ * 404 를 준다(NM-347). 그때는 회색 자리만 남긴다 — 깨진 아이콘을 보여주면 오류로 읽힌다.
+ */
+@Composable
+fun PillCandidateRow(
+    candidate: PillCandidate,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onDetailClick: () -> Unit,
+    onThumbnailClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = NmTheme.semanticColors
+    val shape = RoundedCornerShape(14.dp)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.surface)
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) NmColor.Primary.C500 else colors.border,
+                shape = shape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Radio(selected = selected)
+
+        AsyncImage(
+            model = candidate.pillThumbnailUrl,
+            contentDescription = null,
+            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 72×38(1.89)이라 잘려 나가는 게 거의 없다.
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(width = 72.dp, height = 38.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(NmColor.Neutral.C100)
+                // 썸네일만 비교 뷰어를 연다 — 카드 탭(선택)·세부정보는 그대로다(spec NM-354).
+                .clickable(onClick = onThumbnailClick)
+        )
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = candidate.pillName ?: candidate.pillCode,
+                    style = NameStyle,
+                    color = colors.textPrimary,
+                    // 품목명은 길다("○○정 100밀리그램(염산○○○)"). 줄바꿈을 허용하면 카드마다
+                    // 높이가 달라져 목록이 들쭉날쭉해진다 — 정본도 한 줄이다.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // 배지가 먼저 잘리지 않게 이름 쪽이 줄어든다.
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
+            }
+            candidate.companyName?.let {
+                Text(
+                    text = it,
+                    style = SubStyle,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // 선택과 독립이다 — 고르기 전에 상세를 먼저 확인할 수 있어야 한다(spec §세부정보 조회).
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_info),
+            contentDescription = "세부정보",
+            tint = NmColor.Primary.C500,
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDetailClick)
+                .padding(4.dp)
+        )
+    }
+}
+
+@Composable
+private fun Radio(selected: Boolean) {
+    val colors = NmTheme.semanticColors
+    Box(
+        modifier = Modifier
+            .size(20.dp)
+            .border(2.dp, if (selected) NmColor.Primary.C500 else colors.textTertiary, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) Box(modifier = Modifier.size(10.dp).background(NmColor.Primary.C500, CircleShape))
+    }
+}
+
+/** 통칭 라벨 하나로만 알린다 — 취하·취소·만료·폐업을 구분해 봐야 사용자의 판단이 달라지지 않는다. */
+@Composable
+private fun RevokedBadge() {
+    val shape = RoundedCornerShape(4.dp)
+    Box(
+        modifier = Modifier
+            .background(NmColor.Warning.C50, shape)
+            .border(1.dp, NmColor.Warning.C100, shape)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        // 경고(warning)지 오류(error)가 아니다 — 고를 수 있는 품목이라 빨강으로 막아 세우지 않는다.
+        Text(text = "허가 종료", style = BadgeStyle, color = NmColor.Warning.C700)
+    }
+}
+
+private val NameStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+private val SubStyle = NmTypography.caption
+private val BadgeStyle = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium)

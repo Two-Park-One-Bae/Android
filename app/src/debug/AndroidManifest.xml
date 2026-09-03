@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!--
+            디자인시스템 갤러리 — 개발 확인용. debug 빌드에만 병합된다.
+            런처에는 두지 않는다(아이콘이 둘로 보이면 헷갈린다). adb 로 직접 띄운다:
+              adb shell am start -n app.nursemate.debug/app.nursemate.gallery.DesignGalleryActivity
+        -->
+        <activity
+            android:name="app.nursemate.gallery.DesignGalleryActivity"
+            android:theme="@style/Theme.NurseMate"
+            android:exported="true" />
+
+        <!--
+            세부정보 딥링크 — **debug 빌드 전용**. 릴리스 매니페스트에는 이 필터가 없어
+            밖에서 열 수 없다.
+
+            세부정보의 어떤 상태(표·미적재·이미지 없음)는 특정 품목을 만나야 나오는데,
+            후보 목록을 손으로 훑어 찾기가 사실상 불가능하다. 코드를 알면 바로 열 수 있게 둔다:
+              adb shell am start -a android.intent.action.VIEW \
+                -d "nursemate-debug://pill/detail/200809710?revoked=false"
+        -->
+        <activity
+            android:name="app.nursemate.MainActivity"
+            android:exported="true"
+            tools:node="merge">
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nursemate-debug" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -24,6 +24,11 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        // 카카오 SDK 는 Maven Central 에 없고 카카오가 직접 운영하는 저장소에만 있다.
+        // includeGroup 으로 범위를 좁혀 다른 의존성이 이 서버를 뒤지지 않게 한다.
+        maven("https://devrepo.kakao.com/nexus/content/groups/public") {
+            content { includeGroup("com.kakao.sdk") }
+        }
     }
 }
 
@@ -36,6 +41,7 @@ include(":wear")
 include(":core:model")
 include(":core:data")
 include(":core:network")
+include(":core:vision")
 include(":core:datalayer")
 include(":core:designsystem")
 

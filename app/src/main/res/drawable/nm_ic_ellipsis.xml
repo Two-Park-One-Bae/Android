@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  가로 점 셋 — 제형 '기타'
+  출처: Lucide "ellipsis" (ISC License) https://lucide.dev
+  Lucide 원본은 r=1 원 셋에 stroke 2 다. 벡터로는 같은 굵기를 채운 원(r=1.5)으로 그린다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:pathData="M5,10.5a1.5,1.5 0,1 0,0 3a1.5,1.5 0,0 0,0 -3z" android:fillColor="#FFFFFF" />
+    <path android:pathData="M12,10.5a1.5,1.5 0,1 0,0 3a1.5,1.5 0,0 0,0 -3z" android:fillColor="#FFFFFF" />
+    <path android:pathData="M19,10.5a1.5,1.5 0,1 0,0 3a1.5,1.5 0,0 0,0 -3z" android:fillColor="#FFFFFF" />
+</vector>
