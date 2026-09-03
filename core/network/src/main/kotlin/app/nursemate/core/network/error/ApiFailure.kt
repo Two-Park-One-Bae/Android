@@ -9,13 +9,20 @@ import java.io.IOException
  * 다른 예외를 던지면 `UndeclaredThrowableException` 등으로 감싸여 원인이 가려진다.
  *
  * @param problem 파싱된 본문. 본문이 없거나 problem+json 이 아니면 null
+ * @param rawBody 본문 원문. RFC 9457 확장 필드(429 의 `usage` 등)는 도메인 레이어가
+ *                여기서 직접 꺼낸다 — [ProblemDetail] 에 타입 필드로 넣으면 서버가 모양을
+ *                바꿨을 때 에러 본문 전체가 파싱에 실패한다.
  */
-class ApiFailure(val httpStatus: Int, val problem: ProblemDetail?, val requestPath: String?) :
-    IOException(
-        "HTTP $httpStatus" +
-            (problem?.rawCode?.let { " $it" } ?: "") +
-            (requestPath?.let { " ($it)" } ?: "")
-    ) {
+class ApiFailure(
+    val httpStatus: Int,
+    val problem: ProblemDetail?,
+    val requestPath: String?,
+    val rawBody: String? = null
+) : IOException(
+    "HTTP $httpStatus" +
+        (problem?.rawCode?.let { " $it" } ?: "") +
+        (requestPath?.let { " ($it)" } ?: "")
+) {
 
     val code: ApiErrorCode get() = problem?.errorCode ?: ApiErrorCode.UNKNOWN
 

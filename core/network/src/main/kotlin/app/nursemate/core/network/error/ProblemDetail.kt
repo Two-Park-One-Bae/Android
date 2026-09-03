@@ -15,6 +15,10 @@ import kotlinx.serialization.Serializable
  * ⚠️ 스키마상 `type`·`title`·`status`·`detail`이 required 지만 **전부 기본값을 준다.**
  * 에러 응답을 파싱하다 예외가 나면 원래 실패 원인을 덮어써 버려, 무엇이 잘못됐는지 알 수 없게 된다.
  * 파싱은 최대한 관대하게 하고 판단은 [code]·[status]로 한다.
+ *
+ * ⚠️ **도메인 타입 필드를 여기 추가하지 말 것.** 429 응답에는 `usage` 확장이 실려 오는데
+ * 그걸 타입 필드로 받으면, 서버가 그 모양을 조금만 바꿔도 **에러 본문 전체가 파싱에 실패해
+ * `code` 마저 잃는다**. 도메인 확장은 [ApiFailure.rawBody] 를 도메인 레이어에서 읽는다.
  */
 @Serializable
 data class ProblemDetail(

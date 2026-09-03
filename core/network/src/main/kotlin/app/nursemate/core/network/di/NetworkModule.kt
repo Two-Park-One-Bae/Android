@@ -4,7 +4,9 @@ import app.nursemate.core.network.BuildConfig
 import app.nursemate.core.network.NetworkConfig
 import app.nursemate.core.network.api.AuthApi
 import app.nursemate.core.network.api.ConsentApi
+import app.nursemate.core.network.api.PillApi
 import app.nursemate.core.network.api.UserApi
+import app.nursemate.core.network.auth.ApiHost
 import app.nursemate.core.network.auth.AppCheckInterceptor
 import app.nursemate.core.network.auth.AuthHeaderInterceptor
 import app.nursemate.core.network.auth.TokenRefreshAuthenticator
@@ -92,6 +94,15 @@ internal object NetworkModule {
     @Provides
     @Singleton
     fun provideConsentApi(retrofit: Retrofit): ConsentApi = retrofit.create(ConsentApi::class.java)
+
+    /** 인증 헤더를 붙여도 되는 호스트. 외부(S3 presigned 등)로는 붙이지 않는다. */
+    @Provides
+    @Singleton
+    fun provideApiHost(): ApiHost = ApiHost.Default
+
+    @Provides
+    @Singleton
+    fun providePillApi(retrofit: Retrofit): PillApi = retrofit.create(PillApi::class.java)
 
     private const val CONNECT_TIMEOUT_SECONDS = 10L
 

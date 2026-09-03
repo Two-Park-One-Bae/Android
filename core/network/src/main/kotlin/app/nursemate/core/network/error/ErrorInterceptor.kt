@@ -21,15 +21,15 @@ class ErrorInterceptor @Inject constructor(private val json: Json) : Interceptor
         val response = chain.proceed(chain.request())
         if (response.isSuccessful) return response
 
-        val problem = runCatching {
-            response.body?.string()?.takeIf { it.isNotBlank() }?.let { json.decodeFromString<ProblemDetail>(it) }
-        }.getOrNull()
+        val body = runCatching { response.body?.string()?.takeIf { it.isNotBlank() } }.getOrNull()
+        val problem = body?.let { runCatching { json.decodeFromString<ProblemDetail>(it) }.getOrNull() }
 
         response.close()
         throw ApiFailure(
             httpStatus = response.code,
             problem = problem,
-            requestPath = chain.request().url.encodedPath
+            requestPath = chain.request().url.encodedPath,
+            rawBody = body
         )
     }
 }
