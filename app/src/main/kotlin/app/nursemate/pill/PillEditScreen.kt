@@ -84,7 +84,12 @@ fun PillEditScreen(
     SystemBarIcons(darkIcons = true)
 
     // 어느 선택판을 펼쳐 뒀는지는 화면만의 사정이라 뷰모델에 두지 않는다. 회전해도 남게 Saveable.
-    var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
+    //
+    // ⚠️ 진입하면 **각인판이 펼쳐진 채로** 시작한다. 정본 ⑧-a 는 접힌 상태를 그리지만,
+    // MVP 는 색·모양·제형만 자동이고 **각인은 사람이 직접 넣어야 한다**(spec §로드맵 —
+    // 각인 자동은 V1). 접어 두면 이 화면에서 유일하게 해야 할 일이 꺾쇠 뒤에 숨는다.
+    // iOS 도 같은 이유로 `openPanel = .imprint` 로 시작한다.
+    var open by rememberSaveable { mutableStateOf<AttributePanel?>(AttributePanel.Imprint) }
 
     // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
     // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
