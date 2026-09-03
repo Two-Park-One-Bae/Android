@@ -89,6 +89,7 @@ dependencies {
     implementation(projects.core.model)
     implementation(projects.core.data)
     implementation(projects.core.network)
+    implementation(projects.core.vision)
     implementation(projects.core.designsystem)
 
     implementation(libs.androidx.core.ktx)
@@ -109,6 +110,12 @@ dependencies {
 
     // 카카오 로그인 — 액세스 토큰까지만 여기서 받고, Firebase 교환은 서버가 한다.
     implementation(libs.kakao.user)
+
+    // 촬영 화면(① 촬영). PreviewView + ImageCapture 만 쓴다.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     // App Check provider 는 빌드 타입별로 하나씩만 넣는다.
     //   debug   → DebugAppCheckProvider  (Play 스토어 밖이라 Play Integrity 가 통하지 않는다)

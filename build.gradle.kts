@@ -38,6 +38,7 @@ detekt {
             "core/model/src",
             "core/data/src",
             "core/network/src",
+            "core/vision/src",
             "core/datalayer/src",
             "core/designsystem/src",
             "build-logic/convention/src"

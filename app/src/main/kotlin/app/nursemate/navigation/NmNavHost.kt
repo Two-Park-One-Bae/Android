@@ -120,13 +120,14 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
     val startDestination = remember { entry.route ?: NmRoute.LOGIN }
 
     // 스펙(feature/auth §진입 라우팅)의 세 갈래 — 로그인 · 동의 온보딩 · 홈.
-    // 탭 이동은 홈 안에서 일어나므로, 이미 홈 그래프 안에 있으면 건드리지 않는다.
+    // 홈에 닿은 뒤의 화면 이동은 각 화면이 알아서 한다 — 셸이 개입하지 않는다.
     LaunchedEffect(entry) {
         val target = entry.route ?: return@LaunchedEffect
         val current = navController.currentDestination?.route ?: return@LaunchedEffect
         val settled = when (target) {
-            // 홈은 탭 넷 중 어디에 있어도 "홈에 있는" 것이다. 여기서 되돌리면 탭 이동이 씹힌다.
-            NmRoute.HOME -> current in HOME_GRAPH
+            // 일단 홈에 닿은 뒤의 이동(탭 전환·알약 플로우)은 셸이 되돌리지 않는다.
+            // 목록으로 두면 화면이 늘 때마다 여기를 고쳐야 하고, 빠뜨리면 사용자가 튕긴다.
+            NmRoute.HOME -> current != NmRoute.LOGIN && current != NmRoute.CONSENT
 
             else -> current == target
         }
@@ -180,19 +181,7 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
             }
         }
 
-        // 알약 식별 그래프는 NM-394 에서 이 자리를 대체한다.
-        composable(NmRoute.PILL) {
-            TabRoot(navController, NmTab.Pill) {
-                FeaturePreparingScreen(
-                    title = "알약 식별",
-                    description = "사진으로 알약을 찾아주는 기능을 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_pill),
-                    iconBackground = NmColor.Primary.C50,
-                    iconTint = NmColor.Primary.C500
-                )
-            }
-        }
+        pillNavGraph(navController)
 
         composable(NmRoute.TIMER) {
             TabRoot(navController, NmTab.Timer) {
@@ -250,9 +239,6 @@ private val AppEntry.route: String?
         AppEntry.Loading, AppEntry.Unavailable -> null
     }
 
-/** 탭 넷은 모두 "홈에 있는" 상태다. */
-private val HOME_GRAPH = setOf(NmRoute.HOME, NmRoute.PILL, NmRoute.TIMER, NmRoute.SETTINGS)
-
 /**
  * 진입 화면을 바꾼다. **백스택을 통째로 비운다.**
  *
@@ -309,7 +295,7 @@ internal fun NavController.switchTab(tab: NmTab) {
 internal val NmTab.route: String
     get() = when (this) {
         NmTab.Home -> NmRoute.HOME
-        NmTab.Pill -> NmRoute.PILL
+        NmTab.Pill -> NmRoute.PILL_GRAPH
         NmTab.Timer -> NmRoute.TIMER
         NmTab.Settings -> NmRoute.SETTINGS
     }
