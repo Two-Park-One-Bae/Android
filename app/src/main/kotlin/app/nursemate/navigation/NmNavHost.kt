@@ -121,6 +121,12 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
     // startDestination 을 상태에 묶으면 값이 바뀔 때 NavHost 가 통째로 다시 만들어진다.
     val startDestination = remember { entry.route ?: NmRoute.LOGIN }
 
+    // 딥링크로 열렸어도 세션이 풀리기 전에는 이 NavHost 가 아직 없다. 자동 처리는 그래프를
+    // 세우는 그 순간에만 돌아서, 늦게 만들어진 컨트롤러에는 인텐트가 닿지 않는다 — 한 번 직접
+    // 넘겨준다. 처리된 인텐트에는 표시가 남아 되풀이되지 않는다.
+    val deepLinkActivity = LocalActivity.current
+    LaunchedEffect(navController) { deepLinkActivity?.intent?.let(navController::handleDeepLink) }
+
     // 스펙(feature/auth §진입 라우팅)의 세 갈래 — 로그인 · 동의 온보딩 · 홈.
     // 홈에 닿은 뒤의 화면 이동은 각 화면이 알아서 한다 — 셸이 개입하지 않는다.
     LaunchedEffect(entry) {

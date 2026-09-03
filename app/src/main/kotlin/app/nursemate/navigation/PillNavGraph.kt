@@ -16,6 +16,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import app.nursemate.core.model.LicenseStatus
 import app.nursemate.detail.PillDetailScreen
 import app.nursemate.detail.PillDetailViewModel
@@ -163,7 +164,11 @@ private fun NavGraphBuilder.detail(navController: NavController) = composable(
             type = NavType.BoolType
             defaultValue = false
         }
-    )
+    ),
+    // 표·미적재·이미지 없음처럼 **특정 품목에서만 나오는 상태**는 후보 목록을 훑어 찾기가
+    // 사실상 불가능하다. 코드를 알면 바로 열 수 있게 둔다. 이 스킴의 intent-filter 는
+    // **debug 매니페스트에만** 있어 릴리스에서는 밖에서 닿을 수 없다.
+    deepLinks = listOf(navDeepLink { uriPattern = "nursemate-debug://pill/detail/{pillCode}" })
 ) { entry ->
     val viewModel: PillDetailViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
