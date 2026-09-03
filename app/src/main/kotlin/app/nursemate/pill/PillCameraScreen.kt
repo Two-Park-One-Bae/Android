@@ -2,6 +2,7 @@ package app.nursemate.pill
 
 import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
@@ -92,6 +94,14 @@ fun PillCameraScreen(
     var camera by remember { mutableStateOf<Camera?>(null) }
     var torchOn by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
+
+    // CameraX 는 백그라운드→포그라운드 복귀 시 세션을 자체적으로 닫았다 다시 여는데,
+    // 이때 토치는 꺼진 채로 재개된다. torchOn 은 remember 라 이전 값(true)을 그대로
+    // 들고 있어 화면과 실제 상태가 어긋난다 — 재개 시점에 다시 걸어 맞춘다.
+    LifecycleResumeEffect(camera, torchOn) {
+        if (torchOn) camera?.cameraControl?.enableTorch(true)
+        onPauseOrDispose {}
+    }
 
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -172,7 +182,12 @@ fun PillCameraScreen(
                 capturing = true
                 capture.takeAndSave(context) { uri ->
                     capturing = false
-                    if (uri != null) onPhotoCaptured(uri)
+                    if (uri != null) {
+                        onPhotoCaptured(uri)
+                    } else {
+                        // onError 만으로는 셔터를 눌렀는데 반응이 없는 것처럼 보인다.
+                        Toast.makeText(context, "촬영에 실패했어요. 다시 시도해 주세요", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         )
@@ -359,6 +374,11 @@ private suspend fun Context.awaitCameraProvider(): ProcessCameraProvider = suspe
  * 검출이 끝나면 지워도 되는 임시 파일이다.
  */
 private fun ImageCapture.takeAndSave(context: Context, onResult: (Uri?) -> Unit) {
+    // 이전 캡처가 남아 있으면 지운다 — ViewModel 이 캐시 파일 URI 를 따로 추적하지 않아
+    // 검출 완료 시점 정리는 더 큰 변경이 필요하다. 재촬영마다 쌓이는 걸 막는 최소 대응으로
+    // 한 번에 최대 1개로 묶는다 — 약포 사진은 환자 정보(PII)라 오래 남을수록 위험이 크다.
+    context.cacheDir.listFiles { file -> file.name.startsWith("capture_") }?.forEach { it.delete() }
+
     val file = File(context.cacheDir, "capture_${System.currentTimeMillis()}.jpg")
     takePicture(
         ImageCapture.OutputFileOptions.Builder(file).build(),
