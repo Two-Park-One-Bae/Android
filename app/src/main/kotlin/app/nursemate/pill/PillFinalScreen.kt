@@ -185,4 +185,8 @@ private fun FinalRow(pill: PillCandidate, onClick: () -> Unit) {
 private val SummaryLabel = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
 private val RowName = NmTypography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold)
 private val RowCompany = NmTypography.caption
-private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, lineHeight = 16.5.sp)
+private val Disclaimer = NmTypography.caption.copy(
+    fontSize = 11.sp,
+    fontWeight = FontWeight.Normal,
+    lineHeight = 16.5.sp
+)

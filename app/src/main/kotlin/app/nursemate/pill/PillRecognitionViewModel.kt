@@ -97,9 +97,23 @@ class PillRecognitionViewModel @Inject constructor(
      * 추론이 겹치지 않게 한다.
      */
     fun startDetection() {
-        if (_state.value.detection != DetectionPhase.Idle) return
-        val bitmap = _state.value.photo ?: return
+        // 이미 돌고 있거나 끝난 상태 · 사진이 없는 상태는 여기서 조용히 무시한다.
+        // 두 조건을 한 줄로 묶는다 — ReturnCount 상한(2)에 아래 게이트까지 셋이 걸린다.
+        val bitmap = _state.value.photo
+        if (_state.value.detection != DetectionPhase.Idle || bitmap == null) return
 
+        // 마지막 한도 안에서 촬영·미리보기까지 왔다가 그새 소진된 경우 — 검출조차 돌리지
+        // 않는다(spec §세션 중 소진 방어: "요청 없이 같은 팝업을 띄운다"). 이대로 두면
+        // 이미 0 인 걸 알면서도 온디바이스 검출 + 크롭 인코딩 + 수 MB 업로드를 전부 치르고
+        // 나서야 서버 429 로 뒤늦게 걸린다.
+        if (usageHolder.blocked) {
+            _state.update { it.copy(attributes = AttributePhase.LimitReached) }
+            return
+        }
+        startDetectionUnchecked(bitmap)
+    }
+
+    private fun startDetectionUnchecked(bitmap: Bitmap) {
         _state.update { it.copy(detection = DetectionPhase.Running) }
         viewModelScope.launch {
             runCatching { loadDetector().detect(bitmap) }

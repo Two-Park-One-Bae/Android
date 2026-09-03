@@ -192,4 +192,8 @@ private val BadgeLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight 
 private val SectionTitle = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 private val FieldLabel = NmTypography.caption.copy(fontWeight = FontWeight.SemiBold)
 private val FieldValue = NmTypography.body.copy(fontSize = 13.sp, lineHeight = 19.5.sp)
-private val NoticeText = NmTypography.caption.copy(fontSize = 11.sp, lineHeight = 17.6.sp)
+private val NoticeText = NmTypography.caption.copy(
+    fontSize = 11.sp,
+    fontWeight = FontWeight.Normal,
+    lineHeight = 17.6.sp
+)

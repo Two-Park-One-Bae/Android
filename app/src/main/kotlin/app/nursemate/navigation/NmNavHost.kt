@@ -41,6 +41,7 @@ import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.Usage
 import app.nursemate.core.model.User
 import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
@@ -117,6 +118,26 @@ private fun ServiceUnavailable(onRetry: () -> Unit) {
 private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
     val navController = rememberNavController()
 
+    // 알약 탭 게이트를 홈·타이머·설정 세 화면이 공유해야 한다 — 화면마다 따로 물으면
+    // 서로 다른 값을 볼 수 있다(spec §게이트 위치: "홈 '알약 식별' 카드/탭"). HomeViewModel
+    // 이 이미 UsageHolder 를 감싼 얇은 창이라 새 클래스를 만들지 않고 이 레벨로 끌어올린다.
+    val homeViewModel: HomeViewModel = hiltViewModel()
+    val homeUsage by homeViewModel.usage.collectAsStateWithLifecycle()
+    // 어느 탭에 있든 최신값을 본다 — Home 화면을 아직 안 들렀으면 usage 가 null 인 채로
+    // 게이트를 통과시켜 버릴 수 있다(§한도 도달 플로우: 모르면 막지 않는다는 원칙과는 별개로,
+    // 알 수 있으면 최대한 안다).
+    //
+    // ⚠️ **entry == Home 일 때만** 부른다. NmNavHost 는 Login·Consent 상태에서도 그려지는데,
+    // 가드 없이 부르면 로그인하기도 전에 인증이 필요한 API(/pill-attributes/usage)를 쳐서
+    // 401 로그만 남기고 아무 소용이 없다 — 홈에 닿은 뒤(entry 는 Login·Consent·Home 세
+    // 상태만 오간다, §진입 라우팅)의 탭 내부 이동으로는 entry 자체가 안 바뀌어 다시 타지
+    // 않으니 매 화면 전환마다 불필요하게 재조회하지도 않는다.
+    LifecycleResumeEffect(entry) {
+        if (entry == AppEntry.Home) homeViewModel.refresh()
+        onPauseOrDispose {}
+    }
+    var pillTabLimitReached by remember { mutableStateOf(false) }
+
     // 첫 화면은 진입 상태로 **한 번만** 정한다. 이후 변화는 아래 LaunchedEffect 가 처리한다 —
     // startDestination 을 상태에 묶으면 값이 바뀔 때 NavHost 가 통째로 다시 만들어진다.
     val startDestination = remember { entry.route ?: NmRoute.LOGIN }
@@ -180,29 +201,28 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         }
 
         composable(NmRoute.HOME) {
-            val viewModel: HomeViewModel = hiltViewModel()
-            val usage by viewModel.usage.collectAsStateWithLifecycle()
-            // 화면에 들어올 때마다 다시 받는다 — 다른 기기에서 썼거나 자정을 넘겼을 수 있다.
-            LifecycleResumeEffect(Unit) {
-                viewModel.refresh()
-                onPauseOrDispose {}
-            }
             // 한도에 걸렸으면 촬영으로 보내지 않고 안내만 한다(spec §한도 도달 플로우).
-            var limitReached by remember { mutableStateOf(false) }
+            // 카드 탭 전용 — 하단 탭바 쪽은 pillTabLimitReached(TabRoot 공통 게이트)가 맡는다.
+            var cardLimitReached by remember { mutableStateOf(false) }
 
             TabRoot(
                 navController = navController,
                 tab = NmTab.Home,
-                overlay = if (limitReached) {
-                    { PillLimitAlert(usage = usage, onConfirm = { limitReached = false }) }
+                usage = homeUsage,
+                blocked = homeViewModel::blocked,
+                pillTabLimitReached = pillTabLimitReached,
+                onPillTabLimitReached = { pillTabLimitReached = true },
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                overlay = if (cardLimitReached) {
+                    { PillLimitAlert(usage = homeUsage, onConfirm = { cardLimitReached = false }) }
                 } else {
                     null
                 }
             ) {
                 HomeScreen(
-                    usage = usage,
+                    usage = homeUsage,
                     onPillClick = {
-                        if (viewModel.blocked()) limitReached = true else navController.switchTab(NmTab.Pill)
+                        if (homeViewModel.blocked()) cardLimitReached = true else navController.switchTab(NmTab.Pill)
                     },
                     onTimerClick = { navController.switchTab(NmTab.Timer) },
                     onActiveTimerClick = { navController.switchTab(NmTab.Timer) }
@@ -213,7 +233,15 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         pillNavGraph(navController)
 
         composable(NmRoute.TIMER) {
-            TabRoot(navController, NmTab.Timer) {
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Timer,
+                usage = homeUsage,
+                blocked = homeViewModel::blocked,
+                pillTabLimitReached = pillTabLimitReached,
+                onPillTabLimitReached = { pillTabLimitReached = true },
+                onDismissPillTabLimit = { pillTabLimitReached = false }
+            ) {
                 FeaturePreparingScreen(
                     title = "처치 타이머",
                     description = "여러 처치 시간을 한 번에 관리하는 타이머를 준비하고 있어요.\n" +
@@ -235,6 +263,11 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
             TabRoot(
                 navController = navController,
                 tab = NmTab.Settings,
+                usage = homeUsage,
+                blocked = homeViewModel::blocked,
+                pillTabLimitReached = pillTabLimitReached,
+                onPillTabLimitReached = { pillTabLimitReached = true },
+                onDismissPillTabLimit = { pillTabLimitReached = false },
                 overlay = confirming?.let { pending ->
                     {
                         SettingsConfirmDialog(
@@ -292,18 +325,40 @@ private fun Context.openPolicy(url: String) {
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
-/** 탭바를 두르는 루트 화면. 전체화면 플로우(알약 촬영 등)는 이걸 쓰지 않는다. */
+/**
+ * 탭바를 두르는 루트 화면. 전체화면 플로우(알약 촬영 등)는 이걸 쓰지 않는다.
+ *
+ * ## 알약 탭 게이트가 여기 있는 이유
+ * spec §게이트 위치: "홈 '알약 식별' 카드**·탭** … 탭은 항상 가능하고, 0회일 때 탭하면
+ * 팝업으로 응답한다." 카드는 화면마다 다르지만 **하단 탭바는 홈·타이머·설정 셋이 공유하는
+ * 한 자리**라, 게이트도 이 공통 지점 하나에 둔다 — 화면마다 따로 걸면 빠뜨리는 곳이 생긴다.
+ *
+ * 호출부가 이미 자기 사정의 [overlay](확인 모달 등)를 쓰고 있을 수 있어 두 알럿이 동시에
+ * 필요할 일이 없다는 전제로 [pillTabLimitReached] 를 우선 그린다 — 한도 알럿이 뜬 상태에서
+ * 탈퇴 확인 같은 걸 새로 열 수 있는 조작 자체가 없다.
+ */
 @Composable
 private fun TabRoot(
     navController: NavController,
     tab: NmTab,
+    usage: Usage?,
+    blocked: () -> Boolean,
+    pillTabLimitReached: Boolean,
+    onPillTabLimitReached: () -> Unit,
+    onDismissPillTabLimit: () -> Unit,
     overlay: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     NmTabScaffold(
         selected = tab,
-        onSelect = navController::switchTab,
-        overlay = overlay,
+        onSelect = { target ->
+            if (target == NmTab.Pill && blocked()) onPillTabLimitReached() else navController.switchTab(target)
+        },
+        overlay = if (pillTabLimitReached) {
+            { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit) }
+        } else {
+            overlay
+        },
         content = content
     )
 }

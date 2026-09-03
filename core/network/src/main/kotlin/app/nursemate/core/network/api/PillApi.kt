@@ -9,6 +9,8 @@ import app.nursemate.core.model.PillFaceRequest
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
 import app.nursemate.core.model.Usage
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -41,7 +43,7 @@ interface PillApi {
      * 각인계열(front·back)은 MVP 에서 서버가 뽑지 않아 항상 null 로 온다.
      *
      * @throws app.nursemate.core.network.error.ApiFailure
-     *   429 `DAILY_LIMIT_EXCEEDED` — 한도 도달. **차감되지 않으며** 본문의
+     *   429 `LIMIT_EXCEEDED` — 한도 도달. **차감되지 않으며** 본문의
      *   `ProblemDetail.usage` 에 `remaining=0` 과 리셋 시각이 담겨 온다.
      *   413 — 크롭이 너무 크다. 503 — 외부 AI 일시 오류(재시도 가능).
      */
@@ -110,8 +112,14 @@ data class PillAttributesResponse(
  *
  * @param size 1~50. 범위를 벗어나면 서버가 400 `INVALID_PAGINATION` 을 준다(clamp 없음).
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class PillCandidatesRequest(
+    // ⚠️ 이 프로젝트의 Json 은 explicitNulls=false 뿐 encodeDefaults 는 기본값(false) 이다 —
+    // 기본값과 같은 값은 직렬화에서 통째로 빠진다. openapi.yaml 이 colors 를
+    // required·non-null 로 못박고 있어(빈 배열이면 색 조건 제외라는 뜻으로 서버가 읽는다),
+    // 필드 자체가 빠지면 스키마 검증에서 400 INVALID_REQUEST 다. 이 필드만 항상 실어 보낸다.
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val colors: List<PillColor> = emptyList(),
     val isTransparent: Boolean? = null,
     val shape: PillShape? = null,

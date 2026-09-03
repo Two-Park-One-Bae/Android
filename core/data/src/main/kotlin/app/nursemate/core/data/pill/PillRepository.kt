@@ -15,6 +15,7 @@ import app.nursemate.core.network.error.ApiFailure
 import app.nursemate.core.network.upload.RawImageUploader
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 
 /** 속성 추출 결과. [usage] 는 이번 차감이 반영된 값이라 화면의 남은 횟수를 이걸로 갱신한다. */
 data class AttributeResult(val items: List<PillAttribute>, val usage: Usage)
@@ -82,6 +83,10 @@ class PillRepository @Inject constructor(
      */
     suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidatePage> =
         runCatching { pillApi.candidates(request) }
+            // ⚠️ 실시간 조회라 이전 요청이 나가 있는 채로 취소되는 게 정상 흐름이다.
+            // runCatching 이 CancellationException 까지 Result.failure 로 삼키면 코루틴
+            // 취소가 "조회 실패"로 둔갑해 호출부가 failed = true 를 세운다 — 다시 던진다.
+            .onFailure { if (it is CancellationException) throw it }
 
     /**
      * 확정한 알약의 세부정보.
