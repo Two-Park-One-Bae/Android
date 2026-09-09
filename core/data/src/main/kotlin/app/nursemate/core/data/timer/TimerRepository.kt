@@ -122,8 +122,16 @@ class TimerRepository @Inject constructor(
         timer.copy(memo = memo?.takeIf(String::isNotBlank))
     }
 
-    /** 알람이 울렸다 — 리시버가 부른다. */
-    suspend fun markRinging(timerId: String) = mutate(timerId, CareTimerTransitions::ring)
+    /**
+     * 알람이 울렸다 — 리시버가 부른다.
+     *
+     * ⚠️ **정말 만료했는지 다시 확인한다.** 만료 직전에 [+1분] 을 누르면 `endAt` 이 미래로
+     * 밀리는데, 이미 큐에 들어간 옛 알람은 그대로 발화한다. 확인 없이 올리면 1분 연장했는데도
+     * 곧바로 울리고 카드가 만료로 바뀐다.
+     */
+    suspend fun markRinging(timerId: String) = mutate(timerId) { timer ->
+        if (timer.isExpiredAt(clock.now())) CareTimerTransitions.ring(timer) else timer
+    }
 
     /**
      * 완료·정지 — **둘 다 목록에서 삭제**다(spec §생성 → 실행). 예약·알림도 함께 걷는다.

@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.TimerState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +68,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         repository.markRinging(timerId)
         // 저장소에 조회 함수를 늘리지 않고 기존 흐름에서 한 번만 읽는다.
         val timer = repository.timers.first().firstOrNull { it.id == timerId } ?: return
+        // 울림으로 올라가지 않았다면 아직 만료 전이다 — 만료 직전에 [+1분] 을 눌러 `endAt` 이
+        // 밀렸는데 옛 알람이 뒤늦게 발화한 경우다. 알림을 띄우면 안 된다.
+        if (timer.state != TimerState.RINGING) return
         notify(context, timer)
     }
 

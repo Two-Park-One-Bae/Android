@@ -134,6 +134,8 @@ class TimerRepositoryTest {
         val scheduler = FakeScheduler()
         val repo = repository(store, scheduler)
         val timer = repo.start(preset)
+        // 실제로 만료해야 울림으로 올라간다.
+        now += 900_000L
         repo.markRinging(timer.id)
 
         repo.remove(timer.id)
@@ -225,5 +227,37 @@ class TimerRepositoryTest {
         repo.restore()
 
         assertEquals(1, scheduler.alarmSweeps)
+    }
+
+    @Test
+    fun `만료 직전에 연장하면 옛 알람이 발화해도 울리지 않는다`() = runBlocking {
+        // [+1분] 은 `endAt` 만 밀 뿐, 이미 큐에 들어간 옛 알람은 그대로 발화한다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val timer = repo.start(preset)
+
+        now += 899_000L
+        repo.extend(timer.id)
+
+        // 옛 알람이 원래 만료 시각에 발화
+        now += 1_000L
+        repo.markRinging(timer.id)
+
+        assertEquals(TimerState.RUNNING, store.savedTimers.single().state)
+        assertEquals(now + 60_000L, scheduler.scheduledAt(timer.id))
+    }
+
+    @Test
+    fun `진짜 만료했으면 울림으로 올린다`() = runBlocking {
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val timer = repo.start(preset)
+
+        now += 900_000L
+        repo.markRinging(timer.id)
+
+        assertEquals(TimerState.RINGING, store.savedTimers.single().state)
     }
 }
