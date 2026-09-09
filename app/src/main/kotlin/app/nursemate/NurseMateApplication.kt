@@ -2,7 +2,9 @@ package app.nursemate
 
 import android.app.Application
 import app.nursemate.appcheck.appCheckProviderFactory
+import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
+import app.nursemate.timer.alarm.TimerAlarmChannels
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -11,6 +13,10 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.kakao.sdk.common.KakaoSdk
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 @HiltAndroidApp
@@ -28,6 +34,11 @@ class NurseMateApplication :
     @Inject
     @PlainClient
     lateinit var imageClient: dagger.Lazy<OkHttpClient>
+
+    @Inject
+    lateinit var timerRepository: TimerRepository
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .components { add(OkHttpNetworkFetcherFactory(callFactory = { imageClient.get() })) }
@@ -52,5 +63,14 @@ class NurseMateApplication :
         if (BuildConfig.KAKAO_APP_KEY.isNotEmpty()) {
             KakaoSdk.init(this, BuildConfig.KAKAO_APP_KEY)
         }
+
+        // 타이머 알람 채널은 **울리기 전에** 있어야 한다. 알람 시점에 만들면 늦다.
+        // 이미 있으면 시스템이 무시하므로 매 실행 호출해도 된다.
+        TimerAlarmChannels.ensure(this)
+
+        // 앱이 죽어 있는 동안 만료한 타이머를 현재 시각에 맞추고, 아직 안 끝난 것의 예약을
+        // 되살린다. 재부팅은 TimerBootReceiver 가 따로 받지만, 그 밖의 이유로 예약이
+        // 사라졌을 수도 있어(강제 종료·시스템 정리) 시작할 때마다 한 번 맞춘다.
+        applicationScope.launch { timerRepository.restore() }
     }
 }

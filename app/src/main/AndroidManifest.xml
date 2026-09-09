@@ -4,6 +4,24 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+        처치 타이머 (NM-441).
+
+        spec §만료·알람이 "앱을 완전히 종료한 상태에서도 만료 시각에 알린다"를 타이머의
+        최소 요건으로 못박았다. 그걸 지키려면 아래가 모두 필요하다.
+
+        ⚠️ USE_EXACT_ALARM 은 선언하지 않는다 — 자동 허용이라 편하지만 Play 정책상
+        알람·시계·캘린더가 주 기능인 앱만 쓸 수 있다. 널스메이트는 알약 식별이 함께 있어
+        심사에서 다툴 여지가 있다. 대신 SCHEDULE_EXACT_ALARM 을 쓰고 사용자에게 설정을
+        안내한다(권한이 없으면 예약을 건너뛰고 화면이 안내한다).
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 잠금화면 알람. Android 14+ 는 기본 거부라 없으면 헤드업으로 낮춰 표시된다. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- 재부팅하면 AlarmManager 예약이 전부 사라진다 — 다시 걸어야 한다. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- 카메라가 없는 기기(태블릿 일부)에서도 갤러리 선택으로 쓸 수 있으므로 required=false. -->
     <uses-feature
         android:name="android.hardware.camera.any"
@@ -62,5 +80,18 @@
                 android:resource="@xml/nm_share_paths" />
         </provider>
 
+
+        <!-- 처치 타이머 알람 (NM-441). 앱 밖에서 깨어나므로 exported=false 로 둔다. -->
+        <receiver
+            android:name="app.nursemate.timer.alarm.TimerAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="app.nursemate.timer.alarm.TimerBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
