@@ -209,14 +209,18 @@ class CareTimerTransitionsTest {
     }
 
     @Test
-    fun `일시정지는 멈춘 남은 시간으로 줄을 선다`() {
-        // 15분짜리를 바로 정지 → 900초 고정. 실행 중인 10분짜리보다 뒤에 서야 한다.
+    fun `일시정지는 진행 중인 것보다 뒤에 선다`() {
+        // 남은 시간만으로 세우면 **시간이 흐르는 것만으로 순서가 뒤집힌다.** 멈춰 있는
+        // 15분짜리와 도는 10분짜리를 두면, 도는 쪽이 15분 아래로 내려가는 순간 앞뒤가 바뀐다.
         val paused = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "paused", t0), t0)
         val running = CareTimerTransitions.start(preset.copy(durationSeconds = 600), "running", t0)
 
-        val ordered = CareTimerTransitions.ordered(listOf(paused, running), t0)
+        // 뒤집힐 법한 시점(멈춘 900초 > 도는 590초)에도 순서가 그대로다.
+        val early = CareTimerTransitions.ordered(listOf(paused, running), t0)
+        val later = CareTimerTransitions.ordered(listOf(paused, running), t0 + 10_000L)
 
-        assertEquals(listOf("running", "paused"), ordered.map { it.id })
+        assertEquals(listOf("running", "paused"), early.map { it.id })
+        assertEquals(listOf("running", "paused"), later.map { it.id })
     }
 
     @Test

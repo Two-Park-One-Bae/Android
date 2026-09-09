@@ -2,11 +2,13 @@ package app.nursemate.timer.alarm
 
 import android.app.Notification
 import android.content.Context
+import android.text.format.DateFormat
 import androidx.core.app.NotificationCompat
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerState
+import java.util.Date
 
 /**
  * 진행 중인 타이머를 앱 밖에서 보여 주는 알림 — spec §앱 밖 진행 중 표시.
@@ -36,7 +38,7 @@ object TimerOngoingNotification {
         val builder = NotificationCompat.Builder(context, TimerAlarmChannels.ONGOING_ID)
             .setSmallIcon(DsR.drawable.nm_ic_timer)
             .setContentTitle(lead.headline())
-            .setContentText(others(ordered.size))
+            .setContentText(others(ordered.drop(1)))
             .setContentIntent(TimerAlarmIntents.openTimerTabPending(context))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -58,8 +60,8 @@ object TimerOngoingNotification {
         // 펼치면 전부 보인다 — 접힌 줄만으로는 나머지를 식별할 수 없다(spec §앱 밖 진행 중 표시).
         if (ordered.size > 1) {
             val style = NotificationCompat.InboxStyle()
-            ordered.take(MAX_LINES).forEach { style.addLine(it.line(now)) }
-            if (ordered.size > MAX_LINES) style.setSummaryText(others(ordered.size))
+            ordered.take(MAX_LINES).forEach { style.addLine(it.line(context)) }
+            if (ordered.size > MAX_LINES) style.setSummaryText(others(ordered.drop(MAX_LINES)))
             builder.setStyle(style)
         }
 
@@ -106,21 +108,40 @@ object TimerOngoingNotification {
         if (state == TimerState.RINGING) append(" — 종료")
     }
 
-    /** 펼친 줄 — 제목에 남은 시간을 덧붙인다. 여기서는 크로노미터를 쓸 수 없다. */
-    private fun CareTimer.line(now: Long): String = when (state) {
+    /**
+     * 펼친 줄 — 진행 중인 것은 **끝나는 시각**으로 쓴다.
+     *
+     * ⚠️ **남은 시간을 쓰면 낡는다.** 크로노미터는 접힌 줄 하나에만 걸 수 있어서, 펼친
+     * 줄은 그린 순간의 문자열로 굳는다. 5분 뒤에 펼치면 5분 전 숫자가 그대로 보인다.
+     *
+     * 끝나는 시각은 절대값이라 낡지 않고, 병동에서는 교대 시각과 대조하기도 쉽다.
+     * spec 은 "남은 시간"으로 식별하라고 쓰지만 그건 낡지 않는 표면을 전제한 것이라,
+     * 이 차이는 개정 요청 대상이다.
+     */
+    private fun CareTimer.line(context: Context): String = when (state) {
         TimerState.RINGING -> "$label · ${category.label} — 종료"
         TimerState.PAUSED -> "$label · ${category.label} — 일시정지"
-        TimerState.RUNNING -> "$label · ${category.label} — ${clock(remainingAt(now))}"
+        TimerState.RUNNING -> "$label · ${category.label} — ${endsAt(context)} 종료"
     }
 
-    private fun others(total: Int): String = if (total > 1) "외 ${total - 1}개 진행 중" else ""
+    private fun CareTimer.endsAt(context: Context): String =
+        DateFormat.getTimeFormat(context).format(Date(endAtEpochMillis))
 
-    private fun clock(seconds: Int): String {
-        val s = seconds.coerceAtLeast(0)
-        val hours = s / 3600
-        val minutes = (s % 3600) / 60
-        val secs = s % 60
-        return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, secs) else "%02d:%02d".format(minutes, secs)
+    /**
+     * 접힌 줄 아래에 남은 것들을 센다.
+     *
+     * ⚠️ 만료한 것을 "진행 중"으로 세면 안 된다 — 알람을 놓쳐 쌓인 것을 아직 도는 것처럼
+     * 보이게 한다.
+     */
+    private fun others(rest: List<CareTimer>): String {
+        if (rest.isEmpty()) return ""
+        val ended = rest.count { it.state == TimerState.RINGING }
+        val going = rest.size - ended
+        return when {
+            ended == 0 -> "외 ${going}개 진행 중"
+            going == 0 -> "외 ${ended}개 종료"
+            else -> "외 ${going}개 진행 중 · ${ended}개 종료"
+        }
     }
 
     /** 펼쳐서 보여 줄 최대 줄 수 — 시스템이 그 이상은 자른다. */
