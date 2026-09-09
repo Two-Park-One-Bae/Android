@@ -54,6 +54,11 @@ class TimerPresetEditor(private val repository: TimerPresetRepository, private v
         _form.value = null
     }
 
+    /** 드래그로 바뀐 순서를 저장한다. 손을 뗀 순간 한 번만 부른다. */
+    fun reorder(ordered: List<TimerPreset>) {
+        scope.launch { repository.reorder(ordered) }
+    }
+
     fun askDelete(preset: TimerPreset) {
         _deleting.value = preset
     }

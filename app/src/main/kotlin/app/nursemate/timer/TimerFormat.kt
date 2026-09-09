@@ -22,14 +22,23 @@ fun formatRemaining(seconds: Int): String {
     }
 }
 
-/** 전체 시간 표기 — 정본은 `15분` · `30분` · `2시간` 처럼 사람이 읽는 단위로 쓴다. */
+/**
+ * 전체 시간 표기 — 정본은 `15분` · `30분` · `2시간` 처럼 사람이 읽는 단위로 쓴다.
+ *
+ * ⚠️ **0인 단위는 빼되, 전부 0이면 초로 쓴다.** 분 단위로만 계산하면 15초짜리가 `0분` 이 돼
+ * 무엇을 맞춰 놨는지 알 수 없다(프리셋은 초 단위까지 고를 수 있다).
+ */
 fun formatDuration(seconds: Int): String {
-    val minutes = seconds / 60
-    return when {
-        minutes % 60 == 0 && minutes >= 60 -> "${minutes / 60}시간"
-        minutes >= 60 -> "${minutes / 60}시간 ${minutes % 60}분"
-        else -> "${minutes}분"
+    val s = seconds.coerceAtLeast(0)
+    val parts = buildList {
+        val hours = s / 3600
+        val minutes = (s % 3600) / 60
+        val secs = s % 60
+        if (hours > 0) add("${hours}시간")
+        if (minutes > 0) add("${minutes}분")
+        if (secs > 0) add("${secs}초")
     }
+    return parts.joinToString(" ").ifEmpty { "0초" }
 }
 
 /**

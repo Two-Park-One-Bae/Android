@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
@@ -91,7 +93,15 @@ fun TimerCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(timer.label, style = LabelStyle, color = colors.textPrimary)
+                    // 긴 제목이 태그를 밀어내지 않게 한 줄로 말줄임한다.
+                    Text(
+                        text = timer.label,
+                        style = LabelStyle,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
                     CategoryTag(timer.category)
                 }
                 Text(formatDuration(timer.durationSeconds), style = TotalStyle, color = colors.textTertiary)
@@ -183,7 +193,14 @@ fun ExpiredTimerCard(timer: CareTimer, onComplete: () -> Unit, modifier: Modifie
                     tint = NmColor.Warning.C600,
                     modifier = Modifier.size(20.dp)
                 )
-                Text(timer.label, style = ExpiredLabelStyle, color = NmColor.Warning.C900)
+                Text(
+                    text = timer.label,
+                    style = ExpiredLabelStyle,
+                    color = NmColor.Warning.C900,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
                 // 만료 카드의 태그만 배경이 흰색이다 — 경고색 바탕에서 계열색 배경이 묻힌다.
                 CategoryTag(timer.category, background = NmColor.Neutral.C0)
             }
@@ -250,7 +267,12 @@ private fun ProgressRing(timer: CareTimer, now: Long) {
             // 한 시간을 넘으면 `1:12:40` 이라 13sp 로는 64dp 안에 안 들어간다(정본도 11로 줄인다).
             style = if (remaining >= HOUR_SECONDS) RingTextSmall else RingText,
             color = if (paused) NmTheme.semanticColors.textSecondary else NmTheme.semanticColors.textPrimary,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            // `20:30:30` 처럼 두 자리 시가 되면 11sp 로도 넘친다. 줄바꿈 대신 스스로 줄인다 —
+            // 링 안에서 두 줄이 되면 가운데가 어긋나 읽기 더 어렵다.
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 13.sp),
+            modifier = Modifier.padding(horizontal = RingStroke)
         )
     }
 }

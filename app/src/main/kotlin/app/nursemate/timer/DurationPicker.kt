@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +110,10 @@ private fun WheelColumn(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
+    // ⚠️ **콜백을 최신으로 갱신해야 한다.** `onSelect` 는 형제 열의 값(시·분·초)을 클로저로
+    // 잡는데, 아래 `LaunchedEffect` 는 키가 그대로면 다시 시작하지 않아 **처음 컴포지션 때의
+    // 값**을 계속 쓴다. 그러면 시를 바꾼 뒤 초를 굴릴 때 시가 옛 값으로 되돌아간다.
+    val select by rememberUpdatedState(onSelect)
     val total = count * LOOPS
     // 한가운데 벌에서 시작한다 — 위아래 어느 쪽으로도 수백 바퀴가 남는다.
     val origin = remember(count) { count * (LOOPS / 2) }
@@ -118,7 +124,7 @@ private fun WheelColumn(
     LaunchedEffect(state, count) {
         snapshotFlow { state.firstVisibleItemIndex to state.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
-            .collect { (index, offset) -> if (offset == 0) onSelect(index % count) }
+            .collect { (index, offset) -> if (offset == 0) select(index % count) }
     }
 
     Box(modifier.height(PickerHeight)) {

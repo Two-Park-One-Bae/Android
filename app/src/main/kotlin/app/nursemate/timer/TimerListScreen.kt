@@ -82,6 +82,7 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
             onToggleEditing = editor::toggleEditing,
             onEditPreset = editor::edit,
             onDeletePreset = editor::askDelete,
+            onReorder = editor::reorder,
             onAdd = editor::add,
             onDismiss = {
                 viewModel.setPresetSheet(false)
