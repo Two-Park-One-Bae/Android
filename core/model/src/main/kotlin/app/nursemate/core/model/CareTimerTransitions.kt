@@ -98,6 +98,22 @@ object CareTimerTransitions {
     /** 노출 순서 — `sortOrder` 오름차순. 프리셋을 보여주는 모든 표면이 이걸 쓴다. */
     fun sorted(presets: List<TimerPreset>): List<TimerPreset> = presets.sortedBy { it.sortOrder }
 
+    /**
+     * 리스트 노출 순서 — **울리는 것이 맨 위**, 그 아래는 남은 시간이 짧은 순.
+     *
+     * 정본 `타이머 / C1 리스트` 가 만료 카드를 맨 위에 둔다. 만료는 지금 손을 대야 하는
+     * 일이라 스크롤 아래에 있으면 안 된다. 나머지는 곧 끝날 것부터 보여 준다.
+     *
+     * 일시정지는 남은 시간이 멈춰 있어 시간이 갈수록 자연히 아래로 밀린다 — 별도 규칙을
+     * 두지 않은 건 "곧 끝나는 순"이라는 한 가지 기준을 유지하기 위해서다.
+     */
+    fun ordered(timers: List<CareTimer>, now: Long): List<CareTimer> = timers.sortedWith(
+        compareBy(
+            { if (it.state == TimerState.RINGING) 0 else 1 },
+            { it.remainingAt(now) }
+        )
+    )
+
     const val EXTEND_SECONDS: Int = 60
     private const val MILLIS_PER_SECOND = 1000L
 }

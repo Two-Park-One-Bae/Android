@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -36,14 +35,11 @@ import app.nursemate.auth.LoginViewModel
 import app.nursemate.consent.ConsentScreen
 import app.nursemate.consent.ConsentViewModel
 import app.nursemate.core.designsystem.NmButtonSecondary
-import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.Usage
 import app.nursemate.core.model.User
-import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
 import app.nursemate.home.HomeViewModel
 import app.nursemate.home.NmTab
@@ -52,6 +48,7 @@ import app.nursemate.settings.SettingsConfirm
 import app.nursemate.settings.SettingsConfirmDialog
 import app.nursemate.settings.SettingsScreen
 import app.nursemate.settings.SettingsViewModel
+import app.nursemate.timer.TimerListRoute
 
 /**
  * 앱 셸.
@@ -242,14 +239,7 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
                 onPillTabLimitReached = { pillTabLimitReached = true },
                 onDismissPillTabLimit = { pillTabLimitReached = false }
             ) {
-                FeaturePreparingScreen(
-                    title = "처치 타이머",
-                    description = "여러 처치 시간을 한 번에 관리하는 타이머를 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_timer),
-                    iconBackground = NmColor.Secondary.C50,
-                    iconTint = NmColor.Secondary.C500
-                )
+                TimerListRoute()
             }
         }
 

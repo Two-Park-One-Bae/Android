@@ -1,6 +1,7 @@
 package app.nursemate.timer.alarm
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -69,6 +70,8 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         notify(context, timer)
     }
 
+    // 권한은 바로 아래에서 검사한다. lint 가 호출 지점을 따라가지 못해 오탐을 낸다.
+    @SuppressLint("MissingPermission")
     private suspend fun notify(context: Context, timer: CareTimer) {
         if (!canPostNotifications(context)) {
             Log.w(TAG, "알림 권한이 없어 만료를 알리지 못했다 (${timer.id})")

@@ -174,6 +174,28 @@ class CareTimerTransitionsTest {
     }
 
     @Test
+    fun `리스트는 울리는 것을 맨 위에 두고 나머지는 남은 시간 순으로 세운다`() {
+        val running = CareTimerTransitions.start(preset, "running", t0)
+        val soon = CareTimerTransitions.start(preset.copy(durationSeconds = 60), "soon", t0)
+        val ringing = CareTimerTransitions.ring(CareTimerTransitions.start(preset, "ringing", t0))
+
+        val ordered = CareTimerTransitions.ordered(listOf(running, soon, ringing), t0)
+
+        assertEquals(listOf("ringing", "soon", "running"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `일시정지는 멈춘 남은 시간으로 줄을 선다`() {
+        // 15분짜리를 바로 정지 → 900초 고정. 실행 중인 10분짜리보다 뒤에 서야 한다.
+        val paused = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "paused", t0), t0)
+        val running = CareTimerTransitions.start(preset.copy(durationSeconds = 600), "running", t0)
+
+        val ordered = CareTimerTransitions.ordered(listOf(paused, running), t0)
+
+        assertEquals(listOf("running", "paused"), ordered.map { it.id })
+    }
+
+    @Test
     fun `기본 프리셋 6종이 정본 표와 일치한다`() {
         assertEquals(6, DEFAULT_TIMER_PRESETS.size)
         assertEquals(
