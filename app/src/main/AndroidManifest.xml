@@ -86,6 +86,38 @@
             android:name="app.nursemate.timer.alarm.TimerAlarmReceiver"
             android:exported="false" />
 
+        <!--
+            지정 프리셋 위젯 (NM-443).
+
+            ⚠️ **exported=true 여야 한다.** 위젯 갱신 브로드캐스트를 보내는 쪽은 시스템·런처라,
+            내보내지 않으면 위젯이 목록에 뜨지도 갱신되지도 않는다. 받는 인텐트는 AppWidget
+            프레임워크 것뿐이고 우리 데이터를 꺼내 가는 통로가 아니다.
+        -->
+        <receiver
+            android:name="app.nursemate.timer.widget.PresetWidgetReceiver"
+            android:label="@string/nm_preset_widget_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nm_preset_widget_info" />
+        </receiver>
+
+        <!--
+            슬롯 지정 화면. 런처가 위젯을 놓는 순간 띄우므로 exported 여야 한다.
+            excludeFromRecents — 설정 한 번 하고 끝나는 화면이라 최근 목록에 남을 이유가 없다.
+        -->
+        <activity
+            android:name="app.nursemate.timer.widget.PresetWidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name="app.nursemate.timer.alarm.TimerBootReceiver"
             android:exported="false">

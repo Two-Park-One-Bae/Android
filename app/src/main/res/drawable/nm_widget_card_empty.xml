@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 슬롯이 비었을 때. 눌러야 할 자리라는 걸 알리려고 테두리를 남기고 배경을 낮춘다. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <solid android:color="#F2FFFFFF" />
+    <stroke android:width="1dp" android:color="#FFCBD5E1" />
+</shape>

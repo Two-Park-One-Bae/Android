@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    위젯이 처음 놓였을 때, Glance 가 실제 내용을 그리기 전에 잠깐 보이는 자리.
+    비워 두면 런처가 회색 네모를 그려 "고장 난 위젯"처럼 보인다.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/nm_widget_card" />

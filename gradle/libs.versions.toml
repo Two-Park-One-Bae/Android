@@ -13,6 +13,8 @@ androidxDataStore = "1.2.0"
 androidxHiltViewModelCompose = "1.4.0"
 androidxNavigation = "2.10.0"
 androidxCamera = "1.6.2"
+# 위젯 — Compose BOM 미포함(별도 릴리스 주기). Glance 는 RemoteViews 를 Compose 문법으로 감싼다.
+androidxGlance = "1.2.0"
 
 # Wear (Compose BOM 미포함 — 직접 버전 관리. M2.5 compose-material 금지, material3 사용)
 wearCompose = "1.6.2"
@@ -50,6 +52,8 @@ detekt = "1.23.8"
 ktlint = "1.8.0"
 
 [libraries]
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "androidxGlance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "androidxGlance" }
 # build-logic 전용 (convention plugin 컴파일 클래스패스)
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
 kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }

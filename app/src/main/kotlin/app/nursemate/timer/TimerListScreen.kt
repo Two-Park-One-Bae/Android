@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -45,9 +46,16 @@ import app.nursemate.core.model.TimerState
  * C1 타이머 리스트 — 정본 `타이머 / C1 리스트`.
  *
  * 타이머 탭의 루트다. 프리셋 시트(C3)까지가 하나의 화면 단위라 여기서 함께 띄운다.
+ *
+ * @param startPresetId 위젯에서 시작하려다 권한에 막혀 넘어온 프리셋(NM-443). 관문을 열고,
+ *                      권한을 받으면 **그 타이머가 그대로 시작된다** — 위젯으로 되돌아갈 필요가 없다.
  */
 @Composable
-fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
+fun TimerListRoute(
+    startPresetId: String? = null,
+    onStartPresetHandled: () -> Unit = {},
+    viewModel: TimerListViewModel = hiltViewModel()
+) {
     val timers by viewModel.timers.collectAsStateWithLifecycle()
     val presets by viewModel.presets.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
@@ -58,6 +66,16 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     val editing by editor.editing.collectAsStateWithLifecycle()
     val presetForm by editor.form.collectAsStateWithLifecycle()
     val deletingPreset by editor.deleting.collectAsStateWithLifecycle()
+
+    // 프리셋 목록을 읽기 전에는 id 를 맞춰 볼 수 없다. 빈 목록은 "아직 안 읽혔다"와 구분되지
+    // 않지만, 정말 비어 있으면 시작할 프리셋 자체가 없어 어느 쪽이든 할 일이 같다.
+    LaunchedEffect(startPresetId, presets) {
+        val id = startPresetId ?: return@LaunchedEffect
+        if (presets.isEmpty()) return@LaunchedEffect
+        // 지워진 프리셋이면 시작하지 않되 요청은 소비한다 — 안 그러면 계속 다시 시도한다.
+        onStartPresetHandled()
+        presets.firstOrNull { it.id == id }?.let(viewModel.startGate::start)
+    }
 
     TimerListScreen(
         timers = timers,

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    지정 프리셋 위젯 — spec §위젯(NM-301).
+
+    ⚠️ `widgetCategory` 에 **keyguard 를 함께 넣는다.** 이게 잠금화면 위젯 목록에 뜨는
+    유일한 조건이다(기기에서 확인: 이 비트를 가진 provider 58개, 그중 구글 시계는 home+keyguard).
+    빼면 spec 이 요구한 "잠금화면에서 앱을 열지 않고 시작"이 아예 불가능해진다.
+
+    `configure` 는 놓는 순간 슬롯 지정 화면을 띄운다. iOS 는 시스템 위젯 편집 UI 가 이 역할을
+    대신하지만 Android 에는 그 자리가 없다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="80dp"
+    android:minHeight="60dp"
+    android:minResizeWidth="72dp"
+    android:minResizeHeight="48dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen|keyguard"
+    android:configure="app.nursemate.timer.widget.PresetWidgetConfigActivity"
+    android:description="@string/nm_preset_widget_description"
+    android:initialLayout="@layout/nm_widget_loading"
+    android:initialKeyguardLayout="@layout/nm_widget_loading"
+    android:previewLayout="@layout/nm_preset_widget_preview"
+    android:previewImage="@mipmap/ic_launcher"
+    android:updatePeriodMillis="0" />
