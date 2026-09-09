@@ -100,9 +100,25 @@ data class TimerPreset(
  * 울림 방식 — **앱 전체에 하나**로 적용되는 전역 설정(타이머별 아님).
  *
  * 워치 동기화 대상이 아니다 — 워치는 이 값과 무관하게 항상 햅틱으로 울린다.
+ *
+ * ## Android 는 3가지다 (spec 본문은 2가지)
+ * spec 이 "'진동' 단독 방식은 두지 않는다"고 쓴 근거는 **iOS 제약 #7** — iOS 시스템 알람은
+ * 발화 시 항상 진동하고 앱이 끌 수 없어, 거기서는 '진동'과 '무음'이 동작상 구분되지 않는다.
+ *
+ * Android 는 진동이 알림 채널 속성이라 소리와 따로 끄고 켠다. 제약이 없는데 접을 이유도
+ * 없어 [VIBRATE] 를 둔다(2026-09-09 결정). spec 본문 개정 요청 대상이다.
  */
 @Serializable
-enum class AlertMode { SOUND, SILENT }
+enum class AlertMode {
+    /** 소리 + 진동. 알람 스트림이라 기기 무음 모드를 뚫는다. */
+    SOUND,
+
+    /** 진동만. 소리 없이 알린다 — Android 전용. */
+    VIBRATE,
+
+    /** 조용한 알림. 소리도 진동도 없고 화면 표시만 남는다. */
+    SILENT
+}
 
 /** 기본 프리셋 6종 — spec §생성 표. 첫 실행 시 이 순서로 시드한다. */
 val DEFAULT_TIMER_PRESETS: List<TimerPreset> = listOf(

@@ -247,6 +247,7 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         composable(NmRoute.SETTINGS) {
             val viewModel: SettingsViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
+            val alertMode by viewModel.alertMode.collectAsStateWithLifecycle()
             // 확인 모달은 탭바까지 덮어야 해서 화면 밖(scaffold overlay)에 그린다.
             var confirming by remember { mutableStateOf<SettingsConfirm?>(null) }
 
@@ -276,7 +277,12 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
                     }
                 }
             ) {
-                SettingsScreen(state = state, onConfirm = { confirming = it })
+                SettingsScreen(
+                    state = state,
+                    onConfirm = { confirming = it },
+                    alertMode = alertMode,
+                    onAlertMode = viewModel::setAlertMode
+                )
             }
         }
     }

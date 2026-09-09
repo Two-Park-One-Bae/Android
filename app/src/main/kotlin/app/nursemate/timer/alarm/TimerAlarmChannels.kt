@@ -1,5 +1,6 @@
 package app.nursemate.timer.alarm
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -11,62 +12,89 @@ import app.nursemate.core.model.AlertMode
 /**
  * 만료 알람용 알림 채널.
  *
- * ## 왜 채널이 두 개인가
- * 안드로이드는 **채널을 만든 뒤에 소리를 코드로 바꿀 수 없다** — 사용자만 시스템 설정에서
- * 바꾼다. 그래서 울림 방식(소리·무음)을 하나의 채널로 전환할 수 없고, 방식마다 채널을
- * 따로 두고 **어느 채널로 낼지**를 고르는 방식으로 만든다.
+ * ## 왜 채널이 방식마다 하나씩인가
+ * 안드로이드는 **채널을 만든 뒤에 소리·진동을 코드로 바꿀 수 없다** — 사용자만 시스템 설정에서
+ * 바꾼다. 그래서 울림 방식을 하나의 채널로 전환할 수 없고, 방식마다 채널을 따로 두고
+ * **어느 채널로 낼지**를 고르는 방식으로 만든다.
  *
  * ## '소리'는 기기 무음을 무시한다
  * spec 이 "기기 무음·벨소리 스위치와 무관하게 항상 소리로 울린다(시계 알람과 동일)"고
  * 요구한다. `USAGE_ALARM` 으로 **알람 스트림**을 쓰면 무음 모드에서도 울린다 — 미디어·알림
  * 스트림을 쓰면 무음에서 조용해져 요구를 못 지킨다.
+ *
+ * ## '진동'은 Android 에만 있다
+ * spec 본문은 소리·무음 2가지인데, 그 근거는 iOS 제약 #7(시스템 알람이 항상 진동하고 끌 수
+ * 없어 '진동'과 '무음'이 구분되지 않는다)이다. Android 는 진동이 채널 속성이라 소리와 따로
+ * 끄고 켠다 — 제약이 없어 3가지를 준다(2026-09-09 결정, spec 본문 개정 요청 대상).
  */
 object TimerAlarmChannels {
 
-    const val SOUND_ID = "timer_alarm_sound"
-    const val SILENT_ID = "timer_alarm_silent"
+    // ⚠️ id 에 버전을 붙인다. 채널 설정은 만든 뒤 못 바꾸고, **지웠다 같은 id 로 다시 만들면
+    // 시스템이 옛 설정을 되살린다.** 진동 규칙이 바뀐 지금은 새 id 로 가야 의도대로 뜬다.
+    const val SOUND_ID = "timer_alarm_sound_v2"
+    const val VIBRATE_ID = "timer_alarm_vibrate_v2"
+    const val SILENT_ID = "timer_alarm_silent_v2"
 
-    fun channelFor(mode: AlertMode): String = if (mode == AlertMode.SOUND) SOUND_ID else SILENT_ID
+    private val LEGACY_IDS = listOf("timer_alarm_sound", "timer_alarm_silent")
+
+    fun channelFor(mode: AlertMode): String = when (mode) {
+        AlertMode.SOUND -> SOUND_ID
+        AlertMode.VIBRATE -> VIBRATE_ID
+        AlertMode.SILENT -> SILENT_ID
+    }
 
     /**
-     * 두 채널을 만든다. 이미 있으면 시스템이 무시하므로 매번 불러도 된다.
+     * 채널 3종을 만든다. 이미 있으면 시스템이 무시하므로 매번 불러도 된다.
      *
      * 앱 시작 시 한 번 부른다 — 알람이 울리는 시점에 만들면 늦다.
      */
     fun ensure(context: Context) {
         val manager = context.getSystemService<NotificationManager>() ?: return
+        LEGACY_IDS.forEach(manager::deleteNotificationChannel)
 
         val alarmAudio = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
-        val sound = NotificationChannel(
-            SOUND_ID,
-            "처치 타이머 알람",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "타이머가 끝나면 소리로 알립니다."
+        val sound = channel(SOUND_ID, "처치 타이머 알람", "타이머가 끝나면 소리로 알립니다.").apply {
             setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), alarmAudio)
             enableVibration(true)
-            setBypassDnd(true)
-            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
 
-        val silent = NotificationChannel(
-            SILENT_ID,
-            "처치 타이머 알람 (무음)",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "타이머가 끝나면 소리 없이 알립니다."
+        val vibrate = channel(VIBRATE_ID, "처치 타이머 알람 (진동)", "타이머가 끝나면 진동으로 알립니다.").apply {
             setSound(null, null)
-            // '무음'은 알림을 끄는 게 아니라 소리만 끈 조용한 알림이다(spec §울림 방식).
             enableVibration(true)
-            setBypassDnd(true)
-            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            vibrationPattern = SUSTAINED_PATTERN
         }
 
-        manager.createNotificationChannel(sound)
-        manager.createNotificationChannel(silent)
+        val silent = channel(SILENT_ID, "처치 타이머 알람 (무음)", "타이머가 끝나면 화면 알림만 띄웁니다.").apply {
+            setSound(null, null)
+            enableVibration(false)
+        }
+
+        listOf(sound, vibrate, silent).forEach(manager::createNotificationChannel)
+    }
+
+    private fun channel(id: String, name: String, why: String) =
+        NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+            description = why
+            setBypassDnd(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
+    /**
+     * 진동을 약 1분간 이어 준다.
+     *
+     * `FLAG_INSISTENT` 는 **소리만** 반복한다. 채널 진동은 알림 1건당 패턴을 한 번 재생하고
+     * 끝나서, 짧은 패턴을 쓰면 '진동'이 [완료] 까지 지속되지 않는다(spec §만료·알람).
+     * 그래서 패턴 자체를 길게 만들어 지속을 흉내낸다 — 1분이 지나면 알림 표시만 남는다.
+     */
+    private val SUSTAINED_PATTERN: LongArray = LongArray(SUSTAIN_CYCLES * 2) { index ->
+        if (index % 2 == 0) VIBRATE_MS else PAUSE_MS
     }
 }
+
+private const val VIBRATE_MS = 800L
+private const val PAUSE_MS = 400L
+private const val SUSTAIN_CYCLES = 50

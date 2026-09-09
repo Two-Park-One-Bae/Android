@@ -43,6 +43,14 @@ interface TimerStore {
     val presets: Flow<List<TimerPreset>>
     val alertMode: Flow<AlertMode>
 
+    /**
+     * 울림 방식을 **사용자가 직접 고른 적이 있는가.**
+     *
+     * 별도 플래그를 두지 않고 저장된 값의 유무로 판단한다 — 플래그와 값이 어긋나
+     * "골랐다고 하는데 값이 없는" 상태가 생길 여지를 없앤다.
+     */
+    val alertModeChosen: Flow<Boolean>
+
     suspend fun currentTimers(): List<CareTimer>
     suspend fun currentPresets(): List<TimerPreset>
     suspend fun currentAlertMode(): AlertMode
@@ -79,6 +87,9 @@ internal class DataStoreTimerStore @Inject constructor(@param:ApplicationContext
         prefs[KEY_ALERT_MODE]?.let { runCatching { AlertMode.valueOf(it) }.getOrNull() }
             ?: AlertMode.SOUND
     }
+
+    override val alertModeChosen: Flow<Boolean> =
+        context.timerDataStore.data.map { it[KEY_ALERT_MODE] != null }
 
     override suspend fun currentTimers(): List<CareTimer> = timers.first()
 

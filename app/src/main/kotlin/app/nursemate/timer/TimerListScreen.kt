@@ -53,12 +53,13 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     val now by viewModel.now.collectAsStateWithLifecycle()
     val memoEditing by viewModel.memoEditing.collectAsStateWithLifecycle()
     val presetSheet by viewModel.presetSheetOpen.collectAsStateWithLifecycle()
+    val gate by viewModel.startGate.state.collectAsStateWithLifecycle()
 
     TimerListScreen(
         timers = timers,
         now = now,
         memoEditing = memoEditing,
-        onAdd = viewModel::openPresetSheet,
+        onAdd = { viewModel.setPresetSheet(true) },
         onPauseOrResume = viewModel::pauseOrResume,
         onExtend = viewModel::extend,
         onMemoToggle = viewModel::toggleMemo,
@@ -69,10 +70,18 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     if (presetSheet) {
         TimerPresetSheet(
             presets = presets,
-            onStart = viewModel::start,
-            onDismiss = viewModel::closePresetSheet
+            onStart = viewModel.startGate::start,
+            onDismiss = { viewModel.setPresetSheet(false) }
         )
     }
+
+    TimerGateHost(
+        gate = gate,
+        permissions = viewModel.startGate.permissions,
+        onAdvance = viewModel.startGate::advance,
+        onConfirmAlertMode = viewModel.startGate::confirmAlertMode,
+        onDismiss = viewModel.startGate::dismiss
+    )
 }
 
 @Composable
@@ -89,7 +98,16 @@ fun TimerListScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    val ordered = remember(timers, now) { CareTimerTransitions.ordered(timers, now) }
+    // 만료를 화면에서도 판정한다.
+    //
+    // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫이지만, 알람이 못 오는 경우가 있다 —
+    // 정확 알람 권한이 꺼졌거나, 예약이 실패했거나. 그때 화면만 믿고 있으면 카드가 「진행 중
+    // 00:00」으로 굳어 사용자가 손댈 수 없다. 보이는 것만이라도 만료로 바꿔 [완료]를 준다.
+    val ordered = remember(timers, now) {
+        CareTimerTransitions.ordered(timers, now).map { timer ->
+            if (timer.isExpiredAt(now)) CareTimerTransitions.ring(timer) else timer
+        }
+    }
 
     Box(modifier.fillMaxSize().background(colors.bgApp)) {
         Column(Modifier.fillMaxSize()) {

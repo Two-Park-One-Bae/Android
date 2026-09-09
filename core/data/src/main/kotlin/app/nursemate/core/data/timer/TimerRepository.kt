@@ -56,6 +56,9 @@ class TimerRepository @Inject constructor(
     val timers: Flow<List<CareTimer>> = store.timers
     val alertMode: Flow<AlertMode> = store.alertMode
 
+    /** 울림 방식을 아직 한 번도 고르지 않았다면 첫 시작 시트를 띄운다(spec §알람 권한). */
+    val alertModeChosen: Flow<Boolean> = store.alertModeChosen
+
     /**
      * 앱이 다시 뜰 때 목록을 현재 시각에 맞춘다.
      *

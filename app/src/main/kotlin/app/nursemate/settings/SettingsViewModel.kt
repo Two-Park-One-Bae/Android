@@ -5,11 +5,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.UserRepository
+import app.nursemate.core.data.timer.TimerRepository
+import app.nursemate.core.model.AlertMode
 import app.nursemate.core.network.error.ApiFailure
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -22,11 +27,20 @@ data class SettingsUiState(val deleting: Boolean = false, val message: String? =
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val timerRepository: TimerRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
     val state = _state.asStateFlow()
+
+    /** 울림 방식 — 전역 설정이라 여기서 바꾸면 다음 알람부터 바로 적용된다(spec §설정). */
+    val alertMode: StateFlow<AlertMode> = timerRepository.alertMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AlertMode.SOUND)
+
+    fun setAlertMode(mode: AlertMode) {
+        viewModelScope.launch { timerRepository.setAlertMode(mode) }
+    }
 
     /** 화면 전환은 하지 않는다 — 세션이 끊기면 셸이 로그인으로 보낸다. */
     fun signOut() {
@@ -63,6 +77,7 @@ class SettingsViewModel @Inject constructor(
     fun dismissMessage() = _state.update { it.copy(message = null) }
 
     private companion object {
+        const val STOP_TIMEOUT_MS = 5000L
         const val TAG = "NM408"
         const val DELETE_FAILED = "계정을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요"
     }

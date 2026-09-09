@@ -13,6 +13,7 @@ class FakeTimerStore : TimerStore {
     private val timerState = MutableStateFlow<List<CareTimer>>(emptyList())
     private val presetState = MutableStateFlow(DEFAULT_TIMER_PRESETS)
     private val alertState = MutableStateFlow(AlertMode.SOUND)
+    private val chosenState = MutableStateFlow(false)
 
     /** 테스트가 직접 읽고 쓰는 창구. Flow 프로퍼티와 이름이 겹치지 않게 따로 둔다. */
     var savedTimers: List<CareTimer>
@@ -31,6 +32,8 @@ class FakeTimerStore : TimerStore {
     override val presets: Flow<List<TimerPreset>> get() = presetState
     override val alertMode: Flow<AlertMode> get() = alertState
 
+    override val alertModeChosen: Flow<Boolean> get() = chosenState
+
     override suspend fun currentTimers(): List<CareTimer> = timerState.value
     override suspend fun currentPresets(): List<TimerPreset> = presetState.value
     override suspend fun currentAlertMode(): AlertMode = alertState.value
@@ -42,6 +45,7 @@ class FakeTimerStore : TimerStore {
         presetState.value = value
     }
     override suspend fun updateAlertMode(value: AlertMode) {
+        chosenState.value = true
         alertState.value = value
     }
 }

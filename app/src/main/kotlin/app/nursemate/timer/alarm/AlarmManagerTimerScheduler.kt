@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.content.getSystemService
 import app.nursemate.core.data.timer.TimerAlarmScheduler
 import app.nursemate.core.model.CareTimer
@@ -31,21 +30,16 @@ import javax.inject.Singleton
  * 화면이 [canScheduleExact] 로 상태를 물어 권한 안내를 띄운다.
  */
 @Singleton
-class AlarmManagerTimerScheduler @Inject constructor(@param:ApplicationContext private val context: Context) :
-    TimerAlarmScheduler {
+class AlarmManagerTimerScheduler @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val permissions: TimerPermissions
+) : TimerAlarmScheduler {
 
     private val alarmManager: AlarmManager? get() = context.getSystemService()
 
-    /** 정확 알람을 예약할 수 있는가. 화면이 권한 안내를 띄울지 판단하는 데 쓴다. */
-    fun canScheduleExact(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        alarmManager?.canScheduleExactAlarms() == true
-    } else {
-        true
-    }
-
     override fun schedule(timer: CareTimer) {
         val manager = alarmManager ?: return
-        if (!canScheduleExact()) return
+        if (!permissions.canScheduleExact()) return
 
         val pending = firePendingIntent(timer.id)
         // 같은 요청 코드·같은 액션이라 재예약하면 이전 것을 덮어쓴다.

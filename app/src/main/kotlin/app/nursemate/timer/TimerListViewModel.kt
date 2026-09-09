@@ -7,6 +7,7 @@ import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
+import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class TimerListViewModel @Inject constructor(
     private val repository: TimerRepository,
+    permissions: TimerPermissions,
     presetRepository: TimerPresetRepository
 ) : ViewModel() {
 
@@ -52,27 +54,11 @@ class TimerListViewModel @Inject constructor(
     private val _presetSheetOpen = MutableStateFlow(false)
     val presetSheetOpen: StateFlow<Boolean> = _presetSheetOpen.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            while (isActive) {
-                _now.value = System.currentTimeMillis()
-                delay(TICK_MS)
-            }
-        }
-    }
+    /** 시작 관문 — 권한·울림 방식 최초 선택. 화면이 시트를 띄우고 OS 절차를 밟는다. */
+    val startGate = TimerStartGate(repository, permissions, viewModelScope)
 
-    fun openPresetSheet() {
-        _presetSheetOpen.value = true
-    }
-
-    fun closePresetSheet() {
-        _presetSheetOpen.value = false
-    }
-
-    /** 프리셋을 누르면 곧바로 시작하고 시트를 닫는다(정본 C3 부제). */
-    fun start(preset: TimerPreset) = launchIo {
-        repository.start(preset)
-        _presetSheetOpen.value = false
+    fun setPresetSheet(open: Boolean) {
+        _presetSheetOpen.value = open
     }
 
     fun pauseOrResume(timer: CareTimer) = launchIo {
