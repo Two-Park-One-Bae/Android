@@ -53,6 +53,8 @@ object TimerOngoingNotification {
                 .setShowWhen(true)
         }
 
+        addActions(context, builder, lead)
+
         // 펼치면 전부 보인다 — 접힌 줄만으로는 나머지를 식별할 수 없다(spec §앱 밖 진행 중 표시).
         if (ordered.size > 1) {
             val style = NotificationCompat.InboxStyle()
@@ -62,6 +64,38 @@ object TimerOngoingNotification {
         }
 
         return builder.build()
+    }
+
+    /**
+     * 조작 버튼 — spec §앱 밖 진행 중 표시. 앱을 열지 않고 다룰 수 있어야 한다.
+     *
+     * ## 가장 임박한 하나만 다룬다
+     * 알림을 하나로 묶었으니 버튼이 어느 타이머를 가리키는지 정해야 한다. 접힌 줄에 이름이
+     * 보이는 그것 — 가장 임박한 타이머 — 을 대상으로 삼는다. 다른 것을 다루려면 알림을 눌러
+     * 앱으로 들어간다.
+     *
+     * 울리는 중이면 [완료] 하나다. 이미 끝난 것을 일시정지·연장할 이유가 없다.
+     */
+    private fun addActions(context: Context, builder: NotificationCompat.Builder, lead: CareTimer) {
+        fun action(label: String, name: String) = builder.addAction(
+            0,
+            label,
+            TimerAlarmReceiver.actionPendingIntent(context, lead.id, name)
+        )
+
+        when (lead.state) {
+            TimerState.RINGING -> action("완료", TimerAlarmReceiver.ACTION_COMPLETE)
+
+            TimerState.PAUSED -> {
+                action("재개", TimerAlarmReceiver.ACTION_RESUME)
+                action("정지", TimerAlarmReceiver.ACTION_STOP)
+            }
+
+            TimerState.RUNNING -> {
+                action("일시정지", TimerAlarmReceiver.ACTION_PAUSE)
+                action("정지", TimerAlarmReceiver.ACTION_STOP)
+            }
+        }
     }
 
     /** 접힌 줄의 제목 — `AST · 검사` 또는 만료 시 `AST · 검사 — 종료`. */
