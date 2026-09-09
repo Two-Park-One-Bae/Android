@@ -29,8 +29,8 @@ import kotlinx.coroutines.launch
  * 배터리만 먹고 알림이 깜빡인다.
  *
  * ## 무엇이 "모양이 바뀐 것"인가
- * id·상태·만료 시각의 묶음이다([signature]). 메모를 고치는 것처럼 알림에 안 드러나는
- * 변화로는 다시 그리지 않는다.
+ * id·상태·만료 시각·남은 시간의 묶음이다([timerRenderSignature]). 메모를 고치는 것처럼
+ * 알림에 안 드러나는 변화로는 다시 그리지 않는다.
  */
 @Singleton
 class TimerOngoingNotifier @Inject constructor(
