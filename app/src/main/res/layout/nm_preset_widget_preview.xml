@@ -1,26 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 위젯 고르는 화면의 미리보기. 실제 위젯(PresetWidget)과 같은 배치를 정적으로 옮긴 것이다. -->
+<!--
+    위젯 고르는 화면의 미리보기. 실제 위젯(PresetWidget)과 같은 배치를 정적으로 옮긴 것이다.
+
+    ⚠️ **RemoteViews 가 허용하는 뷰만 쓴다** — LinearLayout · TextView · ImageView 등.
+    `<Space>` 를 넣었다가 미리보기가 통째로 「위젯을 추가할 수 없습니다」로 떴다.
+    인플레이트가 실패해도 로그가 눈에 띄지 않아, 실기기 위젯 목록에서만 드러난다.
+    여백은 위쪽 TextView 에 `layout_weight` 를 줘서 만든다.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/nm_widget_card"
-    android:paddingHorizontal="10dp"
+    android:paddingHorizontal="8dp"
     android:paddingVertical="11dp">
 
     <TextView
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="top"
         android:text="AST"
         android:textColor="#475569"
         android:textSize="13sp"
         android:maxLines="1" />
-
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
 
     <LinearLayout
         android:layout_width="wrap_content"

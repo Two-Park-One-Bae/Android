@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -44,9 +45,10 @@ import app.nursemate.timer.formatDuration
 /**
  * 지정 프리셋 위젯 — 정본 `타이머 / 위젯 — 잠금화면 시안 비교`.
  *
- * 홈 화면과 잠금화면 **양쪽**에 놓인다. 정본이 잠금화면만 그린 것은 iOS 가 두 표면을 따로
- * 만들어야 해서고, Android 는 `widgetCategory` 비트 하나로 같은 위젯이 둘 다 올라간다 —
- * 홈을 빼면 오히려 일이 는다(spec 본문은 "홈 화면 위젯 = MVP 제외", 개정 요청 대상).
+ * ## 폰에서 놓이는 자리는 **홈 화면뿐**이다
+ * 정본은 잠금화면을 그렸지만 Android 의 잠금화면 위젯은 태블릿 전용이다(근거는
+ * `res/xml/nm_preset_widget_info.xml`). spec 본문이 "홈 화면 위젯 = MVP 제외"라고 적은 것과
+ * 정반대로, Android 폰에서 가능한 표면은 홈뿐이다. 둘 다 개정 요청 대상이다.
  *
  * ## 색은 정본을 그대로 옮기지 않았다
  * 정본의 반투명 흰색은 iOS 잠금화면이 위젯을 **모노크롬으로 강제 렌더링**하는 걸 전제한
@@ -75,6 +77,9 @@ class PresetWidget : GlanceAppWidget() {
 
         provideContent {
             val slotId = currentState(PresetWidgetSlot.PRESET_ID)
+            // 방금 시작했는가. 되돌리는 갱신을 놓쳐도 시각을 비교하므로 계속 켜져 있지 않는다.
+            val startedAt = currentState(PresetWidgetSlot.STARTED_AT) ?: 0L
+            val justStarted = System.currentTimeMillis() - startedAt < FEEDBACK_MS
             // Glance 컴포지션은 위젯이 살아 있는 동안 계속 돈다 — 앱에서 프리셋을 고치면
             // 위젯도 따라 바뀐다.
             //
@@ -86,6 +91,7 @@ class PresetWidget : GlanceAppWidget() {
             GlanceTheme {
                 PresetButton(
                     preset = preset,
+                    justStarted = justStarted,
                     action = tapAction(context, appWidgetId, preset, granted)
                 )
             }
@@ -107,24 +113,65 @@ private fun tapAction(context: Context, appWidgetId: Int, preset: TimerPreset?, 
     else -> actionRunCallback<StartPresetAction>(startPresetParameters(preset.id))
 }
 
+/** 위젯이 보여 주는 세 가지 상태. 분기를 한 곳에 모아 두면 색·아이콘이 서로 어긋나지 않는다. */
+private enum class SlotState { EMPTY, STARTED, READY }
+
+private val SlotState.icon: Int
+    get() = when (this) {
+        SlotState.EMPTY -> DsR.drawable.nm_ic_plus
+        SlotState.STARTED -> DsR.drawable.nm_ic_check
+        SlotState.READY -> DsR.drawable.nm_ic_timer
+    }
+
+/** 아이콘·값에 함께 쓰는 강조색. */
+private val SlotState.accent: Color
+    get() = when (this) {
+        SlotState.EMPTY -> NmColor.Neutral.C400
+        SlotState.STARTED -> NmColor.Success.C600
+        SlotState.READY -> NmColor.Primary.C600
+    }
+
+private val SlotState.valueColor: Color
+    get() = when (this) {
+        SlotState.EMPTY -> NmColor.Neutral.C500
+        SlotState.STARTED -> NmColor.Success.C600
+        SlotState.READY -> NmColor.Neutral.C900
+    }
+
 @Composable
-private fun PresetButton(preset: TimerPreset?, action: Action) {
-    // 잠금화면 위젯 영역은 폭이 좁다(정본 기준 버튼당 81~110pt). 좁으면 한 단계 줄인다.
+private fun PresetButton(preset: TimerPreset?, justStarted: Boolean, action: Action) {
+    // 사용자가 셀 하나로 줄여 놓을 수 있다. 좁으면 정본이 4개 나열에서 쓴 한 단계 작은 값으로.
     val narrow = LocalSize.current.width < NARROW_WIDTH
-    val empty = preset == null
+    val state = when {
+        preset == null -> SlotState.EMPTY
+        justStarted -> SlotState.STARTED
+        else -> SlotState.READY
+    }
+    val duration = when (state) {
+        SlotState.EMPTY -> EMPTY_VALUE
+        SlotState.STARTED -> STARTED_VALUE
+        SlotState.READY -> formatDuration(checkNotNull(preset).durationSeconds)
+    }
 
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(ImageProvider(if (empty) R.drawable.nm_widget_card_empty else R.drawable.nm_widget_card))
-            .padding(horizontal = 10.dp, vertical = 11.dp)
+            .background(
+                ImageProvider(
+                    if (state == SlotState.EMPTY) R.drawable.nm_widget_card_empty else R.drawable.nm_widget_card
+                )
+            )
+            // 정본 버튼의 padding: [11, 8].
+            .padding(horizontal = 8.dp, vertical = 11.dp)
             .clickable(action),
         verticalAlignment = Alignment.Top
     ) {
         Text(
             text = preset?.label ?: EMPTY_LABEL,
             style = TextStyle(
-                color = ColorProvider(if (empty) NmColor.Neutral.C400 else NmColor.Neutral.C600),
+                color = ColorProvider(
+                    if (state == SlotState.EMPTY) NmColor.Neutral.C400 else NmColor.Neutral.C600
+                ),
                 fontSize = if (narrow) 12.sp else 13.sp,
                 fontWeight = FontWeight.Medium
             ),
@@ -136,19 +183,17 @@ private fun PresetButton(preset: TimerPreset?, action: Action) {
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
-                provider = ImageProvider(if (empty) DsR.drawable.nm_ic_plus else DsR.drawable.nm_ic_timer),
+                provider = ImageProvider(state.icon),
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(
-                    ColorProvider(if (empty) NmColor.Neutral.C400 else NmColor.Primary.C600)
-                ),
+                colorFilter = ColorFilter.tint(ColorProvider(state.accent)),
                 modifier = GlanceModifier.size(if (narrow) 12.dp else 13.dp)
             )
             Spacer(GlanceModifier.width(3.dp))
             Text(
-                text = preset?.let { formatDuration(it.durationSeconds) } ?: EMPTY_VALUE,
+                text = duration,
                 style = TextStyle(
-                    color = ColorProvider(if (empty) NmColor.Neutral.C500 else NmColor.Neutral.C900),
-                    fontSize = if (narrow) 16.sp else 17.sp,
+                    color = ColorProvider(state.valueColor),
+                    fontSize = durationSize(duration, narrow),
                     fontWeight = FontWeight.Bold
                 ),
                 maxLines = 1
@@ -157,8 +202,26 @@ private fun PresetButton(preset: TimerPreset?, action: Action) {
     }
 }
 
+/**
+ * 값이 길면 글자를 줄인다.
+ *
+ * 정본은 `15분`·`30분` 만 그렸지만 프리셋은 초 단위까지 자유롭게 만들 수 있어
+ * `2시간 30분 30초` 같은 값이 나온다. RemoteViews 에는 자동 축소가 없고 `maxLines=1` 은
+ * 그냥 잘라 버려서, **무엇을 맞춰 놨는지 알 수 없게 된다** — 위젯의 존재 이유가 그거다.
+ */
+private fun durationSize(text: String, narrow: Boolean) = when {
+    text.length > LONG_DURATION -> if (narrow) 12.sp else 13.sp
+    text.length > MEDIUM_DURATION -> if (narrow) 14.sp else 15.sp
+    else -> if (narrow) 16.sp else 17.sp
+}
+
+/** `2시간 30분` = 7자. 그보다 길면 한 단계 더 줄인다. */
+private const val MEDIUM_DURATION = 4
+private const val LONG_DURATION = 7
+
 /** 정본이 4개(≈81pt)에서 한 단계 줄인 값을 dp 로 옮긴 것. */
 private val NARROW_WIDTH = 96.dp
 
+private const val STARTED_VALUE = "시작됨"
 private const val EMPTY_LABEL = "프리셋 미지정"
 private const val EMPTY_VALUE = "지정하기"

@@ -6,6 +6,6 @@
     모서리를 도형 드로어블로 주면 모든 버전에서 같은 모양이 나온다.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <corners android:radius="24dp" />
+    <corners android:radius="18dp" />
     <solid android:color="#FFFFFFFF" />
 </shape>

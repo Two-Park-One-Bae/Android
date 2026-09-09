@@ -108,10 +108,15 @@
         <!--
             슬롯 지정 화면. 런처가 위젯을 놓는 순간 띄우므로 exported 여야 한다.
             excludeFromRecents — 설정 한 번 하고 끝나는 화면이라 최근 목록에 남을 이유가 없다.
+
+            ⚠️ **taskAffinity 를 비워 자기 태스크에서 돌린다.** 안 그러면 앱 태스크에 얹히는데,
+            지정을 마치고 이 화면이 닫히면 **밑에 있던 MainActivity 가 드러난다** — 홈 화면에서
+            위젯을 만졌는데 앱 홈이 뜬다(실기기에서 확인). 자기 태스크면 닫히는 즉시 런처로 돌아간다.
         -->
         <activity
             android:name="app.nursemate.timer.widget.PresetWidgetConfigActivity"
             android:excludeFromRecents="true"
+            android:taskAffinity=""
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />

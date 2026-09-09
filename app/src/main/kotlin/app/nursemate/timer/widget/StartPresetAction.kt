@@ -6,7 +6,9 @@ import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.state.updateAppWidgetState
 import app.nursemate.core.model.TimerPreset
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
 /**
@@ -15,6 +17,10 @@ import kotlinx.coroutines.flow.first
  * ## [TimerRepository.start] 를 그대로 통과시킨다
  * 울림 방식·알람 예약·저장이 전부 그 안에 묶여 있다. 위젯이 자기 경로로 타이머를 만들면
  * 전역 설정이 빠지거나 예약이 누락된다 — iOS 가 실제로 그 버그를 냈다(NM-301 티켓).
+ *
+ * ## 시작한 뒤 잠깐 「시작됨」을 보여 준다
+ * 위젯은 눌러도 화면이 안 바뀐다. 표시가 없으면 안 눌린 줄 알고 한 번 더 눌러 타이머가 둘
+ * 생긴다 — spec 이 막으라고 한 바로 그 경우다. 정본에 이 상태 프레임은 없다(iOS 도 미구현).
  */
 class StartPresetAction : ActionCallback {
 
@@ -30,6 +36,7 @@ class StartPresetAction : ActionCallback {
             PresetWidget().update(context, glanceId)
         } else {
             entry.timerRepository().start(preset)
+            showStarted(context, glanceId)
         }
     }
 
@@ -44,10 +51,31 @@ class StartPresetAction : ActionCallback {
         return entry.presetRepository().presets.first().firstOrNull { it.id == presetId }
     }
 
+    /**
+     * 「시작됨」을 켰다가 [FEEDBACK_MS] 뒤에 되돌린다.
+     *
+     * ⚠️ **여기서 기다리는 동안 브로드캐스트 리시버를 붙잡고 있다.** 포그라운드 브로드캐스트의
+     * ANR 한계가 10초라 2초는 안전하지만, 이 값을 크게 늘리면 안 된다. 되돌리는 갱신을 놓쳐도
+     * 화면이 굳지 않는 것은 저장한 값이 **시각**이라서다(그릴 때 지났는지 다시 본다).
+     */
+    private suspend fun showStarted(context: Context, glanceId: GlanceId) {
+        val widget = PresetWidget()
+        updateAppWidgetState(context, glanceId) { it[PresetWidgetSlot.STARTED_AT] = System.currentTimeMillis() }
+        widget.update(context, glanceId)
+
+        delay(FEEDBACK_MS)
+
+        updateAppWidgetState(context, glanceId) { it.remove(PresetWidgetSlot.STARTED_AT) }
+        widget.update(context, glanceId)
+    }
+
     private companion object {
         const val TAG = "NM443"
     }
 }
+
+/** 「시작됨」이 머무는 시간. 리시버를 붙잡고 있는 시간이기도 하다 — 늘리지 말 것. */
+internal const val FEEDBACK_MS = 2_000L
 
 internal val PRESET_ID_PARAM = ActionParameters.Key<String>("preset_id")
 
