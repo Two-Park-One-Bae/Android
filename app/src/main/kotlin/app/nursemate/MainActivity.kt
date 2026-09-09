@@ -1,5 +1,6 @@
 package app.nursemate
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -7,14 +8,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.navigation.NurseMateApp
+import app.nursemate.timer.alarm.TimerAlarmIntents
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * 만료 알람에서 들어왔는가 — spec §만료·알람 "알람 확인·탭 후 랜딩 = C1".
+     *
+     * 인텐트를 그때그때 읽지 않고 상태로 들고 있는 이유는 **앱이 이미 떠 있을 때**다.
+     * 그때는 [onNewIntent] 로 오는데, Compose 는 `intent` 를 관찰하지 않아 새 인텐트가
+     * 와도 화면이 모른다.
+     */
+    private val openTimerTab = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openTimerTab.value = intent.wantsTimerTab()
 
         // 시스템 바 뒤까지 그린다. 없으면 상·하단에 회색 띠가 남는다.
         //
@@ -35,6 +49,21 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
-        setContent { NurseMateTheme { NurseMateApp() } }
+        setContent {
+            NurseMateTheme {
+                NurseMateApp(
+                    openTimerTab = openTimerTab.value,
+                    onTimerTabOpened = { openTimerTab.value = false }
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.wantsTimerTab()) openTimerTab.value = true
     }
 }
+
+private fun Intent.wantsTimerTab(): Boolean = getBooleanExtra(TimerAlarmIntents.EXTRA_OPEN_TIMER, false)

@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -36,14 +35,11 @@ import app.nursemate.auth.LoginViewModel
 import app.nursemate.consent.ConsentScreen
 import app.nursemate.consent.ConsentViewModel
 import app.nursemate.core.designsystem.NmButtonSecondary
-import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.Usage
 import app.nursemate.core.model.User
-import app.nursemate.home.FeaturePreparingScreen
 import app.nursemate.home.HomeScreen
 import app.nursemate.home.HomeViewModel
 import app.nursemate.home.NmTab
@@ -52,6 +48,7 @@ import app.nursemate.settings.SettingsConfirm
 import app.nursemate.settings.SettingsConfirmDialog
 import app.nursemate.settings.SettingsScreen
 import app.nursemate.settings.SettingsViewModel
+import app.nursemate.timer.TimerListRoute
 
 /**
  * 앱 셸.
@@ -61,7 +58,7 @@ import app.nursemate.settings.SettingsViewModel
  * 탭바가 필요한 루트는 각자 [NmTabScaffold] 로 감싼다.
  */
 @Composable
-fun NurseMateApp(modifier: Modifier = Modifier) {
+fun NurseMateApp(openTimerTab: Boolean = false, onTimerTabOpened: () -> Unit = {}, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
     val sessionViewModel: AppSessionViewModel = hiltViewModel()
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
@@ -85,7 +82,12 @@ fun NurseMateApp(modifier: Modifier = Modifier) {
 
             AppEntry.Unavailable -> ServiceUnavailable(onRetry = sessionViewModel::refresh)
 
-            else -> NmNavHost(entry, sessionViewModel::onUserUpdated)
+            else -> NmNavHost(
+                entry = entry,
+                openTimerTab = openTimerTab,
+                onTimerTabOpened = onTimerTabOpened,
+                onUserUpdated = sessionViewModel::onUserUpdated
+            )
         }
     }
 }
@@ -115,7 +117,12 @@ private fun ServiceUnavailable(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
+private fun NmNavHost(
+    entry: AppEntry,
+    openTimerTab: Boolean,
+    onTimerTabOpened: () -> Unit,
+    onUserUpdated: (User) -> Unit
+) {
     val navController = rememberNavController()
 
     // 알약 탭 게이트를 홈·타이머·설정 세 화면이 공유해야 한다 — 화면마다 따로 물으면
@@ -162,6 +169,13 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         }
         if (!settled) navController.replaceWith(target)
     }
+
+    AlarmLanding(
+        navController = navController,
+        entry = entry,
+        requested = openTimerTab,
+        onHandled = onTimerTabOpened
+    )
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(NmRoute.LOGIN) {
@@ -242,14 +256,7 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
                 onPillTabLimitReached = { pillTabLimitReached = true },
                 onDismissPillTabLimit = { pillTabLimitReached = false }
             ) {
-                FeaturePreparingScreen(
-                    title = "처치 타이머",
-                    description = "여러 처치 시간을 한 번에 관리하는 타이머를 준비하고 있어요.\n" +
-                        "테스트 기간 중 업데이트로 제공될 예정입니다.",
-                    icon = painterResource(DsR.drawable.nm_ic_timer),
-                    iconBackground = NmColor.Secondary.C50,
-                    iconTint = NmColor.Secondary.C500
-                )
+                TimerListRoute()
             }
         }
 
@@ -257,6 +264,7 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         composable(NmRoute.SETTINGS) {
             val viewModel: SettingsViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
+            val alertMode by viewModel.alertMode.collectAsStateWithLifecycle()
             // 확인 모달은 탭바까지 덮어야 해서 화면 밖(scaffold overlay)에 그린다.
             var confirming by remember { mutableStateOf<SettingsConfirm?>(null) }
 
@@ -286,7 +294,12 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
                     }
                 }
             ) {
-                SettingsScreen(state = state, onConfirm = { confirming = it })
+                SettingsScreen(
+                    state = state,
+                    onConfirm = { confirming = it },
+                    alertMode = alertMode,
+                    onAlertMode = viewModel::setAlertMode
+                )
             }
         }
     }
@@ -300,6 +313,22 @@ private val AppEntry.route: String?
         AppEntry.Home -> NmRoute.HOME
         AppEntry.Loading, AppEntry.Unavailable -> null
     }
+
+/**
+ * 만료 알람을 탭해서 들어왔으면 타이머 탭까지 이어서 보낸다 —
+ * spec §만료·알람 "알람 확인·탭 후 랜딩 = C1".
+ *
+ * 홈에 닿은 **뒤**에 움직여야 한다. 알람은 잠금화면에서도 눌리므로, 그때 앱은 아직
+ * 로그인이나 동의 화면일 수 있다.
+ */
+@Composable
+private fun AlarmLanding(navController: NavController, entry: AppEntry, requested: Boolean, onHandled: () -> Unit) {
+    LaunchedEffect(entry, requested) {
+        if (!requested || entry != AppEntry.Home) return@LaunchedEffect
+        navController.switchTab(NmTab.Timer)
+        onHandled()
+    }
+}
 
 /**
  * 진입 화면을 바꾼다. **백스택을 통째로 비운다.**

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  드래그 핸들 — C3 프리셋 편집 모드
+  출처: Lucide "menu" (ISC License) https://lucide.dev
+  디자인 정본(spec/design/DESIGN.pen)이 아이콘을 전부 Lucide로 정의한다.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:pathData="M4,6 L20,6 M4,12 L20,12 M4,18 L20,18"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>
