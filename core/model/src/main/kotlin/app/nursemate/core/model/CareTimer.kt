@@ -2,6 +2,10 @@ package app.nursemate.core.model
 
 import kotlinx.serialization.Serializable
 
+// ⚠️ @Serializable 클래스 안에 private companion 을 두지 않는다 — 컴파일러 플러그인이 만드는
+// `serializer()` 가 그 자리에 들어가는데, private 이면 다른 모듈에서 접근할 수 없다.
+private const val MILLIS_PER_SECOND = 1000L
+
 // 처치 타이머 도메인 — 정본 `spec/feature/care-timer/domain-model.md`.
 //
 // 폰과 워치가 **플랫폼과 무관하게 똑같이 구현해야 하는 계약**이라 core:model 에 둔다.
@@ -71,10 +75,6 @@ data class CareTimer(
 
     /** 아직 안 울렸는데 만료 시각을 지났는가 — 복원 시 RINGING 으로 올려야 하는지 판단한다. */
     fun isExpiredAt(now: Long): Boolean = state == TimerState.RUNNING && now >= endAtEpochMillis
-
-    private companion object {
-        const val MILLIS_PER_SECOND = 1000L
-    }
 }
 
 /**
