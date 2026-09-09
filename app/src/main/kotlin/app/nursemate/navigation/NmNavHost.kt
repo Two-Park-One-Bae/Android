@@ -58,7 +58,7 @@ import app.nursemate.timer.TimerListRoute
  * 탭바가 필요한 루트는 각자 [NmTabScaffold] 로 감싼다.
  */
 @Composable
-fun NurseMateApp(modifier: Modifier = Modifier) {
+fun NurseMateApp(openTimerTab: Boolean = false, onTimerTabOpened: () -> Unit = {}, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
     val sessionViewModel: AppSessionViewModel = hiltViewModel()
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
@@ -82,7 +82,12 @@ fun NurseMateApp(modifier: Modifier = Modifier) {
 
             AppEntry.Unavailable -> ServiceUnavailable(onRetry = sessionViewModel::refresh)
 
-            else -> NmNavHost(entry, sessionViewModel::onUserUpdated)
+            else -> NmNavHost(
+                entry = entry,
+                openTimerTab = openTimerTab,
+                onTimerTabOpened = onTimerTabOpened,
+                onUserUpdated = sessionViewModel::onUserUpdated
+            )
         }
     }
 }
@@ -112,7 +117,12 @@ private fun ServiceUnavailable(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
+private fun NmNavHost(
+    entry: AppEntry,
+    openTimerTab: Boolean,
+    onTimerTabOpened: () -> Unit,
+    onUserUpdated: (User) -> Unit
+) {
     val navController = rememberNavController()
 
     // 알약 탭 게이트를 홈·타이머·설정 세 화면이 공유해야 한다 — 화면마다 따로 물으면
@@ -159,6 +169,13 @@ private fun NmNavHost(entry: AppEntry, onUserUpdated: (User) -> Unit) {
         }
         if (!settled) navController.replaceWith(target)
     }
+
+    AlarmLanding(
+        navController = navController,
+        entry = entry,
+        requested = openTimerTab,
+        onHandled = onTimerTabOpened
+    )
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(NmRoute.LOGIN) {
@@ -296,6 +313,22 @@ private val AppEntry.route: String?
         AppEntry.Home -> NmRoute.HOME
         AppEntry.Loading, AppEntry.Unavailable -> null
     }
+
+/**
+ * 만료 알람을 탭해서 들어왔으면 타이머 탭까지 이어서 보낸다 —
+ * spec §만료·알람 "알람 확인·탭 후 랜딩 = C1".
+ *
+ * 홈에 닿은 **뒤**에 움직여야 한다. 알람은 잠금화면에서도 눌리므로, 그때 앱은 아직
+ * 로그인이나 동의 화면일 수 있다.
+ */
+@Composable
+private fun AlarmLanding(navController: NavController, entry: AppEntry, requested: Boolean, onHandled: () -> Unit) {
+    LaunchedEffect(entry, requested) {
+        if (!requested || entry != AppEntry.Home) return@LaunchedEffect
+        navController.switchTab(NmTab.Timer)
+        onHandled()
+    }
+}
 
 /**
  * 진입 화면을 바꾼다. **백스택을 통째로 비운다.**
