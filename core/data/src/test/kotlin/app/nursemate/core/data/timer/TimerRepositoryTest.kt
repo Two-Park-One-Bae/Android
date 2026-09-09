@@ -4,6 +4,8 @@ import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerCategory
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -259,5 +261,74 @@ class TimerRepositoryTest {
         repo.markRinging(timer.id)
 
         assertEquals(TimerState.RINGING, store.savedTimers.single().state)
+    }
+
+    @Test
+    fun `동시에 만료해도 둘 다 울림으로 올라간다`() = runBlocking {
+        // 알람 리시버는 자기 코루틴에서 돌아 화면과 독립이다. 만료가 거의 같이 오면 리시버
+        // 둘이 같은 목록을 읽고 각자 자기 것만 올려 쓰는데, 읽기-수정-쓰기를 따로 하면
+        // **나중 쓰기가 앞의 울림을 지운다.** 읽기를 늦춰 그 창을 벌린다.
+        val store = FakeTimerStore(readDelayMillis = 5)
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val a = repo.start(preset)
+        val b = repo.start(preset)
+
+        now += 900_000L
+        coroutineScope {
+            launch { repo.markRinging(a.id) }
+            launch { repo.markRinging(b.id) }
+        }
+
+        assertEquals(
+            "하나가 다른 하나의 울림을 덮어썼다",
+            2,
+            store.savedTimers.count { it.state == TimerState.RINGING }
+        )
+    }
+
+    @Test
+    fun `동시에 시작해도 서로를 지우지 않는다`() = runBlocking {
+        val store = FakeTimerStore(readDelayMillis = 5)
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+
+        coroutineScope {
+            launch { repo.start(preset) }
+            launch { repo.start(preset) }
+        }
+
+        assertEquals(2, store.savedTimers.size)
+    }
+
+    @Test
+    fun `울리는 중에는 연장하지 않는다`() = runBlocking {
+        // `endAt` 만 밀면 남은 시간이 양수가 되는데 상태는 RINGING 이라, 카드는 만료로
+        // 그려지고 예약도 안 되는 어긋난 상태가 된다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val timer = repo.start(preset)
+        now += 900_000L
+        repo.markRinging(timer.id)
+
+        repo.extend(timer.id)
+
+        val saved = store.savedTimers.single()
+        assertEquals(TimerState.RINGING, saved.state)
+        assertEquals(timer.endAtEpochMillis, saved.endAtEpochMillis)
+    }
+
+    @Test
+    fun `복원할 때 남은 타이머가 있으면 알림을 걷지 않는다`() = runBlocking {
+        // `cancelAll()` 은 채널을 가리지 않아, 앱이 죽어 있는 동안 울린 알람의 알림까지 지운다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        repo.start(preset)
+
+        repo.restore()
+
+        assertEquals("타이머가 남아 있는데 알림을 걷었다", 0, scheduler.alarmSweeps)
     }
 }

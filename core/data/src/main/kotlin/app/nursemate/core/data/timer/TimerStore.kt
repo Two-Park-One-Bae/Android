@@ -55,6 +55,20 @@ interface TimerStore {
     suspend fun currentPresets(): List<TimerPreset>
     suspend fun currentAlertMode(): AlertMode
 
+    /**
+     * 목록을 **한 번의 원자적 갱신**으로 바꾼다.
+     *
+     * ⚠️ **읽고 → 고치고 → 쓰기를 따로 하면 안 된다.** 알람 리시버는 자기 코루틴에서 돌아
+     * 화면과 완전히 독립이다. 만료가 거의 동시에 오면 리시버 둘이 같은 목록을 읽고 각자
+     * 자기 타이머만 울림으로 올려 쓰는데, **나중 쓰기가 앞의 것을 지운다.**
+     *
+     * 화면은 `now >= endAt` 을 스스로 투영해 만료로 그리므로 눈에는 멀쩡해 보이지만,
+     * 저장 상태가 어긋나 헤더 카운트·정렬·다음 복원이 전부 틀어진다.
+     *
+     * [transform] 은 **순수해야 한다** — 알람 예약 같은 부수효과를 여기서 일으키지 않는다.
+     */
+    suspend fun mutateTimers(transform: (List<CareTimer>) -> List<CareTimer>)
+
     suspend fun updateTimers(value: List<CareTimer>)
     suspend fun updatePresets(value: List<TimerPreset>)
     suspend fun updateAlertMode(value: AlertMode)
@@ -96,6 +110,14 @@ internal class DataStoreTimerStore @Inject constructor(@param:ApplicationContext
     override suspend fun currentPresets(): List<TimerPreset> = presets.first()
 
     override suspend fun currentAlertMode(): AlertMode = alertMode.first()
+
+    /** `edit` 한 번 안에서 읽고 쓴다 — DataStore 가 이 블록을 직렬화해 준다. */
+    override suspend fun mutateTimers(transform: (List<CareTimer>) -> List<CareTimer>) {
+        context.timerDataStore.edit { prefs ->
+            val current = decode(prefs[KEY_TIMERS], timerListSerializer, emptyList())
+            prefs[KEY_TIMERS] = json.encodeToString(timerListSerializer, transform(current))
+        }
+    }
 
     override suspend fun updateTimers(value: List<CareTimer>) {
         context.timerDataStore.edit { it[KEY_TIMERS] = json.encodeToString(timerListSerializer, value) }

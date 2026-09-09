@@ -64,7 +64,11 @@ object CareTimerTransitions {
             remainingSeconds = (timer.remainingSeconds ?: 0) + seconds
         )
 
-        else -> timer.copy(
+        // 이미 울리는 것은 연장하지 않는다. `endAt` 만 밀면 남은 시간이 양수가 되는데 상태는
+        // RINGING 이라, 카드는 만료로 그려지고 예약도 안 되는 어긋난 상태가 된다.
+        TimerState.RINGING -> timer
+
+        TimerState.RUNNING -> timer.copy(
             durationSeconds = timer.durationSeconds + seconds,
             endAtEpochMillis = timer.endAtEpochMillis + seconds * MILLIS_PER_SECOND
         )

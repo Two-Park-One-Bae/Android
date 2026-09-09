@@ -82,44 +82,49 @@ class TimerRepository @Inject constructor(
      */
     suspend fun restore() {
         val now = clock.now()
-        val restored = CareTimerTransitions.restore(store.currentTimers(), now)
-        store.updateTimers(restored)
+        var restored = emptyList<CareTimer>()
+        store.mutateTimers { current ->
+            CareTimerTransitions.restore(current, now).also { restored = it }
+        }
         restored.filter { it.state == TimerState.RUNNING }.forEach(scheduler::schedule)
-        // 남아 있는 알림은 사용자가 지울 수 없으니 여기서 걷어낸다.
-        scheduler.dismissAllAlarms()
+
+        // ⚠️ **남은 타이머가 없을 때만 걷는다.** 이건 `cancelAll()` 이라 채널을 가리지 않는다.
+        // 앱이 죽어 있는 동안 알람이 울렸다면 리시버가 방금 띄운 알림까지 지워 버린다 —
+        // 두 코루틴이 나란히 도는 터라 순서가 실행마다 달라, 간헐적으로만 사라졌다.
+        //
+        // 고아 알림은 앱 데이터가 비워졌을 때 남는데, 그때는 목록도 비어 있다. 그 경우로
+        // 좁히면 방금 울린 알림을 건드리지 않으면서 고아는 여전히 걷어낸다.
+        if (restored.isEmpty()) scheduler.dismissAllAlarms()
     }
 
     /** 프리셋 원탭 → 즉시 시작 + 알람 예약. */
     suspend fun start(preset: TimerPreset): CareTimer {
         val timer = CareTimerTransitions.start(preset, UUID.randomUUID().toString(), clock.now())
-        store.updateTimers(store.currentTimers() + timer)
+        store.mutateTimers { it + timer }
         scheduler.schedule(timer)
         return timer
     }
 
     /** 일시정지 — 알람 예약도 함께 지운다. 안 지우면 멈춰 있는데 울린다. */
-    suspend fun pause(timerId: String) = mutate(timerId) { timer ->
-        CareTimerTransitions.pause(timer, clock.now()).also {
-            if (it.state == TimerState.PAUSED) scheduler.cancel(timerId)
-        }
+    suspend fun pause(timerId: String) {
+        val updated = mutate(timerId) { CareTimerTransitions.pause(it, clock.now()) }
+        if (updated?.state == TimerState.PAUSED) scheduler.cancel(timerId)
     }
 
     /** 재개 — 새 만료 시각으로 다시 예약한다. */
-    suspend fun resume(timerId: String) = mutate(timerId) { timer ->
-        CareTimerTransitions.resume(timer, clock.now()).also {
-            if (it.state == TimerState.RUNNING) scheduler.schedule(it)
-        }
+    suspend fun resume(timerId: String) {
+        val updated = mutate(timerId) { CareTimerTransitions.resume(it, clock.now()) }
+        if (updated?.state == TimerState.RUNNING) scheduler.schedule(updated)
     }
 
     /** [+1분] — 만료 시각이 밀리므로 예약을 새 시각으로 덮어쓴다. */
-    suspend fun extend(timerId: String) = mutate(timerId) { timer ->
-        CareTimerTransitions.extend(timer).also {
-            if (it.state == TimerState.RUNNING) scheduler.schedule(it)
-        }
+    suspend fun extend(timerId: String) {
+        val updated = mutate(timerId) { CareTimerTransitions.extend(it) }
+        if (updated?.state == TimerState.RUNNING) scheduler.schedule(updated)
     }
 
-    suspend fun setMemo(timerId: String, memo: String?) = mutate(timerId) { timer ->
-        timer.copy(memo = memo?.takeIf(String::isNotBlank))
+    suspend fun setMemo(timerId: String, memo: String?) {
+        mutate(timerId) { it.copy(memo = memo?.takeIf(String::isNotBlank)) }
     }
 
     /**
@@ -129,8 +134,8 @@ class TimerRepository @Inject constructor(
      * 밀리는데, 이미 큐에 들어간 옛 알람은 그대로 발화한다. 확인 없이 올리면 1분 연장했는데도
      * 곧바로 울리고 카드가 만료로 바뀐다.
      */
-    suspend fun markRinging(timerId: String) = mutate(timerId) { timer ->
-        if (timer.isExpiredAt(clock.now())) CareTimerTransitions.ring(timer) else timer
+    suspend fun markRinging(timerId: String) {
+        mutate(timerId) { if (it.isExpiredAt(clock.now())) CareTimerTransitions.ring(it) else it }
     }
 
     /**
@@ -141,18 +146,34 @@ class TimerRepository @Inject constructor(
      * 그 알림은 스와이프가 막혀 있어 사용자가 손쓸 방법이 없다.
      */
     suspend fun remove(timerId: String) {
-        val current = store.currentTimers()
-        val target = current.firstOrNull { it.id == timerId }
-        if (target != null) store.updateTimers(current.filterNot { it.id == timerId })
+        var target: CareTimer? = null
+        store.mutateTimers { current ->
+            target = current.firstOrNull { it.id == timerId }
+            if (target == null) current else current.filterNot { it.id == timerId }
+        }
         if (target?.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
     }
 
     suspend fun setAlertMode(mode: AlertMode) = store.updateAlertMode(mode)
 
-    private suspend fun mutate(timerId: String, transform: (CareTimer) -> CareTimer) {
-        val current = store.currentTimers()
-        if (current.none { it.id == timerId }) return
-        store.updateTimers(current.map { if (it.id == timerId) transform(it) else it })
+    /**
+     * 타이머 하나를 원자적으로 고치고 **바뀐 값을 돌려준다.**
+     *
+     * ⚠️ [transform] 안에서 알람을 예약하거나 지우지 않는다. 그 블록은 저장소의 갱신
+     * 안에서 도는데, 부수효과를 섞으면 저장이 실패했을 때 예약만 남는다. 호출자가 돌려받은
+     * 값을 보고 밖에서 예약을 다룬다.
+     *
+     * @return 바뀐 타이머. 그런 id 가 없으면 null.
+     */
+    private suspend fun mutate(timerId: String, transform: (CareTimer) -> CareTimer): CareTimer? {
+        var updated: CareTimer? = null
+        store.mutateTimers { current ->
+            val target = current.firstOrNull { it.id == timerId } ?: return@mutateTimers current
+            val next = transform(target)
+            updated = next
+            current.map { if (it.id == timerId) next else it }
+        }
+        return updated
     }
 }
 

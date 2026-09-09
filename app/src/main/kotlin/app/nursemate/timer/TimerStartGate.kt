@@ -43,6 +43,15 @@ class TimerStartGate(
     private val asked = mutableSetOf<PermissionStep>()
 
     /**
+     * 시작 절차가 이미 돌고 있는가.
+     *
+     * ⚠️ `pending` 을 비우는 지점이 `suspend` 뒤라, 프리셋을 빠르게 두 번 누르면 코루틴
+     * 둘이 모두 검사를 통과해 **같은 타이머가 두 개 생긴다.** 시트가 닫히는 애니메이션
+     * 동안에도 탭은 들어온다.
+     */
+    private var starting = false
+
+    /**
      * 프리셋을 누르면 곧바로 시작한다(정본 C3 부제). 다만 **처음 한 번은** 막힌다.
      *
      * spec §알람 권한이 "권한이 없으면 시작할 수 없다"고 못박았다. 권한 없이 시작시키면
@@ -63,18 +72,24 @@ class TimerStartGate(
     fun advance() {
         val preset = pending ?: return
         val step = nextStep()
-        if (step != null) {
-            _state.value = TimerGate.Permission(step = step, denied = step in asked)
+        if (step != null || starting) {
+            // 남은 관문이 있으면 시트를 띄운다. 이미 시작 절차가 돌고 있으면 아무것도 안 한다.
+            step?.let { _state.value = TimerGate.Permission(step = it, denied = it in asked) }
             return
         }
+        starting = true
         scope.launch {
-            if (!repository.alertModeChosen.first()) {
-                _state.value = TimerGate.AlertMode
-                return@launch
+            try {
+                if (!repository.alertModeChosen.first()) {
+                    _state.value = TimerGate.AlertMode
+                    return@launch
+                }
+                pending = null
+                _state.value = TimerGate.None
+                repository.start(preset)
+            } finally {
+                starting = false
             }
-            pending = null
-            _state.value = TimerGate.None
-            repository.start(preset)
         }
     }
 
