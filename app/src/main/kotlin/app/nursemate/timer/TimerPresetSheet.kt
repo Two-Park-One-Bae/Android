@@ -1,5 +1,9 @@
 package app.nursemate.timer
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,15 +25,20 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,6 +57,8 @@ import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * C3 프리셋 시트 — 정본 `타이머 / C3 프리셋 시트` · `— 편집 모드`.
@@ -199,49 +210,114 @@ private fun ReorderablePresets(
     // 제스처 블록은 한 번만 만들어지므로 그 안에서 최신 목록을 읽으려면 이게 필요하다.
     val currentOrder by rememberUpdatedState(order)
 
+    // 놓을 때의 되돌림 애니메이션. 제스처 블록(`AwaitPointerEventScope`)은 제한된
+    // 스코프라 그 안에서 애니메이션을 돌릴 수 없어 밖으로 뺀다.
+    val scope = rememberCoroutineScope()
+    var settling by remember { mutableStateOf<Job?>(null) }
+
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(RowGap)) {
-        order.forEach { preset ->
-            val held = preset.id == draggingId
-            PresetRow(
-                preset = preset,
-                editing = editing,
-                onClick = { if (editing) onEditPreset(preset) else onStart(preset) },
-                onDelete = { onDeletePreset(preset) },
-                modifier = Modifier
-                    // 끌리는 행이 이웃 위로 떠야 가려지지 않는다.
-                    .zIndex(if (held) 1f else 0f)
-                    .graphicsLayer { translationY = if (held) dragOffset else 0f }
-                    .onSizeChanged { step = it.height + gapPx },
-                dragModifier = Modifier.reorderHandle(
-                    key = preset.id,
-                    onStart = {
-                        draggingId = preset.id
-                        dragOffset = 0f
-                        onReorderingChange(true)
-                    },
-                    onDelta = { delta ->
-                        dragOffset += delta
-                        val from = currentOrder.indexOfFirst { it.id == preset.id }
-                        if (from >= 0 && step > 0f) {
-                            val shift = (dragOffset / step).roundToInt()
-                            val to = (from + shift).coerceIn(0, currentOrder.lastIndex)
-                            if (to != from) {
-                                order = currentOrder.toMutableList().apply { add(to, removeAt(from)) }
-                                // 옮긴 칸 수만큼 빼야 손가락과 행이 계속 붙어 있다.
-                                dragOffset -= (to - from) * step
+        order.forEachIndexed { index, preset ->
+            // ⚠️ **`key` 로 감싸야 한다.** `remember` 는 컴포지션 자리에 묶이는데, 순서가 바뀌면
+            // 자리도 바뀐다. 감싸지 않으면 밀려난 행의 애니메이션 상태가 서로 뒤바뀐다.
+            key(preset.id) {
+                ReorderableRow(
+                    preset = preset,
+                    index = index,
+                    editing = editing,
+                    held = preset.id == draggingId,
+                    dragOffset = dragOffset,
+                    step = step,
+                    onMeasured = { height -> step = height + gapPx },
+                    onClick = { if (editing) onEditPreset(preset) else onStart(preset) },
+                    onDelete = { onDeletePreset(preset) },
+                    dragModifier = Modifier.reorderHandle(
+                        key = preset.id,
+                        onStart = {
+                            // 앞선 되돌림이 아직 돌고 있으면 새 드래그를 덮어쓴다.
+                            settling?.cancel()
+                            draggingId = preset.id
+                            dragOffset = 0f
+                            onReorderingChange(true)
+                        },
+                        onDelta = { delta ->
+                            dragOffset += delta
+                            val from = currentOrder.indexOfFirst { it.id == preset.id }
+                            if (from >= 0 && step > 0f) {
+                                val shift = (dragOffset / step).roundToInt()
+                                val to = (from + shift).coerceIn(0, currentOrder.lastIndex)
+                                if (to != from) {
+                                    order = currentOrder.toMutableList().apply { add(to, removeAt(from)) }
+                                    // 옮긴 칸 수만큼 빼야 손가락과 행이 계속 붙어 있다.
+                                    dragOffset -= (to - from) * step
+                                }
+                            }
+                        },
+                        onEnd = {
+                            onReorderingChange(false)
+                            onReorder(currentOrder)
+                            // 놓는 순간 남아 있던 반 칸 이내의 어긋남을 부드럽게 되돌린다.
+                            // 즉시 0 으로 만들면 행이 제자리로 툭 튄다. 다 되돌린 뒤에야
+                            // 손을 놓은 것으로 표시해, 그동안 이 행이 계속 위에 떠 있게 한다.
+                            settling = scope.launch {
+                                animate(dragOffset, 0f, animationSpec = SettleSpec) { value, _ ->
+                                    dragOffset = value
+                                }
+                                draggingId = null
                             }
                         }
-                    },
-                    onEnd = {
-                        draggingId = null
-                        dragOffset = 0f
-                        onReorderingChange(false)
-                        onReorder(currentOrder)
-                    }
+                    )
                 )
-            )
+            }
         }
     }
+}
+
+/**
+ * 한 행. 쥔 행은 손가락을 따르고, **밀려난 행은 옛 자리에서 새 자리로 흐른다.**
+ *
+ * 자리만 바꿔 다시 그리면 툭툭 끊긴다. 인덱스가 바뀐 순간 옛 자리로 되돌려 놓고([Animatable.snapTo])
+ * 0 까지 애니메이션해, 이웃이 비켜 주는 것처럼 보이게 한다.
+ */
+@Composable
+private fun ReorderableRow(
+    preset: TimerPreset,
+    index: Int,
+    editing: Boolean,
+    held: Boolean,
+    dragOffset: Float,
+    step: Float,
+    onMeasured: (Int) -> Unit,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    dragModifier: Modifier
+) {
+    val slide = remember { Animatable(0f) }
+    var previous by remember { mutableIntStateOf(index) }
+
+    LaunchedEffect(index, step) {
+        val from = previous
+        previous = index
+        if (from != index && step > 0f) {
+            // 옛 자리로 되돌려 놓고 새 자리까지 흐르게 한다.
+            slide.snapTo((from - index) * step)
+            slide.animateTo(0f, SlideSpec)
+        }
+    }
+
+    PresetRow(
+        preset = preset,
+        editing = editing,
+        onClick = onClick,
+        onDelete = onDelete,
+        dragModifier = dragModifier,
+        modifier = Modifier
+            // 끌리는 행이 이웃 위로 떠야 가려지지 않는다.
+            .zIndex(if (held) 1f else 0f)
+            .graphicsLayer { translationY = if (held) dragOffset else slide.value }
+            // 쥔 행만 살짝 들어 올린다 — 무엇을 잡고 있는지 손끝으로만 알 수는 없다.
+            .shadow(if (held) HeldElevation else 0.dp, RowShape)
+            .onSizeChanged { onMeasured(it.height) }
+    )
 }
 
 /**
@@ -374,6 +450,13 @@ private fun PresetRow(
 private val RowShape = RoundedCornerShape(12.dp)
 private val RowGap = 8.dp
 private val HandleTouchPadding = 10.dp
+private val HeldElevation = 6.dp
+
+/** 비켜 주는 행의 움직임. 튕기지 않게 damping 을 높였다. */
+private val SlideSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+
+/** 놓을 때 남은 어긋남을 되돌리는 움직임. */
+private val SettleSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
 private val TagShape = RoundedCornerShape(6.dp)
 
 private val SheetTitle = NmTypography.title.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold)
