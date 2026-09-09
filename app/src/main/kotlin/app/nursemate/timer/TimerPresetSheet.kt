@@ -199,24 +199,16 @@ private fun ReorderablePresets(
     onReorderingChange: (Boolean) -> Unit
 ) {
     val gapPx = with(LocalDensity.current) { RowGap.toPx() }
-    // 끄는 동안만 쓰는 내 목록. 저장이 돌아오면 같은 순서라 튀지 않는다.
-    var order by remember(presets) { mutableStateOf(presets) }
-    // ⚠️ **인덱스가 아니라 id 로 들고 있는다.** 끄는 도중 자리가 바뀌면 인덱스는 매번 달라져,
-    // 어느 행을 쥐고 있는지 놓친다.
-    var draggingId by remember { mutableStateOf<String?>(null) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    var step by remember { mutableFloatStateOf(0f) }
+    val state = remember { PresetReorderState() }
+    LaunchedEffect(presets) { state.sync(presets) }
 
-    // 제스처 블록은 한 번만 만들어지므로 그 안에서 최신 목록을 읽으려면 이게 필요하다.
-    val currentOrder by rememberUpdatedState(order)
-
-    // 놓을 때의 되돌림 애니메이션. 제스처 블록(`AwaitPointerEventScope`)은 제한된
-    // 스코프라 그 안에서 애니메이션을 돌릴 수 없어 밖으로 뺀다.
+    // 되돌림 애니메이션. 제스처 블록(`AwaitPointerEventScope`)은 제한된 스코프라
+    // 그 안에서 애니메이션을 돌릴 수 없어 밖으로 뺀다.
     val scope = rememberCoroutineScope()
     var settling by remember { mutableStateOf<Job?>(null) }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(RowGap)) {
-        order.forEachIndexed { index, preset ->
+        state.order.forEachIndexed { index, preset ->
             // ⚠️ **`key` 로 감싸야 한다.** `remember` 는 컴포지션 자리에 묶이는데, 순서가 바뀌면
             // 자리도 바뀐다. 감싸지 않으면 밀려난 행의 애니메이션 상태가 서로 뒤바뀐다.
             key(preset.id) {
@@ -224,10 +216,10 @@ private fun ReorderablePresets(
                     preset = preset,
                     index = index,
                     editing = editing,
-                    held = preset.id == draggingId,
-                    dragOffset = dragOffset,
-                    step = step,
-                    onMeasured = { height -> step = height + gapPx },
+                    held = preset.id == state.heldId,
+                    dragOffset = state.offset,
+                    step = state.step,
+                    onMeasured = { height -> state.step = height + gapPx },
                     onClick = { if (editing) onEditPreset(preset) else onStart(preset) },
                     onDelete = { onDeletePreset(preset) },
                     dragModifier = Modifier.reorderHandle(
@@ -235,35 +227,16 @@ private fun ReorderablePresets(
                         onStart = {
                             // 앞선 되돌림이 아직 돌고 있으면 새 드래그를 덮어쓴다.
                             settling?.cancel()
-                            draggingId = preset.id
-                            dragOffset = 0f
+                            state.cancelSettle()
+                            state.start(preset.id)
                             onReorderingChange(true)
                         },
-                        onDelta = { delta ->
-                            dragOffset += delta
-                            val from = currentOrder.indexOfFirst { it.id == preset.id }
-                            if (from >= 0 && step > 0f) {
-                                val shift = (dragOffset / step).roundToInt()
-                                val to = (from + shift).coerceIn(0, currentOrder.lastIndex)
-                                if (to != from) {
-                                    order = currentOrder.toMutableList().apply { add(to, removeAt(from)) }
-                                    // 옮긴 칸 수만큼 빼야 손가락과 행이 계속 붙어 있다.
-                                    dragOffset -= (to - from) * step
-                                }
-                            }
-                        },
+                        onDelta = state::drag,
                         onEnd = {
+                            val result = state.finish()
                             onReorderingChange(false)
-                            onReorder(currentOrder)
-                            // 놓는 순간 남아 있던 반 칸 이내의 어긋남을 부드럽게 되돌린다.
-                            // 즉시 0 으로 만들면 행이 제자리로 툭 튄다. 다 되돌린 뒤에야
-                            // 손을 놓은 것으로 표시해, 그동안 이 행이 계속 위에 떠 있게 한다.
-                            settling = scope.launch {
-                                animate(dragOffset, 0f, animationSpec = SettleSpec) { value, _ ->
-                                    dragOffset = value
-                                }
-                                draggingId = null
-                            }
+                            onReorder(result)
+                            settling = scope.launch { state.settle() }
                         }
                     )
                 )
@@ -275,8 +248,8 @@ private fun ReorderablePresets(
 /**
  * 한 행. 쥔 행은 손가락을 따르고, **밀려난 행은 옛 자리에서 새 자리로 흐른다.**
  *
- * 자리만 바꿔 다시 그리면 툭툭 끊긴다. 인덱스가 바뀐 순간 옛 자리로 되돌려 놓고([Animatable.snapTo])
- * 0 까지 애니메이션해, 이웃이 비켜 주는 것처럼 보이게 한다.
+ * 자리만 바꿔 다시 그리면 툭툭 끊긴다. 인덱스가 바뀐 순간 옛 자리로 되돌려 놓고 0 까지
+ * 애니메이션해, 이웃이 비켜 주는 것처럼 보이게 한다.
  */
 @Composable
 private fun ReorderableRow(
@@ -455,8 +428,6 @@ private val HeldElevation = 6.dp
 /** 비켜 주는 행의 움직임. 튕기지 않게 damping 을 높였다. */
 private val SlideSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
 
-/** 놓을 때 남은 어긋남을 되돌리는 움직임. */
-private val SettleSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
 private val TagShape = RoundedCornerShape(6.dp)
 
 private val SheetTitle = NmTypography.title.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold)
