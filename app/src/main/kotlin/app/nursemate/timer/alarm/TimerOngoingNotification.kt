@@ -59,9 +59,12 @@ object TimerOngoingNotification {
 
         // 펼치면 전부 보인다 — 접힌 줄만으로는 나머지를 식별할 수 없다(spec §앱 밖 진행 중 표시).
         if (ordered.size > 1) {
+            // ⚠️ **요약 문구를 여기에도 넣지 않는다.** 접힌 줄이 이미 `contentText` 로 같은
+            // 것을 말하고 있어, 펼치면 서로 다른 기준의 숫자가 둘 보인다("외 2개" 와
+            // "외 6개 진행 중" 이 한 알림에 함께 떴다). 넘치는 것은 마지막 줄로 알린다.
             val style = NotificationCompat.InboxStyle()
             ordered.take(MAX_LINES).forEach { style.addLine(it.line(context)) }
-            if (ordered.size > MAX_LINES) style.setSummaryText(others(ordered.drop(MAX_LINES)))
+            if (ordered.size > MAX_LINES) style.addLine("… ${others(ordered.drop(MAX_LINES))}")
             builder.setStyle(style)
         }
 
@@ -144,6 +147,6 @@ object TimerOngoingNotification {
         }
     }
 
-    /** 펼쳐서 보여 줄 최대 줄 수 — 시스템이 그 이상은 자른다. */
-    private const val MAX_LINES = 6
+    /** 펼쳐서 보여 줄 최대 줄 수. 넘치면 마지막 줄이 몇 개가 더 있는지 알린다. */
+    private const val MAX_LINES = 5
 }
