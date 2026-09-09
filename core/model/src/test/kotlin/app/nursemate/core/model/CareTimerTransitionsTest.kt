@@ -209,14 +209,18 @@ class CareTimerTransitionsTest {
     }
 
     @Test
-    fun `일시정지는 멈춘 남은 시간으로 줄을 선다`() {
-        // 15분짜리를 바로 정지 → 900초 고정. 실행 중인 10분짜리보다 뒤에 서야 한다.
+    fun `일시정지는 진행 중인 것보다 뒤에 선다`() {
+        // 남은 시간만으로 세우면 **시간이 흐르는 것만으로 순서가 뒤집힌다.** 멈춰 있는
+        // 15분짜리와 도는 10분짜리를 두면, 도는 쪽이 15분 아래로 내려가는 순간 앞뒤가 바뀐다.
         val paused = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "paused", t0), t0)
         val running = CareTimerTransitions.start(preset.copy(durationSeconds = 600), "running", t0)
 
-        val ordered = CareTimerTransitions.ordered(listOf(paused, running), t0)
+        // 뒤집힐 법한 시점(멈춘 900초 > 도는 590초)에도 순서가 그대로다.
+        val early = CareTimerTransitions.ordered(listOf(paused, running), t0)
+        val later = CareTimerTransitions.ordered(listOf(paused, running), t0 + 10_000L)
 
-        assertEquals(listOf("running", "paused"), ordered.map { it.id })
+        assertEquals(listOf("running", "paused"), early.map { it.id })
+        assertEquals(listOf("running", "paused"), later.map { it.id })
     }
 
     @Test
@@ -286,5 +290,35 @@ class CareTimerTransitionsTest {
         )
         assertEquals(listOf(0, 1, 2, 3, 4, 5), DEFAULT_TIMER_PRESETS.map { it.sortOrder })
         assertTrue(DEFAULT_TIMER_PRESETS.all { it.isDefault })
+    }
+
+    @Test
+    fun `일시정지를 연장하면 순서가 바뀐다`() {
+        // `extend` 가 PAUSED 에서는 `remainingSeconds` 만 바꾼다 — `state`·`endAt` 은 그대로다.
+        // 그래도 정렬의 마지막 키가 남은 시간이라 순서는 뒤집힌다.
+        val short = CareTimerTransitions.pause(
+            CareTimerTransitions.start(preset.copy(durationSeconds = 600), "short", t0),
+            t0
+        )
+        val long = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "long", t0), t0)
+
+        assertEquals(listOf("short", "long"), CareTimerTransitions.ordered(listOf(short, long), t0).map { it.id })
+
+        // 짧은 쪽을 여섯 번 늘리면 960 초가 되어 long(900) 보다 뒤로 간다.
+        // ⚠️ 다섯 번이면 정확히 900 이라 long 과 동점이 된다 — 안정 정렬이라 순서가
+        //    그대로 남아, 시그니처를 되돌려도 통과하는 테스트가 된다.
+        var extended = short
+        repeat(6) { extended = CareTimerTransitions.extend(extended) }
+
+        assertEquals(960, extended.remainingSeconds)
+        assertEquals(TimerState.PAUSED, extended.state)
+        assertEquals(short.endAtEpochMillis, extended.endAtEpochMillis)
+
+        // ⚠️ 이 파일은 `kotlin.test` 라 메시지가 **뒤**에 온다(JUnit 과 반대다).
+        assertEquals(
+            listOf("long", "short"),
+            CareTimerTransitions.ordered(listOf(extended, long), t0).map { it.id },
+            "state·endAt 이 그대로라도 남은 시간이 바뀌면 순서가 뒤집힌다"
+        )
     }
 }

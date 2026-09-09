@@ -64,7 +64,11 @@ object CareTimerTransitions {
             remainingSeconds = (timer.remainingSeconds ?: 0) + seconds
         )
 
-        else -> timer.copy(
+        // 이미 울리는 것은 연장하지 않는다. `endAt` 만 밀면 남은 시간이 양수가 되는데 상태는
+        // RINGING 이라, 카드는 만료로 그려지고 예약도 안 되는 어긋난 상태가 된다.
+        TimerState.RINGING -> timer
+
+        TimerState.RUNNING -> timer.copy(
             durationSeconds = timer.durationSeconds + seconds,
             endAtEpochMillis = timer.endAtEpochMillis + seconds * MILLIS_PER_SECOND
         )
@@ -99,16 +103,31 @@ object CareTimerTransitions {
     fun sorted(presets: List<TimerPreset>): List<TimerPreset> = presets.sortedBy { it.sortOrder }
 
     /**
-     * 리스트 노출 순서 — **울리는 것이 맨 위**, 그 아래는 남은 시간이 짧은 순.
+     * 리스트 노출 순서 — **울리는 것 → 진행 중 → 일시정지**, 각 묶음 안에서는 임박한 순.
      *
      * 정본 `타이머 / C1 리스트` 가 만료 카드를 맨 위에 둔다. 만료는 지금 손을 대야 하는
-     * 일이라 스크롤 아래에 있으면 안 된다. 나머지는 곧 끝날 것부터 보여 준다.
+     * 일이라 스크롤 아래에 있으면 안 된다.
      *
-     * 일시정지는 남은 시간이 멈춰 있어 시간이 갈수록 자연히 아래로 밀린다 — 별도 규칙을
-     * 두지 않은 건 "곧 끝나는 순"이라는 한 가지 기준을 유지하기 위해서다.
+     * ## 일시정지를 진행 중보다 뒤로 보낸다
+     * 남은 시간만으로 줄을 세우면 **시간이 흐르는 것만으로 순서가 뒤집힌다.** 일시정지는
+     * 남은 시간이 멈춰 있는데 진행 중인 것은 줄어들어, 어느 순간 진행 중인 것이 더 임박해진다.
+     *
+     * 화면은 매초 다시 그리니 따라가지만, 앱 밖 진행 중 알림은 목록의 모양이 바뀔 때만
+     * 다시 그린다(`TimerOngoingNotifier`). 그래서 알림이 옛 순서를 그대로 붙들고,
+     * **조작 버튼이 엉뚱한 타이머를 가리키는** 일이 실제로 일어났다.
+     *
+     * 묶음을 나누면 이 문제가 사라진다 — 진행 중인 것끼리는 `endAt` 순서라 시간이 흘러도
+     * 상대 순서가 불변이고, 일시정지끼리도 멈춰 있어 불변이다. 의미로도 맞다: 멈춰 둔 것이
+     * 도는 것보다 급할 이유가 없다.
      */
     fun ordered(timers: List<CareTimer>, now: Long): List<CareTimer> = timers.sortedWith(
-        compareBy<CareTimer> { if (it.state == TimerState.RINGING) 0 else 1 }
+        compareBy<CareTimer> { timer ->
+            when (timer.state) {
+                TimerState.RINGING -> 0
+                TimerState.RUNNING -> 1
+                TimerState.PAUSED -> 2
+            }
+        }
             // 울리는 것끼리는 **먼저 만료한 것이 위**다. 남은 시간은 전부 0 이라 순서를
             // 가르지 못하는데, 오래 놓친 것이 더 급하다.
             .thenBy { if (it.state == TimerState.RINGING) it.endAtEpochMillis else Long.MAX_VALUE }

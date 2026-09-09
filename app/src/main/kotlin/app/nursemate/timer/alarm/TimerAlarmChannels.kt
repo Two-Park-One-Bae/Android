@@ -35,6 +35,14 @@ object TimerAlarmChannels {
     const val VIBRATE_ID = "timer_alarm_vibrate_v2"
     const val SILENT_ID = "timer_alarm_silent_v2"
 
+    /**
+     * 진행 중 표시용 — 만료 알람과 **채널이 달라야 한다.**
+     *
+     * 이건 종일 떠 있는 조용한 알림이라 소리·진동·헤드업이 없어야 한다. 만료 알람과 같은
+     * 채널에 두면 사용자가 한쪽을 끄려다 다른 쪽까지 끈다.
+     */
+    const val ONGOING_ID = "timer_ongoing_v1"
+
     private val LEGACY_IDS = listOf("timer_alarm_sound", "timer_alarm_silent")
 
     fun channelFor(mode: AlertMode): String = when (mode) {
@@ -73,7 +81,20 @@ object TimerAlarmChannels {
             enableVibration(false)
         }
 
-        listOf(sound, vibrate, silent).forEach(manager::createNotificationChannel)
+        // 진행 중 표시는 조용해야 한다 — IMPORTANCE_LOW 라 헤드업으로 튀어나오지 않는다.
+        val ongoing = NotificationChannel(
+            ONGOING_ID,
+            "진행 중인 타이머",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "타이머가 도는 동안 남은 시간을 보여 줍니다."
+            setSound(null, null)
+            enableVibration(false)
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
+        listOf(sound, vibrate, silent, ongoing).forEach(manager::createNotificationChannel)
     }
 
     private fun channel(id: String, name: String, why: String) =

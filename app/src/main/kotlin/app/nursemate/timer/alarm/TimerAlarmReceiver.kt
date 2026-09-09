@@ -54,7 +54,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
             try {
                 when (intent.action) {
                     ACTION_FIRE -> fire(context, timerId)
-                    ACTION_COMPLETE -> repository.remove(timerId)
+                    ACTION_COMPLETE, ACTION_STOP -> repository.remove(timerId)
+                    ACTION_PAUSE -> repository.pause(timerId)
+                    ACTION_RESUME -> repository.resume(timerId)
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "알람 처리 실패 ($timerId)", t)
@@ -83,15 +85,7 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         }
         val channel = TimerAlarmChannels.channelFor(repository.alertMode.first())
 
-        val complete = PendingIntent.getBroadcast(
-            context,
-            AlarmManagerTimerScheduler.requestCode(timer.id) + COMPLETE_OFFSET,
-            Intent(context, TimerAlarmReceiver::class.java).apply {
-                action = ACTION_COMPLETE
-                putExtra(EXTRA_TIMER_ID, timer.id)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val complete = actionPendingIntent(context, timer.id, ACTION_COMPLETE)
 
         val open = PendingIntent.getActivity(
             context,
@@ -132,7 +126,37 @@ class TimerAlarmReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_FIRE = "app.nursemate.timer.ALARM_FIRE"
         const val ACTION_COMPLETE = "app.nursemate.timer.ALARM_COMPLETE"
+
+        /** 진행 중 알림의 조작 — spec §앱 밖 진행 중 표시(앱을 열지 않고 다룬다). */
+        const val ACTION_PAUSE = "app.nursemate.timer.PAUSE"
+        const val ACTION_RESUME = "app.nursemate.timer.RESUME"
+        const val ACTION_STOP = "app.nursemate.timer.STOP"
+
         const val EXTRA_TIMER_ID = "timer_id"
+
+        /**
+         * 액션마다 `PendingIntent` 요청 코드를 달리 준다.
+         *
+         * 같은 코드를 쓰면 시스템이 **하나로 합쳐** 나중 것이 앞 것을 덮는다 — 일시정지를
+         * 눌렀는데 정지가 되는 식이다.
+         */
+        fun actionPendingIntent(context: Context, timerId: String, action: String): PendingIntent {
+            val offset = when (action) {
+                ACTION_COMPLETE -> COMPLETE_OFFSET
+                ACTION_PAUSE -> PAUSE_OFFSET
+                ACTION_RESUME -> RESUME_OFFSET
+                else -> STOP_OFFSET
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                AlarmManagerTimerScheduler.requestCode(timerId) + offset,
+                Intent(context, TimerAlarmReceiver::class.java).apply {
+                    this.action = action
+                    putExtra(EXTRA_TIMER_ID, timerId)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         private const val TAG = "TimerAlarm"
         private const val COMPLETE_LABEL = "완료"
@@ -140,5 +164,8 @@ class TimerAlarmReceiver : BroadcastReceiver() {
 
         /** [완료] PendingIntent 가 발화용과 같은 요청 코드를 쓰지 않도록 띄운다. */
         private const val COMPLETE_OFFSET = 1
+        private const val PAUSE_OFFSET = 2
+        private const val RESUME_OFFSET = 3
+        private const val STOP_OFFSET = 4
     }
 }

@@ -141,7 +141,9 @@ fun TimerListScreen(
 
     Box(modifier.fillMaxSize().background(colors.bgApp)) {
         Column(Modifier.fillMaxSize()) {
-            Header(timers)
+            // ⚠️ **투영본을 넘긴다.** raw 를 세면 알람이 못 온 타이머가 카드로는 만료인데
+            // 헤더에는 「진행 중」으로 남아, 투영을 넣은 이유와 앞뒤가 맞지 않는다.
+            Header(ordered)
             if (ordered.isEmpty()) {
                 TimerListEmpty(onStart = onAdd)
             } else {
