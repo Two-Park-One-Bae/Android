@@ -6,6 +6,7 @@ import app.nursemate.appcheck.appCheckProviderFactory
 import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
 import app.nursemate.timer.alarm.TimerAlarmChannels
+import app.nursemate.timer.alarm.TimerOngoingNotifier
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -35,6 +36,9 @@ class NurseMateApplication :
     @Inject
     @PlainClient
     lateinit var imageClient: dagger.Lazy<OkHttpClient>
+
+    @Inject
+    lateinit var ongoingNotifier: TimerOngoingNotifier
 
     @Inject
     lateinit var timerRepository: TimerRepository
@@ -72,6 +76,9 @@ class NurseMateApplication :
         // 앱이 죽어 있는 동안 만료한 타이머를 현재 시각에 맞추고, 아직 안 끝난 것의 예약을
         // 되살린다. 재부팅은 TimerBootReceiver 가 따로 받지만, 그 밖의 이유로 예약이
         // 사라졌을 수도 있어(강제 종료·시스템 정리) 시작할 때마다 한 번 맞춘다.
+        // 진행 중 표시는 앱이 사는 동안 목록을 따라간다(spec §앱 밖 진행 중 표시).
+        ongoingNotifier.start(applicationScope)
+
         // ⚠️ 실패를 삼키지 않는다. 예전에는 예외가 나도 조용히 죽어, 알람이 예약되지 않는
         // 것도 알림이 안 걷히는 것도 로그 한 줄 없이 지나갔다 — 원인 찾기가 훨씬 오래 걸렸다.
         @Suppress("TooGenericExceptionCaught")
