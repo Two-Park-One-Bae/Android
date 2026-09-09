@@ -66,8 +66,10 @@ class AlarmManagerTimerScheduler @Inject constructor(
      * 고아만 골라낼 수 없어 통째로 지운다 — `getActiveNotifications()` 가 **지금 프로세스가
      * 띄운 것만** 돌려줘서, 재시작 뒤에는 무엇이 떠 있는지 알 수조차 없다.
      *
-     * 지금 이 앱은 만료 알람 외에 알림을 띄우지 않아 [NotificationManager.cancelAll] 로
-     * 충분하다. 다른 알림이 생기면 그때는 채널별로 지울 방법을 다시 찾아야 한다.
+     * ⚠️ **진행 중 표시까지 함께 지워진다.** [NotificationManager.cancelAll] 은 채널을
+     * 가리지 않는다. 그래서 호출자(`NurseMateApplication`)가 **이걸 부른 뒤에** 진행 중
+     * 표시를 켜도록 순서를 잡아 두었다 — 반대로 하면 알림을 눌러 들어온 사용자 눈앞에서
+     * 표시가 사라진다.
      */
     override fun dismissAllAlarms() {
         val manager = context.getSystemService<NotificationManager>()

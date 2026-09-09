@@ -76,9 +76,11 @@ class NurseMateApplication :
         // 앱이 죽어 있는 동안 만료한 타이머를 현재 시각에 맞추고, 아직 안 끝난 것의 예약을
         // 되살린다. 재부팅은 TimerBootReceiver 가 따로 받지만, 그 밖의 이유로 예약이
         // 사라졌을 수도 있어(강제 종료·시스템 정리) 시작할 때마다 한 번 맞춘다.
-        // 진행 중 표시는 앱이 사는 동안 목록을 따라간다(spec §앱 밖 진행 중 표시).
-        ongoingNotifier.start(applicationScope)
-
+        //
+        // ⚠️ **복원이 끝난 뒤에 진행 중 표시를 켠다.** 복원은 남아 있던 알람 알림을 통째로
+        // 걷어내는데(`cancelAll`), 그때 진행 중 표시까지 함께 지워진다. 먼저 켜면 알림을
+        // 그렸다가 곧바로 지워져, 알림을 눌러 앱에 들어온 사용자 눈앞에서 표시가 사라진다.
+        //
         // ⚠️ 실패를 삼키지 않는다. 예전에는 예외가 나도 조용히 죽어, 알람이 예약되지 않는
         // 것도 알림이 안 걷히는 것도 로그 한 줄 없이 지나갔다 — 원인 찾기가 훨씬 오래 걸렸다.
         @Suppress("TooGenericExceptionCaught")
@@ -86,6 +88,9 @@ class NurseMateApplication :
             runCatching { timerRepository.restore() }
                 .onFailure { Log.e(TIMER_TAG, "타이머 복원 실패", it) }
                 .onSuccess { Log.i(TIMER_TAG, "타이머 복원 완료") }
+
+            // 복원이 실패해도 진행 중 표시는 켠다 — 저장된 타이머가 있으면 보여 줘야 한다.
+            ongoingNotifier.start(applicationScope)
         }
     }
 
