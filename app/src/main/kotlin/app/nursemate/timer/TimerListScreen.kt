@@ -54,6 +54,10 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     val memoEditing by viewModel.memoEditing.collectAsStateWithLifecycle()
     val presetSheet by viewModel.presetSheetOpen.collectAsStateWithLifecycle()
     val gate by viewModel.startGate.state.collectAsStateWithLifecycle()
+    val editor = viewModel.presetEditor
+    val editing by editor.editing.collectAsStateWithLifecycle()
+    val presetForm by editor.form.collectAsStateWithLifecycle()
+    val deletingPreset by editor.deleting.collectAsStateWithLifecycle()
 
     TimerListScreen(
         timers = timers,
@@ -70,12 +74,33 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     if (presetSheet) {
         TimerPresetSheet(
             presets = presets,
+            editing = editing,
             onStart = { preset ->
                 viewModel.setPresetSheet(false)
                 viewModel.startGate.start(preset)
             },
-            onDismiss = { viewModel.setPresetSheet(false) }
+            onToggleEditing = editor::toggleEditing,
+            onEditPreset = editor::edit,
+            onDeletePreset = editor::askDelete,
+            onAdd = editor::add,
+            onDismiss = {
+                viewModel.setPresetSheet(false)
+                editor.reset()
+            }
         )
+    }
+
+    presetForm?.let { form ->
+        TimerPresetEditSheet(
+            preset = form.preset,
+            onSave = editor::save,
+            onDelete = form.preset?.let { { editor.askDelete(it) } },
+            onDismiss = editor::closeForm
+        )
+    }
+
+    deletingPreset?.let {
+        PresetDeleteDialog(onConfirm = editor::confirmDelete, onCancel = editor::cancelDelete)
     }
 
     TimerGateHost(

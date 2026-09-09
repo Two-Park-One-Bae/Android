@@ -33,22 +33,29 @@ import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
 
 /**
- * C3 프리셋 시트 — 정본 `타이머 / C3 프리셋 시트`.
+ * C3 프리셋 시트 — 정본 `타이머 / C3 프리셋 시트` · `— 편집 모드`.
  *
  * ## 누르면 곧바로 시작한다
  * 정본 부제가 "누르면 타이머가 바로 시작됩니다"다. 확인 단계를 넣지 않는다 — 처치 중에
  * 한 손으로 쓰는 화면이라 탭 수가 곧 비용이다. 잘못 눌러도 카드에서 바로 정지할 수 있다.
  *
- * 프리셋 편집(추가·수정·삭제·순서)은 아직 없다. [onEdit] 가 비어 있으면 「편집」을 감춘다.
+ * ## 편집 모드는 같은 시트를 갈아입힌다
+ * 정본이 프레임을 둘로 그렸지만 목록·행 생김새가 같고 부제와 행 양끝만 바뀐다.
+ * 화면을 새로 띄우면 "어디로 갔지"가 생기므로 자리에서 바꾼다.
+ *
+ * ⚠️ 편집 모드에서 행을 눌러도 **시작하지 않는다** — 수정 시트가 열린다.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimerPresetSheet(
     presets: List<TimerPreset>,
+    editing: Boolean,
     onStart: (TimerPreset) -> Unit,
-    onDismiss: () -> Unit,
-    onEdit: (() -> Unit)? = null,
-    onAdd: (() -> Unit)? = null
+    onToggleEditing: () -> Unit,
+    onEditPreset: (TimerPreset) -> Unit,
+    onDeletePreset: (TimerPreset) -> Unit,
+    onAdd: () -> Unit,
+    onDismiss: () -> Unit
 ) {
     val colors = NmTheme.semanticColors
     ModalBottomSheet(
@@ -75,25 +82,37 @@ fun TimerPresetSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("프리셋", style = SheetTitle, color = colors.textPrimary)
-                    if (onEdit != null) {
-                        Text(
-                            text = "편집",
-                            style = EditStyle,
-                            color = NmColor.Primary.C600,
-                            modifier = Modifier.clickable(onClick = onEdit)
-                        )
-                    }
+                    Text(
+                        text = if (editing) "완료" else "편집",
+                        style = if (editing) DoneStyle else EditStyle,
+                        color = NmColor.Primary.C600,
+                        modifier = Modifier.clickable(onClick = onToggleEditing)
+                    )
                 }
-                Text("누르면 타이머가 바로 시작됩니다", style = SheetSubStyle, color = colors.textSecondary)
+                Text(
+                    text = if (editing) {
+                        "프리셋을 눌러 수정 · 휴지통으로 삭제"
+                    } else {
+                        "누르면 타이머가 바로 시작됩니다"
+                    },
+                    style = SheetSubStyle,
+                    color = colors.textSecondary
+                )
             }
 
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 presets.forEach { preset ->
-                    PresetRow(preset = preset, onClick = { onStart(preset) })
+                    PresetRow(
+                        preset = preset,
+                        editing = editing,
+                        onClick = { if (editing) onEditPreset(preset) else onStart(preset) },
+                        onDelete = { onDeletePreset(preset) }
+                    )
                 }
             }
 
-            if (onAdd != null) {
+            // 정본은 「프리셋 추가」를 편집 모드에서만 보여 준다 — 평소에는 시작만 하는 시트다.
+            if (editing) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -123,7 +142,7 @@ fun TimerPresetSheet(
 }
 
 @Composable
-private fun PresetRow(preset: TimerPreset, onClick: () -> Unit) {
+private fun PresetRow(preset: TimerPreset, editing: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier
@@ -136,6 +155,16 @@ private fun PresetRow(preset: TimerPreset, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (editing) {
+            Icon(
+                painter = painterResource(DsR.drawable.nm_ic_trash_2),
+                contentDescription = "${preset.label} 삭제",
+                tint = NmColor.Error.C500,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(onClick = onDelete)
+            )
+        }
         Text(preset.label, style = PresetLabel, color = colors.textPrimary)
         Text(
             text = preset.category.label,
@@ -152,12 +181,23 @@ private fun PresetRow(preset: TimerPreset, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(formatDuration(preset.durationSeconds), style = DurationStyle, color = colors.textSecondary)
-            Icon(
-                painter = painterResource(DsR.drawable.nm_ic_circle_play),
-                contentDescription = null,
-                tint = NmColor.Primary.C500,
-                modifier = Modifier.size(28.dp)
-            )
+            if (editing) {
+                // 순서 변경(드래그)은 아직 없다 — 손잡이만 정본대로 두면 눌러도 안 되는 UI 가 되므로
+                // 붙일 때 함께 넣는다.
+                Icon(
+                    painter = painterResource(DsR.drawable.nm_ic_chevron_right),
+                    contentDescription = null,
+                    tint = NmColor.Neutral.C400,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else {
+                Icon(
+                    painter = painterResource(DsR.drawable.nm_ic_circle_play),
+                    contentDescription = null,
+                    tint = NmColor.Primary.C500,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
     }
 }
@@ -169,6 +209,7 @@ private val TagShape = RoundedCornerShape(6.dp)
 private val SheetTitle = NmTypography.title.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold)
 private val SheetSubStyle = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
 private val EditStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+private val DoneStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 private val PresetLabel = NmTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
 private val TagStyle = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
 private val DurationStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium)

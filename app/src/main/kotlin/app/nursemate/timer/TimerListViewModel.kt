@@ -36,6 +36,9 @@ class TimerListViewModel @Inject constructor(
     presetRepository: TimerPresetRepository
 ) : ViewModel() {
 
+    /** 프리셋 추가·수정·삭제. 시트 안에서만 사는 상태라 따로 둔다. */
+    val presetEditor = TimerPresetEditor(presetRepository, viewModelScope)
+
     val timers: StateFlow<List<CareTimer>> = repository.timers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
