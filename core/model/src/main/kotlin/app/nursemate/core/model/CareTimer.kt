@@ -75,6 +75,9 @@ data class CareTimer(
 
     /** 아직 안 울렸는데 만료 시각을 지났는가 — 복원 시 RINGING 으로 올려야 하는지 판단한다. */
     fun isExpiredAt(now: Long): Boolean = state == TimerState.RUNNING && now >= endAtEpochMillis
+
+    /** 만료 시각에서 얼마나 지났는가. 아직 안 지났으면 0. */
+    fun overdueAt(now: Long): Int = ((now - endAtEpochMillis) / MILLIS_PER_SECOND).toInt().coerceAtLeast(0)
 }
 
 /**

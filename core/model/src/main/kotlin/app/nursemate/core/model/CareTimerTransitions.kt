@@ -108,10 +108,11 @@ object CareTimerTransitions {
      * 두지 않은 건 "곧 끝나는 순"이라는 한 가지 기준을 유지하기 위해서다.
      */
     fun ordered(timers: List<CareTimer>, now: Long): List<CareTimer> = timers.sortedWith(
-        compareBy(
-            { if (it.state == TimerState.RINGING) 0 else 1 },
-            { it.remainingAt(now) }
-        )
+        compareBy<CareTimer> { if (it.state == TimerState.RINGING) 0 else 1 }
+            // 울리는 것끼리는 **먼저 만료한 것이 위**다. 남은 시간은 전부 0 이라 순서를
+            // 가르지 못하는데, 오래 놓친 것이 더 급하다.
+            .thenBy { if (it.state == TimerState.RINGING) it.endAtEpochMillis else Long.MAX_VALUE }
+            .thenBy { it.remainingAt(now) }
     )
 
     const val EXTEND_SECONDS: Int = 60

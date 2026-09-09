@@ -185,6 +185,30 @@ class CareTimerTransitionsTest {
     }
 
     @Test
+    fun `울리는 것끼리는 먼저 만료한 것이 위다`() {
+        // 남은 시간은 전부 0 이라 순서를 가르지 못한다. 오래 놓친 것이 더 급하다.
+        val old = CareTimerTransitions.ring(CareTimerTransitions.start(preset, "old", t0))
+        val recent = CareTimerTransitions.ring(
+            CareTimerTransitions.start(preset, "recent", t0 + 60_000L)
+        )
+        val now = t0 + 2_000_000L
+
+        val ordered = CareTimerTransitions.ordered(listOf(recent, old), now)
+
+        assertEquals(listOf("old", "recent"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `만료에서 얼마나 지났는지 센다`() {
+        val timer = CareTimerTransitions.start(preset, "t1", t0)
+
+        // 15분 타이머를 18분 12초 뒤에 보면 3분 12초 지났다.
+        assertEquals(192, timer.overdueAt(t0 + 1_092_000L))
+        // 아직 안 지났으면 0 이다 — 음수를 그대로 흘리면 화면이 `--03:12` 처럼 된다.
+        assertEquals(0, timer.overdueAt(t0))
+    }
+
+    @Test
     fun `일시정지는 멈춘 남은 시간으로 줄을 선다`() {
         // 15분짜리를 바로 정지 → 900초 고정. 실행 중인 10분짜리보다 뒤에 서야 한다.
         val paused = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "paused", t0), t0)

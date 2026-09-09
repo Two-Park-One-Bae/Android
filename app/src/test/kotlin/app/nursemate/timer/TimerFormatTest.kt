@@ -21,6 +21,14 @@ class TimerFormatTest {
     }
 
     @Test
+    fun `만료 후 경과는 음수로 센다`() {
+        // 정본은 `00:00` 고정인데, 놓친 지 얼마나 됐는지를 알 수 없다.
+        assertEquals("-00:00", formatOverdue(0))
+        assertEquals("-03:12", formatOverdue(192))
+        assertEquals("-1:12:40", formatOverdue(4360))
+    }
+
+    @Test
     fun `전체 시간은 0인 단위를 뺀다`() {
         assertEquals("15분", formatDuration(15 * 60))
         assertEquals("2시간", formatDuration(2 * 60 * 60))

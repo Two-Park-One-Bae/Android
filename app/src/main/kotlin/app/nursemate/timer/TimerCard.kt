@@ -171,7 +171,7 @@ fun TimerCard(
  * 조작이 [완료] 하나뿐이다. 울리는 중에는 일시정지도 [+1분]도 없다(spec §상태).
  */
 @Composable
-fun ExpiredTimerCard(timer: CareTimer, onComplete: () -> Unit, modifier: Modifier = Modifier) {
+fun ExpiredTimerCard(timer: CareTimer, now: Long, onComplete: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -204,7 +204,13 @@ fun ExpiredTimerCard(timer: CareTimer, onComplete: () -> Unit, modifier: Modifie
                 // 만료 카드의 태그만 배경이 흰색이다 — 경고색 바탕에서 계열색 배경이 묻힌다.
                 CategoryTag(timer.category, background = NmColor.Neutral.C0)
             }
-            Text("00:00", style = ExpiredLabelStyle, color = NmColor.Warning.C600)
+            // 정본은 `00:00` 고정인데, 놓친 지 얼마나 됐는지를 알 수 없다.
+            Text(
+                text = formatOverdue(timer.overdueAt(now)),
+                style = ExpiredLabelStyle,
+                color = NmColor.Warning.C600,
+                maxLines = 1
+            )
         }
 
         Row(

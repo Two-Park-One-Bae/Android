@@ -152,7 +152,7 @@ fun TimerListScreen(
                 ) {
                     items(ordered, key = { it.id }) { timer ->
                         if (timer.state == TimerState.RINGING) {
-                            ExpiredTimerCard(timer = timer, onComplete = { onRemove(timer.id) })
+                            ExpiredTimerCard(timer = timer, now = now, onComplete = { onRemove(timer.id) })
                         } else {
                             TimerCard(
                                 timer = timer,
