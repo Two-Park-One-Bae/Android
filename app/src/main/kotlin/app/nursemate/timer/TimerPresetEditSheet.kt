@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -78,6 +80,9 @@ fun TimerPresetEditSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .imePadding()
+                // 키보드가 올라오면 폼이 화면에 안 들어간다. 스크롤을 주지 않으면 통이 눌려
+                // 휠이 찌그러지고, 아래쪽 버튼이 잘린다.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)

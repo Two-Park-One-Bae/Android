@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -57,9 +58,14 @@ fun DurationPicker(seconds: Int, onChange: (Int) -> Unit, modifier: Modifier = M
     val minutes = (seconds % 3600) / 60
     val secs = seconds % 60
 
-    Box(modifier.fillMaxWidth().height(PickerHeight), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().height(PickerHeight)) {
+        // ⚠️ **가운데 정렬로 두면 안 된다.** 숫자는 `contentPadding` 이 정한 자리(위에서 두 칸)
+        // 에 오는데, 키보드가 올라와 폼이 눌리면 이 통이 180 보다 짧아진다. 그때 가운데 기준인
+        // 선택 칸·단위만 위로 밀려 숫자와 어긋난다. 숫자와 같은 규칙으로 못박는다.
         Box(
             Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = ItemHeight * 2)
                 .fillMaxWidth()
                 .height(ItemHeight)
                 .clip(BandShape)
@@ -157,7 +163,13 @@ private fun WheelColumn(
         }
 
         // 고정 단위. 목록 위에 겹쳐 그리되 자리는 항목과 똑같이 잡아 줄을 맞춘다.
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = ItemHeight * 2)
+                .height(ItemHeight),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Spacer(Modifier.width(NumberWidth + UnitGap))
             Text(
                 text = unit,
