@@ -8,8 +8,12 @@ import androidx.glance.action.actionParametersOf
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.state.updateAppWidgetState
 import app.nursemate.core.model.TimerPreset
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * 위젯을 눌러 타이머를 시작한다 — spec §위젯 "앱을 열지 않고 타이머를 시작".
@@ -85,10 +89,13 @@ class StartPresetAction : ActionCallback {
     }
 
     /**
-     * 시작하고 「시작됨」을 [FEEDBACK_MS] 동안 보여 준다. 시각은 [claimStart] 가 이미 찍었다.
+     * 시작하고 「시작됨」을 켠다. 시각은 [claimStart] 가 이미 찍었다.
      *
-     * ⚠️ **기다리는 동안 브로드캐스트 리시버를 붙잡고 있다.** 포그라운드 브로드캐스트의
-     * ANR 한계가 10초라 2초는 안전하지만, 이 값을 크게 늘리면 안 된다.
+     * ⚠️ **되돌리기를 여기서 기다리면 안 된다.** 브로드캐스트는 같은 리시버에 **직렬로**
+     * 전달돼서, 콜백이 2초를 붙잡고 있으면 **두 번째 탭이 그 2초 뒤에야 평가된다** —
+     * 중복을 막으려고 둔 창이 정작 판정 시점에는 닫혀 있고, 그 사이 [claimStart] 가 찍은
+     * 값도 지워져 있다. 실기기 로그로 확인했다(두 번째 수신이 정확히 +2102ms, `prev=0`).
+     * 그래서 콜백은 곧바로 끝내고 되돌리기만 밖에서 재운다.
      */
     private suspend fun startAndShow(
         context: Context,
@@ -96,14 +103,23 @@ class StartPresetAction : ActionCallback {
         entry: PresetWidgetEntryPoint,
         preset: TimerPreset
     ) {
-        val widget = PresetWidget()
         entry.timerRepository().start(preset)
-        widget.update(context, glanceId)
+        PresetWidget().update(context, glanceId)
+        scheduleRevert(context.applicationContext, glanceId)
+    }
 
-        delay(FEEDBACK_MS)
-
-        updateAppWidgetState(context, glanceId) { it.remove(PresetWidgetSlot.STARTED_AT) }
-        widget.update(context, glanceId)
+    /**
+     * [FEEDBACK_MS] 뒤에 「시작됨」을 되돌린다.
+     *
+     * 프로세스가 그사이 죽으면 표시가 남지만, 판정이 시각 비교라 **탭이 막히지는 않는다**
+     * (다음 갱신에서 그림도 돌아온다). 리시버를 붙잡는 것보다 이쪽이 낫다.
+     */
+    private fun scheduleRevert(appContext: Context, glanceId: GlanceId) {
+        revertScope.launch {
+            delay(FEEDBACK_MS)
+            updateAppWidgetState(appContext, glanceId) { it.remove(PresetWidgetSlot.STARTED_AT) }
+            PresetWidget().update(appContext, glanceId)
+        }
     }
 
     private companion object {
@@ -111,12 +127,11 @@ class StartPresetAction : ActionCallback {
     }
 }
 
-/**
- * 「시작됨」이 머무는 시간이자, 그동안 두 번째 탭을 막는 창.
- *
- * 리시버를 붙잡고 있는 시간이기도 하다 — 늘리지 말 것.
- */
+/** 「시작됨」이 머무는 시간이자, 그동안 두 번째 탭을 막는 창. */
 internal const val FEEDBACK_MS = 2_000L
+
+/** 「시작됨」 되돌리기 전용. 리시버 수명 밖에서 재운다 — 이유는 [StartPresetAction] 참고. */
+private val revertScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
 internal val PRESET_ID_PARAM = ActionParameters.Key<String>("preset_id")
 
