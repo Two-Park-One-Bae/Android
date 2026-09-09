@@ -10,6 +10,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
 
 /**
  * 위젯 하나가 기억하는 것 — **어느 프리셋을 담고 있는가**.
@@ -54,3 +55,16 @@ internal interface PresetWidgetEntryPoint {
 
 internal fun Context.timerWidgetEntryPoint(): PresetWidgetEntryPoint =
     EntryPointAccessors.fromApplication(applicationContext, PresetWidgetEntryPoint::class.java)
+
+/**
+ * 앱을 열지 않고 곧바로 시작해도 되는가 — 권한 둘 **그리고 울림 방식 최초 선택**.
+ *
+ * ⚠️ **울림 방식까지 보는 이유가 있다.** Android 12·12L(API 31·32)에서는
+ * `SCHEDULE_EXACT_ALARM` 이 기본 허용이고 `POST_NOTIFICATIONS` 는 런타임 권한이 아니라,
+ * 권한 관문이 **한 번도 걸리지 않는다.** 그 기기에서 위젯이 곧바로
+ * [TimerRepository.start] 를 부르면, 울림 방식 최초 선택이 [TimerStartGate] 에만 있는 탓에
+ * 사용자가 한 번도 고르지 않은 채 기본값(소리)으로 울린다 — spec §알람 권한 흐름을 건너뛴다.
+ * minSdk 26 이라 대상 기기가 실제로 있다.
+ */
+internal suspend fun PresetWidgetEntryPoint.canStartWithoutApp(): Boolean =
+    permissions().allGranted() && timerRepository().alertModeChosen.first()

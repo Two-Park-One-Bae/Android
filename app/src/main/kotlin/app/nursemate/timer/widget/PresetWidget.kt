@@ -55,8 +55,8 @@ import app.nursemate.timer.formatDuration
  * 값이다. Android 는 앱이 준 색을 그대로 그리므로 벽지 위에서도 읽히도록 흰 카드에 앱 색을
  * 얹었다. 배치(키워드 위 · 아이콘+시간 아래)와 굵기 대비는 정본 그대로다.
  *
- * ## 권한 판정을 그릴 때 한다
- * 탭 동작 자체를 갈아 끼운다 — 권한이 있으면 콜백으로 바로 시작하고, 없으면 앱을 연다
+ * ## 관문 판정을 그릴 때 한다
+ * 탭 동작 자체를 갈아 끼운다 — 관문을 다 지났으면 콜백으로 바로 시작하고, 아니면 앱을 연다
  * (spec §위젯: "알람 권한이 없으면 앱이 열리고 알람 권한 안내로 진입").
  * 콜백 안에서 액티비티를 띄우지 않는 이유는 그게 **백그라운드 실행**이라 Android 10+ 에서
  * 막히기 때문이다. 런처가 보내는 `PendingIntent` 로 여는 길만 확실하다.
@@ -69,7 +69,7 @@ class PresetWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entry = context.timerWidgetEntryPoint()
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val granted = entry.permissions().allGranted()
+        val ready = entry.canStartWithoutApp()
 
         // 프리셋은 앱에서 언제든 바뀐다(이름·시간 수정, 삭제). 값을 복사해 두지 않고 id 로
         // 매번 다시 찾아야 위젯이 지워진 프리셋을 계속 들고 있지 않는다.
@@ -92,7 +92,7 @@ class PresetWidget : GlanceAppWidget() {
                 PresetButton(
                     preset = preset,
                     justStarted = justStarted,
-                    action = tapAction(context, appWidgetId, preset, granted)
+                    action = tapAction(context, appWidgetId, preset, ready)
                 )
             }
         }
@@ -104,12 +104,13 @@ class PresetWidget : GlanceAppWidget() {
  *
  * - 슬롯이 비었으면 → 지정 화면. spec 은 "설정 방법을 안내"라고 했지만 안내로 끝내면
  *   위젯 편집을 다시 찾아 들어가야 한다 — 잠금화면에 놓은 위젯은 그 길이 멀다.
- * - 권한이 없으면 → 앱(타이머 탭). 관문이 뜨고, 권한을 받으면 그 프리셋이 그대로 시작된다.
+ * - 관문이 남았으면(권한·울림 방식) → 앱(타이머 탭). 관문이 뜨고, 다 지나면 그 프리셋이
+ *   그대로 시작된다 — 위젯으로 되돌아갈 필요가 없다.
  * - 둘 다 지났으면 → 앱을 열지 않고 바로 시작.
  */
-private fun tapAction(context: Context, appWidgetId: Int, preset: TimerPreset?, granted: Boolean): Action = when {
+private fun tapAction(context: Context, appWidgetId: Int, preset: TimerPreset?, ready: Boolean): Action = when {
     preset == null -> actionStartActivity(PresetWidgetConfigActivity.intent(context, appWidgetId))
-    !granted -> actionStartActivity(PresetWidgetLaunch.startInApp(context, preset.id))
+    !ready -> actionStartActivity(PresetWidgetLaunch.startInApp(context, preset.id))
     else -> actionRunCallback<StartPresetAction>(startPresetParameters(preset.id))
 }
 
