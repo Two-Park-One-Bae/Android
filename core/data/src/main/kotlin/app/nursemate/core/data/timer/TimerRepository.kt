@@ -31,6 +31,20 @@ interface TimerAlarmScheduler {
 
     /** 울리고 있는 알람을 멈춘다(완료). */
     fun dismiss(timerId: String)
+
+    /**
+     * 앱이 새로 뜰 때, 남아 있는 만료 알림을 모두 걷어낸다.
+     *
+     * 알림은 시스템이 들고 있어 **저장소와 수명이 다르다.** 앱 데이터가 지워지거나 재설치되면
+     * 타이머만 사라지고 알림은 남는데, 그것들은 스와이프가 막혀 있어(`setOngoing`) 사용자가
+     * 스스로 지울 방법이 없다.
+     *
+     * ⚠️ **어느 알림이 고아인지 골라낼 수 없다.** `getActiveNotifications()` 는 **지금
+     * 프로세스가 띄운 것만** 돌려주므로, 재시작 뒤에는 빈 목록이 온다. 그래서 살릴 것을
+     * 가리지 않고 전부 걷는다 — 앱이 막 떴다면 울리는 중인 알람은 있을 수 없고, 놓친 만료는
+     * 화면의 만료 카드가 알려 준다.
+     */
+    fun dismissAllAlarms()
 }
 
 /**
@@ -71,6 +85,8 @@ class TimerRepository @Inject constructor(
         val restored = CareTimerTransitions.restore(store.currentTimers(), now)
         store.updateTimers(restored)
         restored.filter { it.state == TimerState.RUNNING }.forEach(scheduler::schedule)
+        // 남아 있는 알림은 사용자가 지울 수 없으니 여기서 걷어낸다.
+        scheduler.dismissAllAlarms()
     }
 
     /** 프리셋 원탭 → 즉시 시작 + 알람 예약. */
@@ -110,15 +126,17 @@ class TimerRepository @Inject constructor(
     suspend fun markRinging(timerId: String) = mutate(timerId, CareTimerTransitions::ring)
 
     /**
-     * 완료·정지 — **둘 다 목록에서 삭제**다(spec §생성 → 실행).
+     * 완료·정지 — **둘 다 목록에서 삭제**다(spec §생성 → 실행). 예약·알림도 함께 걷는다.
      *
-     * 울리는 중이었다면 그 알람도 함께 끈다.
+     * ⚠️ **타이머가 이미 없어도 알림은 지운다.** 예전에는 목록에서 못 찾으면 곧바로 돌아섰는데,
+     * 그러면 알림만 남아 고아가 된다 — 화면에서 먼저 지웠거나 앱 데이터가 비워진 경우다.
+     * 그 알림은 스와이프가 막혀 있어 사용자가 손쓸 방법이 없다.
      */
     suspend fun remove(timerId: String) {
         val current = store.currentTimers()
-        val target = current.firstOrNull { it.id == timerId } ?: return
-        store.updateTimers(current.filterNot { it.id == timerId })
-        if (target.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
+        val target = current.firstOrNull { it.id == timerId }
+        if (target != null) store.updateTimers(current.filterNot { it.id == timerId })
+        if (target?.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
     }
 
     suspend fun setAlertMode(mode: AlertMode) = store.updateAlertMode(mode)

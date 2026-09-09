@@ -23,6 +23,7 @@ class TimerRepositoryTest {
         val scheduled = linkedMapOf<String, Long>()
         val cancelled = mutableListOf<String>()
         val dismissed = mutableListOf<String>()
+        var alarmSweeps = 0
 
         override fun schedule(timer: CareTimer) {
             scheduled[timer.id] = timer.endAtEpochMillis
@@ -30,6 +31,10 @@ class TimerRepositoryTest {
 
         /** 예약이 없으면 명확히 터진다 — null 비교로 조용히 통과하는 걸 막는다. */
         fun scheduledAt(timerId: String): Long = scheduled.getValue(timerId)
+
+        override fun dismissAllAlarms() {
+            alarmSweeps++
+        }
 
         override fun cancel(timerId: String) {
             scheduled.remove(timerId)
@@ -183,15 +188,42 @@ class TimerRepositoryTest {
     }
 
     @Test
-    fun `없는 타이머를 건드려도 아무 일도 일어나지 않는다`() = runBlocking {
+    fun `없는 타이머를 건드려도 저장소는 그대로다`() = runBlocking {
         val store = FakeTimerStore()
         val scheduler = FakeScheduler()
         val repo = repository(store, scheduler)
 
         repo.pause("없음")
-        repo.remove("없음")
+        repo.resume("없음")
+        repo.extend("없음")
 
         assertTrue(store.savedTimers.isEmpty())
-        assertTrue(scheduler.cancelled.isEmpty())
+        assertTrue(scheduler.scheduled.isEmpty())
+    }
+
+    @Test
+    fun `타이머가 이미 없어도 알림을 걷는다`() = runBlocking {
+        // 화면에서 먼저 지웠거나 앱 데이터가 비워진 뒤 알림의 [완료] 를 누르는 경우다.
+        // 예전에는 목록에서 못 찾으면 곧바로 돌아서서, 스와이프가 막힌 알림이 고아로 남았다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+
+        repo.remove("없는-타이머")
+
+        assertTrue("알림을 걷지 않았다", scheduler.cancelled.contains("없는-타이머"))
+    }
+
+    @Test
+    fun `복원할 때 남아 있는 알림을 걷는다`() = runBlocking {
+        // 재설치·데이터 삭제로 타이머만 사라지면 알림이 고아가 되는데, 스와이프가 막혀 있어
+        // 사용자가 지울 방법이 없다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+
+        repo.restore()
+
+        assertEquals(1, scheduler.alarmSweeps)
     }
 }

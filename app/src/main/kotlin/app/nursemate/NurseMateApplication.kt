@@ -1,6 +1,7 @@
 package app.nursemate
 
 import android.app.Application
+import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
 import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
@@ -71,6 +72,17 @@ class NurseMateApplication :
         // 앱이 죽어 있는 동안 만료한 타이머를 현재 시각에 맞추고, 아직 안 끝난 것의 예약을
         // 되살린다. 재부팅은 TimerBootReceiver 가 따로 받지만, 그 밖의 이유로 예약이
         // 사라졌을 수도 있어(강제 종료·시스템 정리) 시작할 때마다 한 번 맞춘다.
-        applicationScope.launch { timerRepository.restore() }
+        // ⚠️ 실패를 삼키지 않는다. 예전에는 예외가 나도 조용히 죽어, 알람이 예약되지 않는
+        // 것도 알림이 안 걷히는 것도 로그 한 줄 없이 지나갔다 — 원인 찾기가 훨씬 오래 걸렸다.
+        @Suppress("TooGenericExceptionCaught")
+        applicationScope.launch {
+            runCatching { timerRepository.restore() }
+                .onFailure { Log.e(TIMER_TAG, "타이머 복원 실패", it) }
+                .onSuccess { Log.i(TIMER_TAG, "타이머 복원 완료") }
+        }
+    }
+
+    private companion object {
+        const val TIMER_TAG = "NM441"
     }
 }

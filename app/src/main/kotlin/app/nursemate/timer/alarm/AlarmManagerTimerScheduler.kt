@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.getSystemService
 import app.nursemate.core.data.timer.TimerAlarmScheduler
 import app.nursemate.core.model.CareTimer
@@ -59,6 +60,23 @@ class AlarmManagerTimerScheduler @Inject constructor(
         clearNotification(timerId)
     }
 
+    /**
+     * 남아 있는 만료 알림을 전부 내린다.
+     *
+     * 고아만 골라낼 수 없어 통째로 지운다 — `getActiveNotifications()` 가 **지금 프로세스가
+     * 띄운 것만** 돌려줘서, 재시작 뒤에는 무엇이 떠 있는지 알 수조차 없다.
+     *
+     * 지금 이 앱은 만료 알람 외에 알림을 띄우지 않아 [NotificationManager.cancelAll] 로
+     * 충분하다. 다른 알림이 생기면 그때는 채널별로 지울 방법을 다시 찾아야 한다.
+     */
+    override fun dismissAllAlarms() {
+        val manager = context.getSystemService<NotificationManager>()
+        // 남은 개수는 여기서 알 수 없다(`getActiveNotifications` 는 이 프로세스가 띄운 것만
+        // 본다). 호출 여부만 남겨 둔다 — 조용히 지나가면 원인을 못 찾는다.
+        Log.i(TAG, "만료 알림 정리 (manager=${manager != null})")
+        manager?.cancelAll()
+    }
+
     /** 울리고 있던 알림을 내린다. 예약만 지우면 이미 뜬 알림은 남는다. */
     private fun clearNotification(timerId: String) {
         context.getSystemService<NotificationManager>()?.cancel(notificationId(timerId))
@@ -96,5 +114,7 @@ class AlarmManagerTimerScheduler @Inject constructor(
         fun requestCode(timerId: String): Int = timerId.hashCode()
 
         fun notificationId(timerId: String): Int = timerId.hashCode()
+
+        private const val TAG = "NM441"
     }
 }
