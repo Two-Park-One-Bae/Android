@@ -57,6 +57,15 @@ class TimerListViewModel @Inject constructor(
     /** 시작 관문 — 권한·울림 방식 최초 선택. 화면이 시트를 띄우고 OS 절차를 밟는다. */
     val startGate = TimerStartGate(repository, permissions, viewModelScope)
 
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                _now.value = System.currentTimeMillis()
+                delay(TICK_MS)
+            }
+        }
+    }
+
     fun setPresetSheet(open: Boolean) {
         _presetSheetOpen.value = open
     }

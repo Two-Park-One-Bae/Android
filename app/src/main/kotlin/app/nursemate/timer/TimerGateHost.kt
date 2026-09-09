@@ -1,7 +1,6 @@
 package app.nursemate.timer
 
 import android.Manifest
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
@@ -38,6 +37,7 @@ fun TimerGateHost(
     gate: TimerGate,
     permissions: TimerPermissions,
     onAdvance: () -> Unit,
+    onAsked: (PermissionStep) -> Unit,
     onConfirmAlertMode: (AlertMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -55,9 +55,19 @@ fun TimerGateHost(
 
         is TimerGate.Permission -> PermissionSheet(
             denied = gate.denied,
-            permissions = permissions,
-            onRequestNotification = { notifications.launch(Manifest.permission.POST_NOTIFICATIONS) },
-            onOpenSettings = { settings.launch(it) },
+            onRequest = {
+                onAsked(gate.step)
+                when {
+                    // 거부한 뒤에는 팝업을 다시 띄울 수 없다 — 앱 상세 설정이 유일한 길이다.
+                    gate.step == PermissionStep.NOTIFICATION && !gate.denied ->
+                        notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+
+                    gate.step == PermissionStep.EXACT_ALARM ->
+                        settings.launch(permissions.exactAlarmSettings())
+
+                    else -> settings.launch(permissions.appDetailsSettings())
+                }
+            },
             onDismiss = onDismiss
         )
 
@@ -90,13 +100,7 @@ fun TimerGateHost(
  * 무엇이 잘못됐는지 모르므로, 문구를 바꾸고 설정으로 유도한다.
  */
 @Composable
-private fun PermissionSheet(
-    denied: Boolean,
-    permissions: TimerPermissions,
-    onRequestNotification: () -> Unit,
-    onOpenSettings: (Intent) -> Unit,
-    onDismiss: () -> Unit
-) {
+private fun PermissionSheet(denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
     TimerNoticeSheet(
         icon = if (denied) DsR.drawable.nm_ic_bell_off else DsR.drawable.nm_ic_bell,
         iconTint = if (denied) NmColor.Error.C600 else NmColor.Primary.C600,
@@ -104,14 +108,7 @@ private fun PermissionSheet(
         title = if (denied) "알람이 꺼져 있어요" else "알람 권한이 필요해요",
         body = if (denied) DENIED_BODY else NOTICE_BODY,
         primaryLabel = if (denied) "설정에서 켜기" else "허용하고 시작하기",
-        onPrimary = {
-            // 알림 권한이 먼저다 — 이것만 팝업으로 받을 수 있어 사용자가 앱을 안 떠난다.
-            when {
-                !permissions.canPostNotifications() -> onRequestNotification()
-                !permissions.canScheduleExact() -> onOpenSettings(permissions.exactAlarmSettings())
-                else -> onOpenSettings(permissions.appDetailsSettings())
-            }
-        },
+        onPrimary = onRequest,
         secondaryLabel = if (denied) "닫기" else "나중에 할게요",
         onSecondary = onDismiss,
         onDismiss = onDismiss

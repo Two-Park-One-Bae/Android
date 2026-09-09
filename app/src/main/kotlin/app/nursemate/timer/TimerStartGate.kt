@@ -34,6 +34,15 @@ class TimerStartGate(
     private var pending: TimerPreset? = null
 
     /**
+     * 이미 한 번 요청해 본 권한.
+     *
+     * 여기 있는데도 여전히 없으면 사용자가 거부한 것이다. 이걸 안 나누면 **정상 흐름을
+     * 거부로 오해한다** — Android 는 받을 권한이 둘이라, 알림을 허용한 직후에도 정확 알람이
+     * 남아 다시 권한 관문에 걸린다.
+     */
+    private val asked = mutableSetOf<PermissionStep>()
+
+    /**
      * 프리셋을 누르면 곧바로 시작한다(정본 C3 부제). 다만 **처음 한 번은** 막힌다.
      *
      * spec §알람 권한이 "권한이 없으면 시작할 수 없다"고 못박았다. 권한 없이 시작시키면
@@ -53,9 +62,9 @@ class TimerStartGate(
      */
     fun advance() {
         val preset = pending ?: return
-        if (!permissions.allGranted()) {
-            // 이미 안내를 띄운 뒤에도 권한이 없으면 거부 문구로 바꿔 설정으로 유도한다.
-            _state.value = TimerGate.Permission(denied = _state.value is TimerGate.Permission)
+        val step = nextStep()
+        if (step != null) {
+            _state.value = TimerGate.Permission(step = step, denied = step in asked)
             return
         }
         scope.launch {
@@ -77,9 +86,21 @@ class TimerStartGate(
         }
     }
 
+    /** 화면이 권한을 요청하기 직전에 부른다. 다음 판정에서 거부인지 가리는 근거가 된다. */
+    fun markAsked(step: PermissionStep) {
+        asked += step
+    }
+
     /** 관문을 닫고 시작을 포기한다 — 「나중에 할게요」·「닫기」. */
     fun dismiss() {
         pending = null
         _state.value = TimerGate.None
+    }
+
+    /** 아직 못 받은 권한 하나. 알림을 먼저 받는다 — 앱을 안 떠나고 끝나서다. */
+    private fun nextStep(): PermissionStep? = when {
+        !permissions.canPostNotifications() -> PermissionStep.NOTIFICATION
+        !permissions.canScheduleExact() -> PermissionStep.EXACT_ALARM
+        else -> null
     }
 }

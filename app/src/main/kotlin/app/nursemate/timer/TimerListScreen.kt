@@ -70,7 +70,10 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
     if (presetSheet) {
         TimerPresetSheet(
             presets = presets,
-            onStart = viewModel.startGate::start,
+            onStart = { preset ->
+                viewModel.setPresetSheet(false)
+                viewModel.startGate.start(preset)
+            },
             onDismiss = { viewModel.setPresetSheet(false) }
         )
     }
@@ -79,6 +82,7 @@ fun TimerListRoute(viewModel: TimerListViewModel = hiltViewModel()) {
         gate = gate,
         permissions = viewModel.startGate.permissions,
         onAdvance = viewModel.startGate::advance,
+        onAsked = viewModel.startGate::markAsked,
         onConfirmAlertMode = viewModel.startGate::confirmAlertMode,
         onDismiss = viewModel.startGate::dismiss
     )
