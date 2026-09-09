@@ -41,7 +41,16 @@ object TimerOngoingNotification {
 
     /** 보여 줄 것이 없으면 null — 호출자가 알림을 내린다. */
     fun build(context: Context, timers: List<CareTimer>, now: Long): Notification? {
-        val ordered = CareTimerTransitions.ordered(timers, now)
+        // 화면과 같은 규칙으로 만료를 투영한다(`TimerListScreen`).
+        //
+        // 알람이 못 오면 저장 상태가 RUNNING 에 머무는데, 그대로 쓰면 화면은 「종료」인데
+        // 알림은 0 을 지나 올라가는 카운트다운에 [일시정지]·[정지] 를 달고 있게 된다.
+        //
+        // ⚠️ 다만 다시 그리는 계기가 목록의 변화뿐이라, 만료하는 **그 순간**에는 갱신되지
+        // 않는다. 다음 신호가 올 때까지 옛 모습이 남는다 — 트리거를 따로 두려면 주기 갱신이
+        // 필요해 크로노미터로 얻은 이점을 잃는다.
+        val projected = timers.map { if (it.isExpiredAt(now)) CareTimerTransitions.ring(it) else it }
+        val ordered = CareTimerTransitions.ordered(projected, now)
         val lead = ordered.firstOrNull() ?: return null
 
         val builder = NotificationCompat.Builder(context, TimerAlarmChannels.ONGOING_ID)

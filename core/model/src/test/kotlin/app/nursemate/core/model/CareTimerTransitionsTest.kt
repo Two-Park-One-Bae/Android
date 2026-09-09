@@ -291,4 +291,25 @@ class CareTimerTransitionsTest {
         assertEquals(listOf(0, 1, 2, 3, 4, 5), DEFAULT_TIMER_PRESETS.map { it.sortOrder })
         assertTrue(DEFAULT_TIMER_PRESETS.all { it.isDefault })
     }
+
+    @Test
+    fun `일시정지를 연장하면 순서가 바뀐다`() {
+        // `extend` 가 PAUSED 에서는 `remainingSeconds` 만 바꾼다 — `state`·`endAt` 은 그대로다.
+        // 그래도 정렬의 마지막 키가 남은 시간이라 순서는 뒤집힌다.
+        val short = CareTimerTransitions.pause(
+            CareTimerTransitions.start(preset.copy(durationSeconds = 600), "short", t0),
+            t0
+        )
+        val long = CareTimerTransitions.pause(CareTimerTransitions.start(preset, "long", t0), t0)
+
+        assertEquals(listOf("short", "long"), CareTimerTransitions.ordered(listOf(short, long), t0).map { it.id })
+
+        // 짧은 쪽을 다섯 번 늘리면(+300초) 900 초가 되어 뒤로 간다.
+        var extended = short
+        repeat(5) { extended = CareTimerTransitions.extend(extended) }
+
+        assertEquals(900, extended.remainingSeconds)
+        assertEquals(TimerState.PAUSED, extended.state)
+        assertEquals(short.endAtEpochMillis, extended.endAtEpochMillis)
+    }
 }
