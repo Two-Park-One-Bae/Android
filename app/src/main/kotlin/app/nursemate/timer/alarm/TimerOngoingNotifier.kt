@@ -42,7 +42,7 @@ class TimerOngoingNotifier @Inject constructor(
     fun start(scope: CoroutineScope) {
         scope.launch {
             repository.timers
-                .map { timers -> timers to signature(timers) }
+                .map { timers -> timers to timerRenderSignature(timers) }
                 .distinctUntilChanged { old, new -> old.second == new.second }
                 .collect { (timers, _) -> render(timers) }
         }
@@ -65,21 +65,6 @@ class TimerOngoingNotifier @Inject constructor(
         }
     }
 
-    /**
-     * 알림에 드러나는 것만 모은다 — 이게 그대로면 다시 그릴 이유가 없다.
-     *
-     * ⚠️ **`remainingSeconds` 를 빼면 안 된다.** 일시정지 중에 [+1분] 을 누르면 그 값만
-     * 바뀌고 `state`·`endAt` 은 그대로다. 그런데 정렬의 마지막 키가 남은 시간이라 순서는
-     * 뒤집힌다 — 시그니처가 같으면 알림이 옛 lead 를 붙들고 **조작 버튼이 엉뚱한 타이머를
-     * 가리킨다.**
-     *
-     * 「여러 개 동시 진행」에서 고친 것과 같은 실패다. 거기서는 *시간이 흐르는* 경로를 묶음
-     * 분리로 막았는데, *값을 고치는* 경로가 남아 있었다.
-     */
-    private fun signature(timers: List<CareTimer>): String = timers.joinToString("|") {
-        "${it.id}:${it.state}:${it.endAtEpochMillis}:${it.remainingSeconds}"
-    }
-
     private fun canPostNotifications(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
@@ -87,4 +72,21 @@ class TimerOngoingNotifier @Inject constructor(
     private companion object {
         const val TAG = "NM442"
     }
+}
+
+/**
+ * 알림에 드러나는 것만 모은다 — 이게 그대로면 다시 그릴 이유가 없다.
+ *
+ * ⚠️ **`remainingSeconds` 를 빼면 안 된다.** 일시정지 중에 [+1분] 을 누르면 그 값만 바뀌고
+ * `state`·`endAt` 은 그대로다. 그런데 정렬의 마지막 키가 남은 시간이라 순서는 뒤집힌다 —
+ * 시그니처가 같으면 알림이 옛 lead 를 붙들고 **조작 버튼이 엉뚱한 타이머를 가리킨다.**
+ *
+ * 「여러 개 동시 진행」에서 고친 것과 같은 실패다. 거기서는 *시간이 흐르는* 경로를 묶음
+ * 분리로 막았는데, *값을 고치는* 경로가 남아 있었다.
+ *
+ * 클래스 밖에 두는 이유는 **테스트가 직접 확인할 수 있게** 하기 위해서다. private 로 두면
+ * 회귀를 도메인 테스트로 에둘러 지킬 수밖에 없다.
+ */
+internal fun timerRenderSignature(timers: List<CareTimer>): String = timers.joinToString("|") {
+    "${it.id}:${it.state}:${it.endAtEpochMillis}:${it.remainingSeconds}"
 }

@@ -304,12 +304,21 @@ class CareTimerTransitionsTest {
 
         assertEquals(listOf("short", "long"), CareTimerTransitions.ordered(listOf(short, long), t0).map { it.id })
 
-        // 짧은 쪽을 다섯 번 늘리면(+300초) 900 초가 되어 뒤로 간다.
+        // 짧은 쪽을 여섯 번 늘리면 960 초가 되어 long(900) 보다 뒤로 간다.
+        // ⚠️ 다섯 번이면 정확히 900 이라 long 과 동점이 된다 — 안정 정렬이라 순서가
+        //    그대로 남아, 시그니처를 되돌려도 통과하는 테스트가 된다.
         var extended = short
-        repeat(5) { extended = CareTimerTransitions.extend(extended) }
+        repeat(6) { extended = CareTimerTransitions.extend(extended) }
 
-        assertEquals(900, extended.remainingSeconds)
+        assertEquals(960, extended.remainingSeconds)
         assertEquals(TimerState.PAUSED, extended.state)
         assertEquals(short.endAtEpochMillis, extended.endAtEpochMillis)
+
+        // ⚠️ 이 파일은 `kotlin.test` 라 메시지가 **뒤**에 온다(JUnit 과 반대다).
+        assertEquals(
+            listOf("long", "short"),
+            CareTimerTransitions.ordered(listOf(extended, long), t0).map { it.id },
+            "state·endAt 이 그대로라도 남은 시간이 바뀌면 순서가 뒤집힌다"
+        )
     }
 }
