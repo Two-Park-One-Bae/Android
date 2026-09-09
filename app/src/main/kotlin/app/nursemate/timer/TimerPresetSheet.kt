@@ -124,10 +124,10 @@ fun TimerPresetSheet(
                     )
                 }
                 Text(
-                    text = if (editing) {
-                        "프리셋을 눌러 수정 · 휴지통으로 삭제"
-                    } else {
-                        "누르면 타이머가 바로 시작됩니다"
+                    text = when {
+                        presets.isEmpty() -> "프리셋을 추가하면 원탭으로 시작할 수 있어요"
+                        editing -> "프리셋을 눌러 수정 · 휴지통으로 삭제"
+                        else -> "누르면 타이머가 바로 시작됩니다"
                     },
                     style = SheetSubStyle,
                     color = colors.textSecondary
@@ -145,7 +145,12 @@ fun TimerPresetSheet(
             )
 
             // 정본은 「프리셋 추가」를 편집 모드에서만 보여 준다 — 평소에는 시작만 하는 시트다.
-            if (editing) {
+            //
+            // ⚠️ **프리셋이 하나도 없으면 평소에도 보여 준다.** spec 이 "생성 = 프리셋 원탭,
+            // 키워드 직접 입력 생성은 없다"고 못박아서, 프리셋이 0개면 타이머를 시작할 길이
+            // 아예 없다. 그런데 전부 지우는 건 막지 않았으므로(자기 것만 쓰려는 선택은 정당하다)
+            // 여기서 빠져나갈 길을 열어 둔다. 정본에 0개 상태 프레임이 없어 충돌하지 않는다.
+            if (editing || presets.isEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

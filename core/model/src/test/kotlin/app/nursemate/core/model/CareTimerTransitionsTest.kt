@@ -220,6 +220,49 @@ class CareTimerTransitionsTest {
     }
 
     @Test
+    fun `연장을 거듭해도 진행률이 어긋나지 않는다`() {
+        // `durationSeconds` 와 `endAt` 을 함께 늘리지 않으면 링이 거꾸로 차거나 넘친다.
+        var timer = CareTimerTransitions.start(preset, "t1", t0)
+        repeat(3) { timer = CareTimerTransitions.extend(timer) }
+
+        assertEquals(900 + 180, timer.durationSeconds)
+        assertEquals(t0 + 1_080_000L, timer.endAtEpochMillis)
+        assertEquals(0f, timer.progressAt(t0))
+        // 절반이 지났으면 절반만 찬다.
+        assertEquals(0.5f, timer.progressAt(t0 + 540_000L))
+    }
+
+    @Test
+    fun `일시정지한 채 복원해도 남은 시간이 그대로다`() {
+        // 앱이 죽었다 살아나도 멈춰 있던 것은 흐르면 안 된다.
+        val paused = CareTimerTransitions.pause(
+            CareTimerTransitions.start(preset, "t1", t0),
+            t0 + 300_000L
+        )
+
+        val restored = CareTimerTransitions.restore(listOf(paused), t0 + 10_000_000L).single()
+
+        assertEquals(TimerState.PAUSED, restored.state)
+        assertEquals(600, restored.remainingSeconds)
+    }
+
+    @Test
+    fun `재개하면 멈춰 있던 만큼만 남는다`() {
+        val paused = CareTimerTransitions.pause(
+            CareTimerTransitions.start(preset, "t1", t0),
+            t0 + 300_000L
+        )
+
+        // 한참 멈춰 있다가 재개
+        val resumeAt = t0 + 10_000_000L
+        val resumed = CareTimerTransitions.resume(paused, resumeAt)
+
+        assertEquals(TimerState.RUNNING, resumed.state)
+        assertEquals(resumeAt + 600_000L, resumed.endAtEpochMillis)
+        assertNull(resumed.remainingSeconds, "재개 뒤에는 endAt 만 쓴다")
+    }
+
+    @Test
     fun `기본 프리셋 6종이 정본 표와 일치한다`() {
         assertEquals(6, DEFAULT_TIMER_PRESETS.size)
         assertEquals(
