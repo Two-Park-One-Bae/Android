@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -68,7 +67,6 @@ fun PresetWidgetConfigScreen(presets: List<TimerPreset>, onPick: (TimerPreset) -
             PresetRow(preset = preset, onClick = { onPick(preset) })
         }
 
-        if (presets.isEmpty()) Spacer(Modifier.padding(top = 4.dp))
         NmButtonSecondary(text = "닫기", onClick = onClose, modifier = Modifier.fillMaxWidth())
     }
 }
@@ -84,28 +82,39 @@ private fun PresetRow(preset: TimerPreset, onClick: () -> Unit) {
             .background(colors.surface, RowShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // ⚠️ **가중치를 가진 자식은 하나여야 한다.** 라벨과 여백에 각각 `weight(1f)` 를 주면
+        // 남는 폭이 반씩 나뉘어, **라벨이 짧을수록 시간이 왼쪽으로 붙는다.** 왼쪽 묶음
+        // 하나만 늘리고 시간은 SpaceBetween 이 끝으로 밀게 한다.
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = preset.label,
-            style = LabelStyle,
-            color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-        Text(
-            text = preset.category.label,
-            style = TagStyle,
-            color = tagForeground(preset.category),
-            textAlign = TextAlign.Center,
+        Row(
             modifier = Modifier
-                .clip(TagShape)
-                .background(tagBackground(preset.category))
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-        )
-        Spacer(Modifier.weight(1f))
+                .weight(1f, fill = false)
+                // 라벨이 길어 폭을 다 쓸 때 시간과 붙지 않도록.
+                .padding(end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = preset.label,
+                style = LabelStyle,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Text(
+                text = preset.category.label,
+                style = TagStyle,
+                color = tagForeground(preset.category),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .clip(TagShape)
+                    .background(tagBackground(preset.category))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
         Text(formatDuration(preset.durationSeconds), style = DurationStyle, color = colors.textSecondary)
     }
 }
