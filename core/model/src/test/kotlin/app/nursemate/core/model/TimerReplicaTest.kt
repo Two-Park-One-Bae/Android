@@ -188,4 +188,79 @@ class TimerReplicaTest {
         assertTrue(replica.record("b")!!.isRemoved)
         assertNull(replica.record("없는것"))
     }
+
+    // ── 목록 반영 ────────────────────────────────────────────────────
+
+    @Test
+    fun `새 타이머는 첫 판으로 들어온다`() {
+        val replica = TimerReplica(ORIGIN_PHONE).withTimers(listOf(timer("a")), t0)
+
+        assertEquals(1, replica.records.single().rev)
+        assertEquals(ORIGIN_PHONE, replica.records.single().origin)
+    }
+
+    @Test
+    fun `내용이 그대로면 판을 안 올린다`() {
+        // 올리면 상대가 바뀐 줄 알고 되받아 쓰고, 그게 또 이쪽을 깨워 발행이 안 멎는다.
+        val before = TimerReplica(ORIGIN_PHONE, listOf(live("a", 5, ORIGIN_WATCH)))
+        val after = before.withTimers(listOf(timer("a")), t0)
+
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun `내용이 바뀌면 판을 올리고 내 이름을 적는다`() {
+        val before = TimerReplica(ORIGIN_PHONE, listOf(live("a", 5, ORIGIN_WATCH)))
+        val after = before.withTimers(listOf(timer("a", state = TimerState.PAUSED)), t0)
+
+        assertEquals(6, after.records.single().rev)
+        assertEquals(ORIGIN_PHONE, after.records.single().origin)
+    }
+
+    @Test
+    fun `목록에서 빠지면 자리표가 된다`() {
+        val before = TimerReplica(ORIGIN_PHONE, listOf(live("a", 2, ORIGIN_PHONE)))
+        val after = before.withTimers(emptyList(), t0)
+
+        val record = after.records.single()
+        assertTrue(record.isRemoved)
+        assertEquals(3, record.rev)
+        assertEquals(t0, record.removedAt)
+    }
+
+    @Test
+    fun `이미 지운 것을 다시 지우지 않는다`() {
+        // 자리표는 그대로 둔다 — 다시 판을 올리면 상대와 끝없이 주고받는다.
+        val before = TimerReplica(ORIGIN_PHONE, listOf(dead("a", 3, ORIGIN_WATCH)))
+        val after = before.withTimers(emptyList(), t0 + 1)
+
+        assertEquals(before.records, after.records)
+    }
+
+    @Test
+    fun `반영 결과도 id 순이다`() {
+        val replica = TimerReplica(ORIGIN_PHONE).withTimers(listOf(timer("c"), timer("a"), timer("b")), t0)
+
+        assertEquals(listOf("a", "b", "c"), replica.records.map { it.id })
+    }
+
+    @Test
+    fun `합쳐도 내 이름은 그대로다`() {
+        val mine = TimerReplica(ORIGIN_PHONE, listOf(live("a", 1, ORIGIN_PHONE)))
+        val theirs = TimerReplica(ORIGIN_WATCH, listOf(live("b", 1, ORIGIN_WATCH)))
+
+        val merged = mine.mergedWith(theirs, t0)
+
+        assertEquals(ORIGIN_PHONE, merged.origin)
+        assertEquals(listOf("a", "b"), merged.records.map { it.id })
+    }
+
+    @Test
+    fun `바뀐 게 없으면 합친 결과가 나와 같다`() {
+        // 3단계에서 이 비교로 "다시 발행할지"를 정한다.
+        val mine = TimerReplica(ORIGIN_PHONE, listOf(live("a", 2, ORIGIN_PHONE), dead("b", 1, ORIGIN_WATCH)))
+        val theirs = TimerReplica(ORIGIN_WATCH, mine.records)
+
+        assertEquals(mine, mine.mergedWith(theirs, t0))
+    }
 }

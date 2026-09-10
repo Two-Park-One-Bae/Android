@@ -126,3 +126,43 @@ fun pruneTombstones(records: List<TimerRecord>, now: Long): List<TimerRecord> {
     val kept = tombstones.sortedByDescending { it.removedAt ?: Long.MAX_VALUE }.take(MAX_TOMBSTONES).toSet()
     return fresh.filter { !it.isRemoved || it in kept }
 }
+
+/**
+ * 상대 복제본을 합쳐 넣는다. 내 [TimerReplica.origin] 은 그대로다.
+ *
+ * 결과가 `this` 와 같으면 **아무것도 바뀌지 않았다는 뜻**이다 — 그때 다시 발행하지 않아야
+ * 서로 되받는 무한 루프가 끊긴다([mergeRecords] 가 id 순으로 정렬해 주는 이유다).
+ */
+fun TimerReplica.mergedWith(other: TimerReplica, now: Long): TimerReplica =
+    copy(records = mergeRecords(records, other.records, now))
+
+/**
+ * 타이머 목록이 이렇게 바뀌었다고 장부에 적는다.
+ *
+ * 저장소는 여전히 "타이머 목록을 통째로 바꾼다"는 모양으로 쓰이고(`TimerStore.mutateTimers`),
+ * 판 올리기와 자리표 만들기는 여기서 알아서 한다 — 부르는 쪽이 복제를 몰라도 된다.
+ *
+ * - 내용이 그대로인 타이머는 **판을 올리지 않는다.** 올리면 상대가 바뀐 줄 알고 되받아
+ *   쓰고, 그게 또 이쪽을 깨워 발행이 멎지 않는다.
+ * - [timers] 에서 빠진 것은 자리표로 남긴다 — 완료·정지가 곧 삭제라서다.
+ *
+ * @param now 자리표에 적을 시각. 승부에는 안 쓰고 청소에만 쓴다
+ */
+fun TimerReplica.withTimers(timers: List<CareTimer>, now: Long): TimerReplica {
+    val byId = records.associateBy { it.id }
+    val next = timers.map { timer ->
+        val existing = byId[timer.id]
+        when {
+            existing == null -> TimerRecord(id = timer.id, rev = 1, origin = origin, timer = timer)
+            existing.timer == timer -> existing
+            else -> existing.bumped(origin, timer)
+        }
+    }
+
+    val surviving = timers.mapTo(HashSet()) { it.id }
+    val gone = records.filter { !it.isRemoved && it.id !in surviving }
+        .map { it.bumped(origin, timer = null, removedAt = now) }
+    val tombstones = records.filter { it.isRemoved }
+
+    return copy(records = pruneTombstones((next + gone + tombstones).sortedBy { it.id }, now))
+}

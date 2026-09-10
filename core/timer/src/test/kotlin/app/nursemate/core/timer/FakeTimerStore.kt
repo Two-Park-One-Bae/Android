@@ -3,10 +3,15 @@ package app.nursemate.core.timer
 import app.nursemate.core.model.AlertMode
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.DEFAULT_TIMER_PRESETS
+import app.nursemate.core.model.ORIGIN_PHONE
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.TimerReplica
+import app.nursemate.core.model.mergedWith
+import app.nursemate.core.model.withTimers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -38,6 +43,23 @@ class FakeTimerStore(private val readDelayMillis: Long = 0) : TimerStore {
         }
 
     override val timers: Flow<List<CareTimer>> get() = timerState
+
+    /**
+     * 복제 장부는 타이머 목록에서 그때그때 만든다.
+     *
+     * 실제 저장소는 판번호를 이어 가지만, [TimerRepository] 규칙을 보는 데는 필요 없다 —
+     * 복제 규칙 자체는 `TimerReplicaTest` 가 따로 못박는다.
+     */
+    override val replica: Flow<TimerReplica> get() = timerState.map { replicaOf(it) }
+
+    override suspend fun mergeReplica(incoming: TimerReplica): Boolean {
+        val merged = replicaOf(timerState.value).mergedWith(incoming, 0L)
+        val changed = merged.timers != timerState.value
+        timerState.value = merged.timers
+        return changed
+    }
+
+    private fun replicaOf(timers: List<CareTimer>) = TimerReplica(ORIGIN_PHONE).withTimers(timers, 0L)
     override val presets: Flow<List<TimerPreset>> get() = presetState
     override val alertMode: Flow<AlertMode> get() = alertState
 

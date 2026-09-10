@@ -2,6 +2,7 @@ package app.nursemate.core.timer
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -10,6 +11,10 @@ import app.nursemate.core.model.AlertMode
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.DEFAULT_TIMER_PRESETS
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.TimerRecord
+import app.nursemate.core.model.TimerReplica
+import app.nursemate.core.model.mergedWith
+import app.nursemate.core.model.withTimers
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,6 +45,13 @@ private val Context.timerDataStore: DataStore<Preferences> by preferencesDataSto
  */
 interface TimerStore {
     val timers: Flow<List<CareTimer>>
+
+    /**
+     * 상대에게 보낼 복제본 — 타이머에 판번호와 지운 자리표까지 붙은 것.
+     *
+     * 화면은 [timers] 만 보면 되고, 이건 동기화 계층이 쓴다.
+     */
+    val replica: Flow<TimerReplica>
     val presets: Flow<List<TimerPreset>>
     val alertMode: Flow<AlertMode>
 
@@ -70,21 +82,33 @@ interface TimerStore {
     suspend fun mutateTimers(transform: (List<CareTimer>) -> List<CareTimer>)
 
     suspend fun updateTimers(value: List<CareTimer>)
+
+    /**
+     * 상대가 보낸 복제본을 합쳐 넣는다.
+     *
+     * @return 무언가 바뀌었으면 true. **false 면 다시 발행하지 않는다** — 그래야 서로
+     *   되받는 무한 루프가 끊긴다.
+     */
+    suspend fun mergeReplica(incoming: TimerReplica): Boolean
     suspend fun updatePresets(value: List<TimerPreset>)
     suspend fun updateAlertMode(value: AlertMode)
 }
 
 @Singleton
-internal class DataStoreTimerStore @Inject constructor(@param:ApplicationContext private val context: Context) :
-    TimerStore {
+internal class DataStoreTimerStore @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    @param:ReplicaOrigin private val origin: String,
+    private val clock: TimerClock
+) : TimerStore {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val timerListSerializer = ListSerializer(CareTimer.serializer())
+    private val recordListSerializer = ListSerializer(TimerRecord.serializer())
     private val presetListSerializer = ListSerializer(TimerPreset.serializer())
 
-    override val timers: Flow<List<CareTimer>> = context.timerDataStore.data.map { prefs ->
-        decode(prefs[KEY_TIMERS], timerListSerializer, emptyList())
-    }
+    override val replica: Flow<TimerReplica> = context.timerDataStore.data.map(::readReplica)
+
+    override val timers: Flow<List<CareTimer>> = replica.map { it.timers }
 
     /**
      * 프리셋 — 저장된 값이 없으면 **기본 6종을 시드**해 내보낸다(spec §생성).
@@ -114,13 +138,43 @@ internal class DataStoreTimerStore @Inject constructor(@param:ApplicationContext
     /** `edit` 한 번 안에서 읽고 쓴다 — DataStore 가 이 블록을 직렬화해 준다. */
     override suspend fun mutateTimers(transform: (List<CareTimer>) -> List<CareTimer>) {
         context.timerDataStore.edit { prefs ->
-            val current = decode(prefs[KEY_TIMERS], timerListSerializer, emptyList())
-            prefs[KEY_TIMERS] = json.encodeToString(timerListSerializer, transform(current))
+            val current = readReplica(prefs)
+            val next = current.withTimers(transform(current.timers), clock.now())
+            if (next != current) writeReplica(prefs, next)
         }
     }
 
-    override suspend fun updateTimers(value: List<CareTimer>) {
-        context.timerDataStore.edit { it[KEY_TIMERS] = json.encodeToString(timerListSerializer, value) }
+    override suspend fun updateTimers(value: List<CareTimer>) = mutateTimers { value }
+
+    override suspend fun mergeReplica(incoming: TimerReplica): Boolean {
+        var changed = false
+        context.timerDataStore.edit { prefs ->
+            val current = readReplica(prefs)
+            val next = current.mergedWith(incoming, clock.now())
+            changed = next != current
+            if (changed) writeReplica(prefs, next)
+        }
+        return changed
+    }
+
+    /**
+     * 저장된 복제본. 없으면 **옛 저장분(타이머 목록만 있던 시절)을 첫 판으로 올려 받는다.**
+     *
+     * 읽기에서는 디스크를 건드리지 않는다 — 실제 이관은 다음 쓰기 때 [writeReplica] 가 한다.
+     * 자리표가 없는 목록이라 여기서 `now` 는 쓰이지 않고, 그래서 읽을 때마다 같은 값이 나온다.
+     */
+    private fun readReplica(prefs: Preferences): TimerReplica {
+        prefs[KEY_RECORDS]?.let {
+            return TimerReplica(origin, decode(it, recordListSerializer, emptyList()))
+        }
+        val legacy = decode(prefs[KEY_TIMERS], timerListSerializer, emptyList())
+        return TimerReplica(origin).withTimers(legacy, clock.now())
+    }
+
+    /** ⚠️ **옛 키를 지운다.** 남겨 두면 다음에 읽을 때 이관이 다시 돌아 지운 타이머가 살아난다. */
+    private fun writeReplica(prefs: MutablePreferences, replica: TimerReplica) {
+        prefs[KEY_RECORDS] = json.encodeToString(recordListSerializer, replica.records)
+        prefs.remove(KEY_TIMERS)
     }
 
     override suspend fun updatePresets(value: List<TimerPreset>) {
@@ -141,7 +195,10 @@ internal class DataStoreTimerStore @Inject constructor(@param:ApplicationContext
     }
 
     private companion object {
+        /** 옛 키 — 타이머 목록만 있던 시절. 읽기 전용이고, 한 번 쓰면 지운다. */
         val KEY_TIMERS = stringPreferencesKey("timers")
+
+        val KEY_RECORDS = stringPreferencesKey("records")
         val KEY_PRESETS = stringPreferencesKey("presets")
         val KEY_ALERT_MODE = stringPreferencesKey("alert_mode")
     }
