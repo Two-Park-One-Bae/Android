@@ -47,7 +47,7 @@ class StartPresetAction : ActionCallback {
             !claimStart(context, glanceId) ->
                 Log.i(TAG, "방금 시작해 이 탭은 넘긴다 (${parameters[PRESET_ID_PARAM]})")
 
-            else -> startAndShow(context, glanceId, entry, preset)
+            else -> startAndShow(entry, preset)
         }
     }
 
@@ -88,38 +88,8 @@ class StartPresetAction : ActionCallback {
         return entry.presetRepository().presets.first().firstOrNull { it.id == presetId }
     }
 
-    /**
-     * 시작하고 「시작됨」을 켠다. 시각은 [claimStart] 가 이미 찍었다.
-     *
-     * ⚠️ **되돌리기를 여기서 기다리면 안 된다.** 브로드캐스트는 같은 리시버에 **직렬로**
-     * 전달돼서, 콜백이 2초를 붙잡고 있으면 **두 번째 탭이 그 2초 뒤에야 평가된다** —
-     * 중복을 막으려고 둔 창이 정작 판정 시점에는 닫혀 있고, 그 사이 [claimStart] 가 찍은
-     * 값도 지워져 있다. 실기기 로그로 확인했다(두 번째 수신이 정확히 +2102ms, `prev=0`).
-     * 그래서 콜백은 곧바로 끝내고 되돌리기만 밖에서 재운다.
-     */
-    private suspend fun startAndShow(
-        context: Context,
-        glanceId: GlanceId,
-        entry: PresetWidgetEntryPoint,
-        preset: TimerPreset
-    ) {
+    private suspend fun startAndShow(entry: PresetWidgetEntryPoint, preset: TimerPreset) {
         entry.timerRepository().start(preset)
-        PresetWidget().update(context, glanceId)
-        scheduleRevert(context.applicationContext, glanceId)
-    }
-
-    /**
-     * [FEEDBACK_MS] 뒤에 「시작됨」을 되돌린다.
-     *
-     * 프로세스가 그사이 죽으면 표시가 남지만, 판정이 시각 비교라 **탭이 막히지는 않는다**
-     * (다음 갱신에서 그림도 돌아온다). 리시버를 붙잡는 것보다 이쪽이 낫다.
-     */
-    private fun scheduleRevert(appContext: Context, glanceId: GlanceId) {
-        revertScope.launch {
-            delay(FEEDBACK_MS)
-            updateAppWidgetState(appContext, glanceId) { it.remove(PresetWidgetSlot.STARTED_AT) }
-            PresetWidget().update(appContext, glanceId)
-        }
     }
 
     private companion object {
@@ -127,11 +97,15 @@ class StartPresetAction : ActionCallback {
     }
 }
 
-/** 「시작됨」이 머무는 시간이자, 그동안 두 번째 탭을 막는 창. */
+/**
+ * 두 번째 탭을 막는 창.
+ *
+ * 예전에는 이 시간 동안 위젯에 「시작됨」을 띄웠는데, 탭에서 화면에 그려지기까지 492ms 가
+ * 걸려 실효가 없어 표시는 걷어냈다(실기기 측정). **중복을 막는 창으로는 그대로 쓴다.**
+ */
 internal const val FEEDBACK_MS = 2_000L
 
 /** 「시작됨」 되돌리기 전용. 리시버 수명 밖에서 재운다 — 이유는 [StartPresetAction] 참고. */
-private val revertScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
 internal val PRESET_ID_PARAM = ActionParameters.Key<String>("preset_id")
 

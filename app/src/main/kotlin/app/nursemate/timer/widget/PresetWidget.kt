@@ -41,6 +41,7 @@ import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.formatDuration
+import kotlinx.coroutines.flow.first
 
 /**
  * 지정 프리셋 위젯 — 정본 `타이머 / 위젯 — 잠금화면 시안 비교`.
@@ -75,23 +76,25 @@ class PresetWidget : GlanceAppWidget() {
         // 매번 다시 찾아야 위젯이 지워진 프리셋을 계속 들고 있지 않는다.
         val presets = entry.presetRepository().presets
 
+        // ⚠️ **첫 값을 여기서 기다린다.** 컴포지션 안에서 `initial = emptyList()` 로 두면
+        // Glance 가 **그 빈 프레임을 그대로 런처에 보낸다** — 슬롯 id 는 맞는데 목록이 비어
+        // 위젯이 「프리셋 미지정」으로 한 번 그려졌다가 뒤늦게 제 값으로 바뀐다.
+        // 실기기 로그: `그림 slot=default-0 찾음=null 목록=0` → 205ms 뒤 `찾음=AST 목록=8`.
+        val initial = presets.first()
+
         provideContent {
             val slotId = currentState(PresetWidgetSlot.PRESET_ID)
-            // 방금 시작했는가. 되돌리는 갱신을 놓쳐도 시각을 비교하므로 계속 켜져 있지 않는다.
-            val startedAt = currentState(PresetWidgetSlot.STARTED_AT) ?: 0L
-            val justStarted = System.currentTimeMillis() - startedAt < FEEDBACK_MS
             // Glance 컴포지션은 위젯이 살아 있는 동안 계속 돈다 — 앱에서 프리셋을 고치면
             // 위젯도 따라 바뀐다.
             //
             // ⚠️ 목록을 통째로 받아 여기서 고른다. `presets.map { ... }` 처럼 컴포지션 안에서
             // 흐름을 새로 만들면 다시 그릴 때마다 구독이 끊겼다 붙어 값이 초기값으로 돌아간다.
-            val list by presets.collectAsState(initial = emptyList())
+            val list by presets.collectAsState(initial = initial)
             val preset = list.firstOrNull { it.id == slotId }
 
             GlanceTheme {
                 PresetButton(
                     preset = preset,
-                    justStarted = justStarted,
                     action = tapAction(context, appWidgetId, preset, ready)
                 )
             }
@@ -115,12 +118,11 @@ private fun tapAction(context: Context, appWidgetId: Int, preset: TimerPreset?, 
 }
 
 /** 위젯이 보여 주는 세 가지 상태. 분기를 한 곳에 모아 두면 색·아이콘이 서로 어긋나지 않는다. */
-private enum class SlotState { EMPTY, STARTED, READY }
+private enum class SlotState { EMPTY, READY }
 
 private val SlotState.icon: Int
     get() = when (this) {
         SlotState.EMPTY -> DsR.drawable.nm_ic_plus
-        SlotState.STARTED -> DsR.drawable.nm_ic_check
         SlotState.READY -> DsR.drawable.nm_ic_timer
     }
 
@@ -128,29 +130,22 @@ private val SlotState.icon: Int
 private val SlotState.accent: Color
     get() = when (this) {
         SlotState.EMPTY -> NmColor.Neutral.C400
-        SlotState.STARTED -> NmColor.Success.C600
         SlotState.READY -> NmColor.Primary.C600
     }
 
 private val SlotState.valueColor: Color
     get() = when (this) {
         SlotState.EMPTY -> NmColor.Neutral.C500
-        SlotState.STARTED -> NmColor.Success.C600
         SlotState.READY -> NmColor.Neutral.C900
     }
 
 @Composable
-private fun PresetButton(preset: TimerPreset?, justStarted: Boolean, action: Action) {
+private fun PresetButton(preset: TimerPreset?, action: Action) {
     // 사용자가 셀 하나로 줄여 놓을 수 있다. 좁으면 정본이 4개 나열에서 쓴 한 단계 작은 값으로.
     val narrow = LocalSize.current.width < NARROW_WIDTH
-    val state = when {
-        preset == null -> SlotState.EMPTY
-        justStarted -> SlotState.STARTED
-        else -> SlotState.READY
-    }
+    val state = if (preset == null) SlotState.EMPTY else SlotState.READY
     val duration = when (state) {
         SlotState.EMPTY -> EMPTY_VALUE
-        SlotState.STARTED -> STARTED_VALUE
         SlotState.READY -> formatDuration(checkNotNull(preset).durationSeconds)
     }
 
@@ -223,6 +218,5 @@ private const val LONG_DURATION = 7
 /** 정본이 4개(≈81pt)에서 한 단계 줄인 값을 dp 로 옮긴 것. */
 private val NARROW_WIDTH = 96.dp
 
-private const val STARTED_VALUE = "시작됨"
 private const val EMPTY_LABEL = "프리셋 미지정"
 private const val EMPTY_VALUE = "지정하기"
