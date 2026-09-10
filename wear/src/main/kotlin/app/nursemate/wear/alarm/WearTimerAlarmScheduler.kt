@@ -1,5 +1,6 @@
 package app.nursemate.wear.alarm
 
+import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -45,6 +46,10 @@ class WearTimerAlarmScheduler @Inject constructor(@param:ApplicationContext priv
      * 이미 지난 시각이면 0 으로 눌러 즉시 울린다 — 음수로 넘기면 시스템이 조용히 버린다.
      * 같은 요청 코드라 다시 부르면 이전 예약을 덮어쓴다.
      */
+    // 린트는 `SCHEDULE_EXACT_ALARM` 만 찾고 `USE_EXACT_ALARM` 을 인정하지 않는다.
+    // 실기기에서 실제로 허용되는 것을 확인했다 —
+    // `exactAllowReason=policy_permission`, `window=0`(삼성 기본 워치 타이머와 같은 값).
+    @SuppressLint("MissingPermission")
     override fun schedule(timer: CareTimer) {
         val manager = alarmManager ?: return
         val remaining = (timer.endAtEpochMillis - System.currentTimeMillis()).coerceAtLeast(0)
