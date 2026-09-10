@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -206,12 +207,15 @@ private fun PresetPage(
         ) {
             item { ListHeader { Text("프리셋", style = WearTimerType.Header) } }
             item {
+                // ⚠️ **`fillMaxSize` 를 쓰면 안 된다.** 세로로 스크롤되는 목록 안에서는 높이
+                // 제약이 무한이라, 이 한 줄이 화면 전체를 요구해 측정할 때마다 목록 길이가
+                // 흔들린다 — 스크롤이 위아래로 튕겼다(실기기 확인).
                 Text(
                     text = "누르면 바로 시작됩니다",
                     style = WearTimerType.Hint,
                     color = WearTimerColors.Muted,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
             items(presets, key = { it.id }) { preset ->
