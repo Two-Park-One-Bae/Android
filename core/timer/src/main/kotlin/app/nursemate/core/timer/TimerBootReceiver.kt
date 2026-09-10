@@ -1,10 +1,9 @@
-package app.nursemate.timer.alarm
+package app.nursemate.core.timer
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +19,11 @@ import kotlinx.coroutines.launch
  *
  * [TimerRepository.restore] 가 판단을 다 갖고 있다. 이미 만료한 것은 RINGING 으로 올리고
  * 재예약하지 않으며, 아직 안 끝난 것만 다시 건다.
+ *
+ * ## 폰과 워치가 같은 것을 쓴다
+ * `core:timer` 의 매니페스트에 등록해 두어 **두 앱 모두 자동으로 갖는다.** 워치도 자기
+ * 타이머를 갖게 된 뒤로는 워치 재부팅에서도 같은 문제가 생기기 때문이다 — 워치만 차고
+ * 있는데 재부팅되면 되살릴 사람이 없다.
  */
 @AndroidEntryPoint
 class TimerBootReceiver : BroadcastReceiver() {
@@ -38,7 +42,7 @@ class TimerBootReceiver : BroadcastReceiver() {
             try {
                 repository.restore()
             } catch (t: Throwable) {
-                Log.e("TimerAlarm", "부팅 후 알람 복원 실패", t)
+                Log.e("NM445", "부팅 후 알람 복원 실패", t)
             } finally {
                 pending.finish()
             }

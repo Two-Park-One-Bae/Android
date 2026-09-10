@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.CareTimerTransitions
-import app.nursemate.core.model.PresetSnapshot
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
@@ -45,9 +44,6 @@ class WearTimerViewModel @Inject constructor(
     private val store: WearPresetStore,
     private val tiles: TileInstallation
 ) : ViewModel() {
-
-    /** 프리셋을 실어 오는 통로. 타이머는 더 이상 여기서 오지 않는다. */
-    val snapshot: StateFlow<PresetSnapshot?> = store.snapshot
 
     val presets: StateFlow<List<TimerPreset>> = store.snapshot
         .map { it?.presets.orEmpty() }
