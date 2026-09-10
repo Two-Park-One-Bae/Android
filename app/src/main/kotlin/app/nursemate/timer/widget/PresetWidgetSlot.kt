@@ -51,6 +51,7 @@ internal interface PresetWidgetEntryPoint {
     fun presetRepository(): TimerPresetRepository
     fun timerRepository(): TimerRepository
     fun permissions(): TimerPermissions
+    fun slotStore(): PresetWidgetSlotStore
 }
 
 internal fun Context.timerWidgetEntryPoint(): PresetWidgetEntryPoint =

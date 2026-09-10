@@ -3,11 +3,13 @@ package app.nursemate
 import android.app.Application
 import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
+import app.nursemate.core.data.timer.TimerPresetRepository
 import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
 import app.nursemate.timer.sync.TimerSnapshotPublisher
+import app.nursemate.timer.widget.PresetWidgetRefresher
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -19,6 +21,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -46,6 +50,9 @@ class NurseMateApplication :
 
     @Inject
     lateinit var snapshotPublisher: TimerSnapshotPublisher
+
+    @Inject
+    lateinit var timerPresets: TimerPresetRepository
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -99,6 +106,15 @@ class NurseMateApplication :
             // 워치에 상태를 계속 흘려보낸다(NM-445). 복원 뒤에 켜야 첫 스냅샷이
             // 현재 시각에 맞춰진 목록을 담는다.
             snapshotPublisher.start(applicationScope)
+        }
+
+        // 앱 안에서 프리셋을 고치면 위젯도 따라 바뀌어야 한다. 지정 화면은 자기가 직접
+        // 그리지만(그쪽이 더 빠르다), 이름·시간 수정이나 삭제는 여기로만 들어온다.
+        applicationScope.launch {
+            timerPresets.presets
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { PresetWidgetRefresher.refreshAll(this@NurseMateApplication) }
         }
     }
 

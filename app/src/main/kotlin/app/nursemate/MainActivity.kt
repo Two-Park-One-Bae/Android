@@ -9,14 +9,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.navigation.NurseMateApp
 import app.nursemate.timer.alarm.TimerAlarmIntents
 import app.nursemate.timer.sync.TimerSnapshotPublisher
-import app.nursemate.timer.widget.PresetWidget
 import app.nursemate.timer.widget.PresetWidgetLaunch
+import app.nursemate.timer.widget.PresetWidgetRefresher
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -98,7 +97,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         lifecycleScope.launch {
-            PresetWidget().updateAll(this@MainActivity)
+            PresetWidgetRefresher.refreshAll(this@MainActivity)
             // 권한은 흐름이 아니라 그때그때 묻는 값이라, 목록이 그대로면 워치가 옛 판정을
             // 계속 들고 있는다. 앱을 떠나는 이 지점에서 한 번 맞춰 보낸다.
             snapshotPublisher.publishNow()

@@ -119,6 +119,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 위젯 탭 — 앱을 열지 않고 바로 시작한다. -->
+                <action android:name="app.nursemate.timer.widget.START" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
