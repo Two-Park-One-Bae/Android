@@ -21,9 +21,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         askNotificationPermission()
+        // 타일의 [더 보기] 는 프리셋 페이지를 곧장 연다 — 타일에 다 못 담은 나머지를
+        // 보러 오는 길이라 활성 페이지에서 한 번 더 쓸게 하면 헛걸음이다.
+        val openPresets = intent?.getBooleanExtra(EXTRA_OPEN_PRESETS, false) == true
         setContent {
-            MaterialTheme { NurseMateWearApp() }
+            MaterialTheme { NurseMateWearApp(openPresets = openPresets) }
         }
+    }
+
+    companion object {
+        /** 타일에서 [더 보기] 를 눌렀을 때. 프리셋 페이지로 연다. */
+        const val EXTRA_OPEN_PRESETS = "open_presets"
     }
 
     /**

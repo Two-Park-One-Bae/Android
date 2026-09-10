@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
  * 글꼴 크기 설정을 따라야 하고(WO-V1), 핵심 텍스트 최소 크기 요건이 있다(WO-V14).
  */
 @Composable
-fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
+fun NurseMateWearApp(openPresets: Boolean = false, viewModel: WearTimerViewModel = hiltViewModel()) {
     // 화면을 열 때마다 기기에 남아 있는 마지막 스냅샷을 한 번 당겨온다.
     // 앱이 꺼져 있는 동안 리스너가 못 받았어도 DataItem 은 최신이라, 열자마자 맞는 걸 본다.
     // 옛 값이 와도 `newerOf` 가 무시하므로 되돌아가는 일은 없다.
@@ -72,7 +72,7 @@ fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
     val now by viewModel.now.collectAsStateWithLifecycle()
     val pending by viewModel.pending.collectAsStateWithLifecycle()
 
-    val pagerState = rememberPagerState { PAGE_COUNT }
+    val pagerState = rememberPagerState(initialPage = if (openPresets) PAGE_PRESETS else PAGE_ACTIVE) { PAGE_COUNT }
 
     // 시작이 폰에서 확인되면 활성 페이지로 돌아간다 — 방금 만든 타이머를 바로 보여 준다.
     LaunchedEffect(Unit) {
