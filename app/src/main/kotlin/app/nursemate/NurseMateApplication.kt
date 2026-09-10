@@ -7,6 +7,7 @@ import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
+import app.nursemate.timer.sync.TimerSnapshotPublisher
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -42,6 +43,9 @@ class NurseMateApplication :
 
     @Inject
     lateinit var timerRepository: TimerRepository
+
+    @Inject
+    lateinit var snapshotPublisher: TimerSnapshotPublisher
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -91,6 +95,10 @@ class NurseMateApplication :
 
             // 복원이 실패해도 진행 중 표시는 켠다 — 저장된 타이머가 있으면 보여 줘야 한다.
             ongoingNotifier.start(applicationScope)
+
+            // 워치에 상태를 계속 흘려보낸다(NM-445). 복원 뒤에 켜야 첫 스냅샷이
+            // 현재 시각에 맞춰진 목록을 담는다.
+            snapshotPublisher.start(applicationScope)
         }
     }
 

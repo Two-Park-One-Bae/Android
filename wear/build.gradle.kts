@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.nursemate.android.application)
     alias(libs.plugins.nursemate.android.application.compose)
+    // 폰과 같은 방식으로 의존성을 잇는다 — 스냅샷 리스너(서비스)와 화면이 **같은 상태**를
+    // 봐야 해서, 전역 객체 대신 주입으로 묶는다.
+    alias(libs.plugins.nursemate.hilt)
 }
 
 android {
@@ -32,6 +35,7 @@ dependencies {
     implementation(projects.core.datalayer)
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
