@@ -142,7 +142,7 @@ class CareTimerTransitionsTest {
      * `docs/SPEC-FEEDBACK.md` 와 [CareTimer.alarmTitle] 주석에 있다.
      */
     @Test
-    fun `알람 제목은 spec 의 「❗ [분류] 라벨」 이다`() {
+    fun `알람 제목은 spec 의 대괄호 분류 표기를 따른다`() {
         val timer = CareTimerTransitions.start(
             preset.copy(label = "수혈 바이탈", category = TimerCategory.TREATMENT),
             "t1",
