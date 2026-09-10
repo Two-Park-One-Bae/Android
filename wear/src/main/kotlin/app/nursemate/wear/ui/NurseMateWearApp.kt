@@ -35,6 +35,9 @@ import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import androidx.wear.compose.navigation.SwipeDismissableNavHost
+import androidx.wear.compose.navigation.composable
+import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import app.nursemate.core.model.TimerState
 import app.nursemate.wear.R
 import kotlinx.coroutines.launch
@@ -76,7 +79,49 @@ fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
     }
     val scope = rememberCoroutineScope()
 
+    val navController = rememberSwipeDismissableNavController()
+
     AppScaffold {
+        // 뒤로 가기는 오른쪽 스와이프다 — 워치의 표준 제스처라 뒤로 버튼을 두지 않는다.
+        SwipeDismissableNavHost(navController = navController, startDestination = ROUTE_LIST) {
+            composable(ROUTE_LIST) { TimerPages(pagerState, viewModel, navController) }
+            composable("$ROUTE_DETAIL/{$ARG_TIMER_ID}") { entry ->
+                val id = entry.arguments?.getString(ARG_TIMER_ID).orEmpty()
+                val timer = snapshot?.timers?.firstOrNull { it.id == id }
+
+                // 다른 데서 끝났으면 목록으로 돌린다.
+                // ⚠️ **스냅샷을 아직 못 받았을 때는 나가지 않는다.** 그때도 timer 가 null 이라,
+                // 구분하지 않으면 앱을 켜자마자 화면이 튕긴다.
+                LaunchedEffect(snapshot, timer) {
+                    if (snapshot != null && timer == null) navController.popBackStack()
+                }
+                timer?.let {
+                    TimerDetailScreen(
+                        timer = it,
+                        now = now,
+                        pending = pending == it.id,
+                        onBack = { navController.popBackStack() },
+                        onPauseOrResume = { viewModel.pauseOrResume(it) },
+                        onStop = { viewModel.stop(it) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimerPages(
+    pagerState: androidx.wear.compose.foundation.pager.PagerState,
+    viewModel: WearTimerViewModel,
+    navController: androidx.navigation.NavController
+) {
+    val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
+    val now by viewModel.now.collectAsStateWithLifecycle()
+    val pending by viewModel.pending.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    Box {
         // Scaffold 는 곡선 페이지 인디케이터만 얹는다. 실제 스와이프는 안쪽 Pager 가 한다.
         HorizontalPagerScaffold(pagerState = pagerState) {
             HorizontalPager(state = pagerState) { page ->
@@ -86,6 +131,7 @@ fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
                         now = now,
                         pending = pending,
                         onComplete = viewModel::complete,
+                        onOpen = { navController.navigate("$ROUTE_DETAIL/${it.id}") },
                         onGoToPresets = { scope.launch { pagerState.animateScrollToPage(PAGE_PRESETS) } }
                     )
 
@@ -106,6 +152,7 @@ private fun ActivePage(
     now: Long,
     pending: String?,
     onComplete: (app.nursemate.core.model.CareTimer) -> Unit,
+    onOpen: (app.nursemate.core.model.CareTimer) -> Unit,
     onGoToPresets: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
@@ -133,7 +180,7 @@ private fun ActivePage(
                             onComplete = { onComplete(timer) }
                         )
                     } else {
-                        RunningTimerCard(timer = timer, now = now)
+                        RunningTimerCard(timer = timer, now = now, onOpen = { onOpen(timer) })
                     }
                 }
             }
@@ -236,6 +283,10 @@ private fun EmptyActive(onGoToPresets: () -> Unit) {
 
 /** 힌트 탭 영역 모서리. 정본에 없는 값 — 누를 수 있다는 표시만 최소로 준다. */
 private val HintShape = RoundedCornerShape(12.dp)
+
+private const val ROUTE_LIST = "list"
+private const val ROUTE_DETAIL = "detail"
+private const val ARG_TIMER_ID = "timerId"
 
 private const val PAGE_ACTIVE = 0
 private const val PAGE_PRESETS = 1

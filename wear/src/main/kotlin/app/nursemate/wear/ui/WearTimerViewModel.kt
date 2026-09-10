@@ -7,6 +7,7 @@ import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerCommand
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerSnapshot
+import app.nursemate.core.model.TimerState
 import app.nursemate.wear.sync.WearTimerStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -97,6 +98,15 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
     }
 
     fun complete(timer: CareTimer) = send(timer.id, TimerCommand.Remove(timer.id))
+
+    /** W2 [일시정지/재개]. 어느 쪽인지는 현재 상태가 정한다 — 화면이 판단하지 않는다. */
+    fun pauseOrResume(timer: CareTimer) = send(
+        timer.id,
+        if (timer.state == TimerState.PAUSED) TimerCommand.Resume(timer.id) else TimerCommand.Pause(timer.id)
+    )
+
+    /** W2 [정지] — 완료와 마찬가지로 삭제다(spec §생성 → 실행). */
+    fun stop(timer: CareTimer) = send(timer.id, TimerCommand.Remove(timer.id))
 
     private fun send(key: String, command: TimerCommand) {
         _pending.value = key

@@ -46,6 +46,9 @@ internal object WearTimerColors {
     /** [완료] 글자·아이콘. 정본 `#FFFFFF`. */
     val OnWarning = Color(0xFFFFFFFF)
 
+    /** `$error-500` — [정지]. 되돌릴 수 없는 조작이라 색으로 갈라 둔다. */
+    val Danger = Color(0xFFEF4444)
+
     /** `$info-300` — 분류 「검사」. */
     val CategoryTest = Color(0xFF93C5FD)
 

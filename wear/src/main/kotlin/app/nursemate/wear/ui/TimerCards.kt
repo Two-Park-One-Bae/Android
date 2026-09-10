@@ -144,21 +144,16 @@ internal fun ExpiredTimerCard(timer: CareTimer, now: Long, pending: Boolean, onC
 /**
  * 진행 중·일시정지 행 — 정본 `W1 활성 타이머`.
  *
- * ⚠️ **아직 누를 수 없다.** 정본은 카드 탭으로 W2(조작)로 가는데 그 화면이 다음 단계라,
- * 지금 꼬리표(chevron)를 그리면 눌러도 아무 일이 없는 죽은 표시가 된다.
+ * 누르면 W2(조작)로 간다(spec §워치 "카드 탭으로 진입"). 정본의 오른쪽 꺾쇠가 그 표시다.
  */
 @Composable
-internal fun RunningTimerCard(timer: CareTimer, now: Long) {
+internal fun RunningTimerCard(timer: CareTimer, now: Long, onOpen: () -> Unit) {
     val paused = timer.state == TimerState.PAUSED
     val accent = if (paused) WearTimerColors.Muted else WearTimerColors.Primary
 
     Button(
-        onClick = {},
-        enabled = false,
-        colors = ButtonDefaults.buttonColors(
-            disabledContainerColor = WearTimerColors.Card,
-            containerColor = WearTimerColors.Card
-        ),
+        onClick = onOpen,
+        colors = ButtonDefaults.buttonColors(containerColor = WearTimerColors.Card),
         shape = RunningShape,
         contentPadding = RunningPadding,
         modifier = Modifier.fillMaxWidth()
@@ -199,6 +194,12 @@ internal fun RunningTimerCard(timer: CareTimer, now: Long) {
                 maxLines = 1
             )
         }
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_chevron_right),
+            contentDescription = null,
+            tint = WearTimerColors.Muted,
+            modifier = Modifier.size(11.dp)
+        )
     }
 }
 

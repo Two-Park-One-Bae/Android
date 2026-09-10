@@ -58,6 +58,15 @@ internal object WearTimerType {
     /** 빈 상태 제목 — 정본 22px/600(=11). **WO-V14 때문에 12sp 로 올림.** */
     val EmptyTitle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
 
+    /** W2 헤더의 처치 키워드 — 정본 27px/600. */
+    val DetailLabel = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+
+    /** W2 가운데 큰 남은 시간 — 정본 48px/700. */
+    val DetailRemaining = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+    /** W2 링 아래 전체 시간 — 정본 21px/normal. */
+    val DetailTotal = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
+
     /** 「완료」 — 정본 22px/600. */
     val Action = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 }
