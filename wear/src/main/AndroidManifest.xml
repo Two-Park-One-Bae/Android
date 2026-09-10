@@ -66,6 +66,25 @@
                 android:value="처치 타이머 만료 알림 — [완료] 를 누를 때까지 손목에 진동을 이어 준다" />
         </service>
 
+        <!--
+            워치 페이스에서 위로 쓸어 올리면 나오는 프리셋 시작 타일 (NM-445).
+
+            런처가 우리 대신 그리므로 exported 여야 하고, 아무나 붙지 못하도록
+            BIND_TILE_PROVIDER 권한을 요구한다(시스템 런처만 가진 권한이다).
+        -->
+        <service
+            android:name=".tile.PresetTileService"
+            android:label="널스메이트 타이머"
+            android:exported="true"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
         <!-- 워치 알림의 [완료]. 시스템이 보내므로 내보낼 필요는 없다. -->
         <receiver
             android:name=".alarm.WearTimerActionReceiver"

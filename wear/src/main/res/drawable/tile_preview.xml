@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    타일 고르기 화면의 미리보기. 실제 타일을 렌더링해 주지 않으므로 우리가 그려 둬야 한다.
+    지금은 자리표시로 정본 색만 맞춘 2×2 다 — 실기기 스크린샷으로 교체할 것.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#000000" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/nm_ic_timer" android:gravity="center" android:width="48dp" android:height="48dp" />
+</layer-list>

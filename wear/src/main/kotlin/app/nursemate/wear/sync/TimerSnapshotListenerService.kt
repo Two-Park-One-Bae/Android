@@ -1,11 +1,13 @@
 package app.nursemate.wear.sync
 
 import android.util.Log
+import androidx.wear.tiles.TileService
 import app.nursemate.core.datalayer.DataLayerPaths
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.decodeSnapshot
 import app.nursemate.wear.alarm.WearAlarmService
 import app.nursemate.wear.alarm.WearTimerNotifier
+import app.nursemate.wear.tile.PresetTileService
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
@@ -42,6 +44,10 @@ class TimerSnapshotListenerService : WearableListenerService() {
                     return@forEach
                 }
                 store.offer(snapshot)
+
+                // 폰에서 프리셋이 바뀌면 타일도 따라가야 한다. 타일은 우리가 그리는 게 아니라
+                // 런처가 그리므로, 다시 물어봐 달라고 알리는 수밖에 없다.
+                TileService.getUpdater(this).requestUpdate(PresetTileService::class.java)
 
                 // 앱이 꺼져 있어도 이 서비스는 깨어난다 — 만료를 알리는 자리가 여기다.
                 // 화면이 떠 있을 때만 알리면 손목에서 아무 일도 안 일어난다.
