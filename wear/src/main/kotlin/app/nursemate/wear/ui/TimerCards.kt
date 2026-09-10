@@ -159,7 +159,7 @@ internal fun RunningTimerCard(timer: CareTimer, now: Long, onOpen: () -> Unit) {
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(RingSize)) {
             CircularProgressIndicator(
-                progress = { timer.progressAt(now) },
+                progress = { timer.ringFractionAt(now) },
                 colors = ProgressIndicatorDefaults.colors(
                     indicatorColor = accent,
                     trackColor = WearTimerColors.Track

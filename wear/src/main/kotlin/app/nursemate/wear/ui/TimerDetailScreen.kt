@@ -192,7 +192,7 @@ private fun DetailHeader(timer: CareTimer, onBack: () -> Unit) {
 private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean) {
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(RingSize)) {
         CircularProgressIndicator(
-            progress = { timer.progressAt(now) },
+            progress = { timer.ringFractionAt(now) },
             colors = ProgressIndicatorDefaults.colors(
                 indicatorColor = if (paused) WearTimerColors.Muted else WearTimerColors.Primary,
                 trackColor = WearTimerColors.Track

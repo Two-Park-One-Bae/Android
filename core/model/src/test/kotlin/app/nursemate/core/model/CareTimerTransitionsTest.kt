@@ -132,9 +132,10 @@ class CareTimerTransitionsTest {
     fun `진행률은 0에서 1 사이로 잘린다`() {
         val timer = CareTimerTransitions.start(preset, "t1", t0)
 
-        assertEquals(0f, timer.progressAt(t0))
-        assertEquals(1f, timer.progressAt(t0 + 900_000L))
-        assertEquals(1f, timer.progressAt(t0 + 999_999_999L), "만료 후에도 1을 넘지 않는다")
+        // 링은 **남은 시간**만큼 찬다 — 시작에 가득, 만료에 빈다(정본 `sweepAngle -302`).
+        assertEquals(1f, timer.ringFractionAt(t0))
+        assertEquals(0f, timer.ringFractionAt(t0 + 900_000L))
+        assertEquals(0f, timer.ringFractionAt(t0 + 999_999_999L), "만료 후에도 0 아래로 안 간다")
     }
 
     /**
@@ -235,9 +236,9 @@ class CareTimerTransitionsTest {
 
         assertEquals(900 + 180, timer.durationSeconds)
         assertEquals(t0 + 1_080_000L, timer.endAtEpochMillis)
-        assertEquals(0f, timer.progressAt(t0))
+        assertEquals(1f, timer.ringFractionAt(t0))
         // 절반이 지났으면 절반만 찬다.
-        assertEquals(0.5f, timer.progressAt(t0 + 540_000L))
+        assertEquals(0.5f, timer.ringFractionAt(t0 + 540_000L))
     }
 
     @Test
@@ -324,5 +325,26 @@ class CareTimerTransitionsTest {
             CareTimerTransitions.ordered(listOf(extended, long), t0).map { it.id },
             "state·endAt 이 그대로라도 남은 시간이 바뀌면 순서가 뒤집힌다"
         )
+    }
+
+    @Test
+    fun `링은 정본 프레임과 같은 각도로 찬다`() {
+        // 정본 `DESIGN.pen` 의 `타이머 카드 — AST`: 15분 중 `12:34` 남은 상태를
+        // `sweepAngle: -302` 로 그린다. 폰 C1·워치 W1·W2 세 프레임이 같은 값이다.
+        //
+        // 이 수치를 못박아 두는 이유는, 폰과 워치가 **반대로 돌았던 적이 있어서다** —
+        // 한쪽은 뒤집어 쓰고 한쪽은 그대로 써서 실기기에서야 드러났다.
+        val timer = CareTimer(
+            id = "t1",
+            label = "AST",
+            category = TimerCategory.TEST,
+            durationSeconds = 900,
+            endAtEpochMillis = t0 + 900_000
+        )
+        val remaining754 = t0 + 900_000 - 754_000
+
+        val degrees = timer.ringFractionAt(remaining754) * 360f
+
+        assertEquals(302f, degrees, 1f, "정본 프레임의 링 각도와 다르다")
     }
 }

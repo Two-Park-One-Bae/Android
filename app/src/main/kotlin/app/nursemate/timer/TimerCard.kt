@@ -264,7 +264,7 @@ private fun ProgressRing(timer: CareTimer, now: Long) {
             drawArc(
                 color = if (paused) NmColor.Neutral.C300 else NmColor.Primary.C500,
                 startAngle = TOP_ANGLE,
-                sweepAngle = FULL_TURN * (1f - timer.progressAt(now)),
+                sweepAngle = FULL_TURN * timer.ringFractionAt(now),
                 useCenter = false,
                 topLeft = Offset(inset, inset),
                 size = arcSize,
