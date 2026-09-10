@@ -57,7 +57,13 @@ data class CareTimer(
     val remainingSeconds: Int? = null,
     val state: TimerState = TimerState.RUNNING
 ) {
-    /** 알람·표면에 쓰는 만료 제목. spec §만료·알람 — `❗ [분류] 라벨`. */
+    /**
+     * 알람·표면에 쓰는 만료 제목. spec §만료·알람 — `❗ [분류] 라벨`.
+     *
+     * ⚠️ **정본 디자인은 이것과 다르다.** 「시스템 알람 — 잠금화면」·「W3 만료」 프레임은
+     * `수혈 바이탈 종료` 로 그려져 있다. 글을 따르기로 했고, 그림을 글에 맞춰 달라는 요청은
+     * `docs/SPEC-FEEDBACK.md` 에 적어 두었다.
+     */
     val alarmTitle: String get() = "❗ [${category.label}] $label"
 
     /** @return [now] 기준 남은 초. 일시정지 중이면 멈춘 값, 만료했으면 0 */

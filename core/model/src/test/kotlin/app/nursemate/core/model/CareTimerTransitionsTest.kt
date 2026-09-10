@@ -137,8 +137,12 @@ class CareTimerTransitionsTest {
         assertEquals(1f, timer.progressAt(t0 + 999_999_999L), "만료 후에도 1을 넘지 않는다")
     }
 
+    /**
+     * spec 안에서 글과 그림이 갈렸을 때 **글을 따랐다** — 자세한 사정은
+     * `docs/SPEC-FEEDBACK.md` 와 [CareTimer.alarmTitle] 주석에 있다.
+     */
     @Test
-    fun `알람 제목은 정본 형식을 따른다`() {
+    fun `알람 제목은 spec 의 「❗ [분류] 라벨」 이다`() {
         val timer = CareTimerTransitions.start(
             preset.copy(label = "수혈 바이탈", category = TimerCategory.TREATMENT),
             "t1",
