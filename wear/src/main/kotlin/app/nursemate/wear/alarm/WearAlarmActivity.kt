@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.compose.material3.Icon
@@ -70,49 +74,43 @@ class WearAlarmActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
-        render(intent)
-        closeWhenSettled()
-    }
+        setContent {
+            // ⚠️ **인텐트에 실린 타이머 하나에 매달리지 않는다.** 그러면 나중에 울린 것이
+            // `onNewIntent` 로 앞 것을 덮고, [완료] 를 누르면 화면이 닫혀 **아직 울리는 앞
+            // 알람이 화면 없이 남는다.** spec §만료·알람은 "하나씩 순서대로"를 요구한다.
+            //
+            // 그래서 **울리는 목록을 구독해 먼저 만료한 것부터** 보여 준다. 하나를 완료하면
+            // 다음 것으로 저절로 갈아 끼워지고, 다 끝나야 화면이 닫힌다.
+            val snapshot by store.snapshot.collectAsStateWithLifecycle()
+            val ringing = remember(snapshot) {
+                snapshot?.timers.orEmpty()
+                    .filter { it.state == TimerState.RINGING }
+                    .sortedBy { it.endAtEpochMillis }
+            }
+            val current = ringing.firstOrNull()
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        render(intent)
-    }
+            LaunchedEffect(current) {
+                if (current == null) finish()
+            }
 
-    private fun render(intent: Intent?) {
-        val timerId = intent?.getStringExtra(EXTRA_TIMER_ID)
-        val title = intent?.getStringExtra(EXTRA_TITLE).orEmpty()
-        setContent { WearAlarmScreen(title = title, onComplete = { complete(timerId) }) }
-    }
-
-    /**
-     * 이 타이머가 더 이상 울리지 않으면 화면을 닫는다.
-     *
-     * [완료] 는 여기서만 눌리는 게 아니다 — 폰에서 완료하거나, 워치 알림의 [완료] 를 눌러도
-     * 타이머는 사라진다. 그때 이 화면이 남아 있으면 **이미 끝난 알람이 손목을 계속 덮는다.**
-     */
-    private fun closeWhenSettled() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                store.snapshot.collect { snapshot ->
-                    val id = intent?.getStringExtra(EXTRA_TIMER_ID) ?: return@collect
-                    val stillRinging = snapshot?.timers.orEmpty()
-                        .any { it.id == id && it.state == TimerState.RINGING }
-                    if (!stillRinging) finish()
-                }
+            if (current != null) {
+                WearAlarmScreen(
+                    title = current.alarmTitle,
+                    onComplete = { complete(current.id) }
+                )
             }
         }
     }
 
-    private fun complete(timerId: String?) {
-        if (timerId == null) {
-            finish()
-            return
-        }
-        lifecycleScope.launch {
-            if (store.send(TimerCommand.Remove(timerId))) finish()
-        }
+    /**
+     * 폰에 삭제 명령을 보낸다.
+     *
+     * 화면은 여기서 닫지 않는다 — 폰이 처리하면 스냅샷이 바뀌고, 남은 것이 있으면 그것으로
+     * 갈아 끼워지고 없으면 위에서 닫는다. 명령이 전달되지 않으면 화면이 그대로 남아
+     * 사용자가 다시 누를 수 있다.
+     */
+    private fun complete(timerId: String) {
+        lifecycleScope.launch { store.send(TimerCommand.Remove(timerId)) }
     }
 
     companion object {

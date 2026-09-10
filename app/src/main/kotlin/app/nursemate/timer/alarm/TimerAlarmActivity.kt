@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,10 +34,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.TimerState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -66,32 +71,29 @@ class TimerAlarmActivity : ComponentActivity() {
             setTurnScreenOn(true)
         }
 
-        val timerId = intent?.getStringExtra(EXTRA_TIMER_ID)
-        val title = intent?.getStringExtra(EXTRA_TITLE).orEmpty()
-
         setContent {
-            AlarmScreen(title = title, onComplete = { complete(timerId) })
+            // ⚠️ **인텐트에 실린 타이머 하나에 매달리지 않는다.** 그러면 나중에 울린 것이
+            // 앞 것을 덮고, [완료] 를 누르면 화면이 닫혀 **아직 울리는 앞 알람이 화면 없이
+            // 남는다.** spec §만료·알람은 "하나씩 순서대로"를 요구한다.
+            val timers by repository.timers.collectAsStateWithLifecycle(emptyList())
+            val ringing = remember(timers) {
+                timers.filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
+            }
+            val current = ringing.firstOrNull()
+
+            LaunchedEffect(current) {
+                if (current == null) finish()
+            }
+
+            if (current != null) {
+                AlarmScreen(title = current.alarmTitle, onComplete = { complete(current.id) })
+            }
         }
     }
 
-    /** 새 만료가 오면 화면만 갈아 끼운다 — `singleTask` 라 액티비티가 쌓이지 않는다. */
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        val timerId = intent.getStringExtra(EXTRA_TIMER_ID)
-        val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
-        setContent { AlarmScreen(title = title, onComplete = { complete(timerId) }) }
-    }
-
-    private fun complete(timerId: String?) {
-        if (timerId == null) {
-            finish()
-            return
-        }
-        lifecycleScope.launch {
-            repository.remove(timerId)
-            finish()
-        }
+    /** 화면은 여기서 닫지 않는다 — 지워지면 목록이 바뀌고, 남은 것이 있으면 그것으로 이어진다. */
+    private fun complete(timerId: String) {
+        lifecycleScope.launch { repository.remove(timerId) }
     }
 
     companion object {
