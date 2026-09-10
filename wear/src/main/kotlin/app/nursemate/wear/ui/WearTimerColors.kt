@@ -43,6 +43,9 @@ internal object WearTimerColors {
     /** `$warning-600` — [완료] 버튼·만료 테두리. */
     val WarningStrong = Color(0xFFD97706)
 
+    /** [완료] 글자·아이콘. 정본 `#FFFFFF`. */
+    val OnWarning = Color(0xFFFFFFFF)
+
     /** `$info-300` — 분류 「검사」. */
     val CategoryTest = Color(0xFF93C5FD)
 

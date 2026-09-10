@@ -11,8 +11,11 @@ import app.nursemate.wear.sync.WearTimerStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -40,6 +43,19 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
     private val _pending = MutableStateFlow<String?>(null)
     val pending: StateFlow<String?> = _pending.asStateFlow()
 
+    /**
+     * 시작이 **폰에서 확인됐다** — 활성 페이지로 돌아갈 신호.
+     *
+     * 누르자마자 넘기지 않는다. 워치는 상태를 직접 바꾸지 않아(spec §명령) 그 순간에는
+     * 활성 페이지가 아직 비어 있다 — 빈 화면을 보여 줬다가 채우면 시작이 안 된 것처럼 보인다.
+     * 스냅샷이 돌아온 뒤에 넘긴다.
+     */
+    private val _startConfirmed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val startConfirmed: SharedFlow<Unit> = _startConfirmed.asSharedFlow()
+
+    /** 시작 명령을 보내고 스냅샷을 기다리는 중인가. */
+    private var awaitingStart = false
+
     /** 마지막 명령이 폰에 닿지 못했다. 화면이 안내한다. */
     private val _undelivered = MutableStateFlow(false)
     val undelivered: StateFlow<Boolean> = _undelivered.asStateFlow()
@@ -54,7 +70,13 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
         }
         // 스냅샷이 새로 오면 기다리던 명령이 처리된 것이다.
         viewModelScope.launch {
-            snapshot.collect { _pending.value = null }
+            snapshot.collect {
+                if (_pending.value != null && awaitingStart) {
+                    awaitingStart = false
+                    _startConfirmed.tryEmit(Unit)
+                }
+                _pending.value = null
+            }
         }
     }
 
@@ -64,7 +86,15 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
         now
     )
 
-    fun start(preset: TimerPreset) = send(preset.id, TimerCommand.Start(preset.id))
+    /** 기기에 남아 있는 마지막 스냅샷을 다시 읽는다. 화면이 열릴 때마다 부른다. */
+    fun refresh() {
+        viewModelScope.launch { store.restore() }
+    }
+
+    fun start(preset: TimerPreset) {
+        awaitingStart = true
+        send(preset.id, TimerCommand.Start(preset.id))
+    }
 
     fun complete(timer: CareTimer) = send(timer.id, TimerCommand.Remove(timer.id))
 
@@ -75,6 +105,7 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
             if (!store.send(command)) {
                 // 폰이 꺼져 있거나 연결이 끊겼다. 기다리게 두면 영영 안 풀린다.
                 _pending.value = null
+                awaitingStart = false
                 _undelivered.value = true
             }
         }

@@ -1,18 +1,28 @@
 package app.nursemate.wear.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
@@ -23,11 +33,11 @@ import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.HorizontalPagerScaffold
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
-import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import app.nursemate.core.model.TimerState
 import app.nursemate.wear.R
+import kotlinx.coroutines.launch
 
 /**
  * W1 — 좌우 2페이지: 활성 타이머 ↔ 프리셋 (정본 `타이머 워치 / W1`).
@@ -46,11 +56,25 @@ import app.nursemate.wear.R
  */
 @Composable
 fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
+    // 화면을 열 때마다 기기에 남아 있는 마지막 스냅샷을 한 번 당겨온다.
+    // 앱이 꺼져 있는 동안 리스너가 못 받았어도 DataItem 은 최신이라, 열자마자 맞는 걸 본다.
+    // 옛 값이 와도 `newerOf` 가 무시하므로 되돌아가는 일은 없다.
+    LifecycleResumeEffect(Unit) {
+        viewModel.refresh()
+        onPauseOrDispose {}
+    }
+
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val pending by viewModel.pending.collectAsStateWithLifecycle()
 
     val pagerState = rememberPagerState { PAGE_COUNT }
+
+    // 시작이 폰에서 확인되면 활성 페이지로 돌아간다 — 방금 만든 타이머를 바로 보여 준다.
+    LaunchedEffect(Unit) {
+        viewModel.startConfirmed.collect { pagerState.animateScrollToPage(PAGE_ACTIVE) }
+    }
+    val scope = rememberCoroutineScope()
 
     AppScaffold {
         // Scaffold 는 곡선 페이지 인디케이터만 얹는다. 실제 스와이프는 안쪽 Pager 가 한다.
@@ -61,7 +85,8 @@ fun NurseMateWearApp(viewModel: WearTimerViewModel = hiltViewModel()) {
                         timers = snapshot?.let { viewModel.ordered(it, now) }.orEmpty(),
                         now = now,
                         pending = pending,
-                        onComplete = viewModel::complete
+                        onComplete = viewModel::complete,
+                        onGoToPresets = { scope.launch { pagerState.animateScrollToPage(PAGE_PRESETS) } }
                     )
 
                     else -> PresetPage(
@@ -80,12 +105,13 @@ private fun ActivePage(
     timers: List<app.nursemate.core.model.CareTimer>,
     now: Long,
     pending: String?,
-    onComplete: (app.nursemate.core.model.CareTimer) -> Unit
+    onComplete: (app.nursemate.core.model.CareTimer) -> Unit,
+    onGoToPresets: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
     ScreenScaffold(scrollState = listState) { contentPadding ->
         if (timers.isEmpty()) {
-            EmptyActive()
+            EmptyActive(onGoToPresets = onGoToPresets)
         } else {
             ScalingLazyColumn(
                 state = listState,
@@ -97,11 +123,12 @@ private fun ActivePage(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                item { ListHeader { Text("타이머") } }
+                item { ListHeader { Text("타이머", style = WearTimerType.Header) } }
                 items(timers, key = { it.id }) { timer ->
                     if (timer.state == TimerState.RINGING) {
                         ExpiredTimerCard(
                             timer = timer,
+                            now = now,
                             pending = pending == timer.id,
                             onComplete = { onComplete(timer) }
                         )
@@ -126,14 +153,15 @@ private fun PresetPage(
             state = listState,
             contentPadding = contentPadding,
             autoCentering = null,
+            // 정본 `Preset List gap: 12`(애플워치 2x).
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item { ListHeader { Text("프리셋") } }
+            item { ListHeader { Text("프리셋", style = WearTimerType.Header) } }
             item {
                 Text(
                     text = "누르면 바로 시작됩니다",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = WearTimerType.Hint,
                     color = WearTimerColors.Muted,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxSize()
@@ -150,34 +178,65 @@ private fun PresetPage(
     }
 }
 
-/** 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다. */
+/**
+ * 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다.
+ *
+ * 아이콘을 **원형 판 위에** 얹는 것까지 정본이다 — 검은 배경에 회색 아이콘만 두면 떠 보인다.
+ */
 @Composable
-private fun EmptyActive() {
+private fun EmptyActive(onGoToPresets: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            painter = painterResource(R.drawable.nm_ic_timer),
-            contentDescription = null,
-            tint = WearTimerColors.Muted,
-            modifier = Modifier.size(28.dp)
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .background(WearTimerColors.Card, CircleShape)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.nm_ic_timer),
+                contentDescription = null,
+                tint = WearTimerColors.Muted,
+                modifier = Modifier.size(19.dp)
+            )
+        }
         Text(
             text = "진행 중인 타이머가 없어요",
-            style = MaterialTheme.typography.bodyMedium,
+            style = WearTimerType.EmptyTitle,
             color = WearTimerColors.OnBackground,
             textAlign = TextAlign.Center
         )
-        Text(
-            text = "프리셋에서 시작하세요 ›",
-            style = MaterialTheme.typography.bodySmall,
-            color = WearTimerColors.PrimarySoft,
-            textAlign = TextAlign.Center
-        )
+        // 정본의 화살표는 "저쪽에 있다"는 표시다. 누를 수 있게 해 두면 한 손으로 바로 넘어간다
+        // — 스와이프만 남겨 두면 장갑을 낀 손으로는 잘 안 먹는다.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier
+                .clip(HintShape)
+                .clickable(onClick = onGoToPresets)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "프리셋에서 시작하세요",
+                style = WearTimerType.EmptyHint,
+                color = WearTimerColors.PrimarySoft
+            )
+            Icon(
+                painter = painterResource(R.drawable.nm_ic_chevron_right),
+                contentDescription = null,
+                tint = WearTimerColors.PrimarySoft,
+                modifier = Modifier.size(10.dp)
+            )
+        }
     }
 }
 
+/** 힌트 탭 영역 모서리. 정본에 없는 값 — 누를 수 있다는 표시만 최소로 준다. */
+private val HintShape = RoundedCornerShape(12.dp)
+
 private const val PAGE_ACTIVE = 0
+private const val PAGE_PRESETS = 1
 private const val PAGE_COUNT = 2
