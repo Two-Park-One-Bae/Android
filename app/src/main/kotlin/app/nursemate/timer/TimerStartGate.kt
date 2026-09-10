@@ -115,7 +115,13 @@ class TimerStartGate(
     /** 아직 못 받은 권한 하나. 알림을 먼저 받는다 — 앱을 안 떠나고 끝나서다. */
     private fun nextStep(): PermissionStep? = when {
         !permissions.canPostNotifications() -> PermissionStep.NOTIFICATION
+
         !permissions.canScheduleExact() -> PermissionStep.EXACT_ALARM
+
+        // 마지막에 둔다 — 앞의 둘은 못 울리는 문제고, 이건 **잠금화면에서만** 못 보는 문제라
+        // 덜 급하다. 그래도 spec 이 "잠금: 풀스크린"을 요구하므로 건너뛰지는 않는다.
+        !permissions.canUseFullScreenIntent() -> PermissionStep.FULL_SCREEN
+
         else -> null
     }
 }

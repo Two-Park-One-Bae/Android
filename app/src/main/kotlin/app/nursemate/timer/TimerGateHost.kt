@@ -65,6 +65,9 @@ fun TimerGateHost(
                     gate.step == PermissionStep.EXACT_ALARM ->
                         settings.launch(permissions.exactAlarmSettings())
 
+                    gate.step == PermissionStep.FULL_SCREEN ->
+                        settings.launch(permissions.fullScreenIntentSettings())
+
                     else -> settings.launch(permissions.appDetailsSettings())
                 }
             },
