@@ -20,6 +20,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // ⚠️ **폰과 접미사를 맞춘다.** Data Layer 는 패키지명이 같은 앱끼리만 주고받는다.
+            // 폰 디버그가 `app.nursemate.debug` 인데 워치가 `app.nursemate` 면, 붙어 있어도
+            // 스냅샷도 명령도 도착하지 않는다 — 실기기에서 확인했다.
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(

@@ -39,7 +39,20 @@ class WearTimerStore @Inject constructor(private val transport: TimerSyncTranspo
      * `snapshotAt` 이 최신인 쪽만 채택한다(spec §충돌·삭제).
      */
     fun offer(incoming: TimerSnapshot) {
-        _snapshot.update { current -> newerOf(current, incoming) }
+        _snapshot.update { current ->
+            val next = newerOf(current, incoming)
+            if (next === incoming) {
+                Log.i(
+                    TAG,
+                    "스냅샷 반영 at=${incoming.snapshotAt} 타이머=${incoming.timers.size} " +
+                        "프리셋=${incoming.presets.size} 권한=${incoming.alarmAuthorized}"
+                )
+            } else {
+                // 옛 스냅샷이 늦게 도착한 경우다. 버리는 것도 기록해야 "왜 안 바뀌지"를 쫓을 수 있다.
+                Log.i(TAG, "옛 스냅샷을 버렸다 at=${incoming.snapshotAt} < ${current?.snapshotAt}")
+            }
+            next
+        }
     }
 
     /**
