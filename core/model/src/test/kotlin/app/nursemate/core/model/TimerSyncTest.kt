@@ -44,6 +44,8 @@ class TimerSyncTest {
 
     private fun replica() = TimerReplica(
         origin = ORIGIN_PHONE,
+        seq = 3,
+        ackSeq = 2,
         records = listOf(TimerRecord(id = timer.id, rev = 1, origin = ORIGIN_PHONE, timer = timer))
     )
 
@@ -115,12 +117,12 @@ class TimerSyncTest {
     @Test
     fun `복제본 필드는 계약 그대로다`() {
         assertEquals(
-            listOf("origin", "records"),
+            listOf("origin", "seq", "ackSeq", "records"),
             TimerReplica.serializer().descriptor.fieldNames(),
             "복제본 필드가 계약과 다르다"
         )
         assertEquals(
-            listOf("id", "rev", "origin", "timer", "removedAt"),
+            listOf("id", "rev", "origin", "timer", "removedAt", "removedSeq"),
             TimerRecord.serializer().descriptor.fieldNames(),
             "복제 기록 필드가 계약과 다르다"
         )

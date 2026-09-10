@@ -382,7 +382,7 @@ class TimerRepositoryTest {
             state = TimerState.RINGING
         )
         repo.mergeReplica(
-            TimerReplica(ORIGIN_WATCH, listOf(TimerRecord("from-watch", 1, ORIGIN_WATCH, expired)))
+            TimerReplica(ORIGIN_WATCH, records = listOf(TimerRecord("from-watch", 1, ORIGIN_WATCH, expired)))
         )
 
         assertEquals(now - 1_000, scheduler.scheduledAt("from-watch"))

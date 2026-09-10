@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.nursemate.core.model.AlertMode
@@ -164,16 +165,22 @@ internal class DataStoreTimerStore @Inject constructor(
      * 자리표가 없는 목록이라 여기서 `now` 는 쓰이지 않고, 그래서 읽을 때마다 같은 값이 나온다.
      */
     private fun readReplica(prefs: Preferences): TimerReplica {
+        val seq = prefs[KEY_SEQ] ?: 0L
+        val ack = prefs[KEY_ACK] ?: 0L
         prefs[KEY_RECORDS]?.let {
-            return TimerReplica(origin, decode(it, recordListSerializer, emptyList()))
+            return TimerReplica(origin, seq, ack, decode(it, recordListSerializer, emptyList()))
         }
         val legacy = decode(prefs[KEY_TIMERS], timerListSerializer, emptyList())
-        return TimerReplica(origin).withTimers(legacy, clock.now())
+        return TimerReplica(origin, seq, ack).withTimers(legacy, clock.now())
     }
 
     /** ⚠️ **옛 키를 지운다.** 남겨 두면 다음에 읽을 때 이관이 다시 돌아 지운 타이머가 살아난다. */
     private fun writeReplica(prefs: MutablePreferences, replica: TimerReplica) {
         prefs[KEY_RECORDS] = json.encodeToString(recordListSerializer, replica.records)
+        // ⚠️ **판 번호도 함께 남긴다.** 프로세스가 다시 떠도 이어져야 상대가 확인한 지점을
+        // 알 수 있고, 그래야 자리표를 언제 버릴지 정할 수 있다.
+        prefs[KEY_SEQ] = replica.seq
+        prefs[KEY_ACK] = replica.ackSeq
         prefs.remove(KEY_TIMERS)
     }
 
@@ -199,6 +206,12 @@ internal class DataStoreTimerStore @Inject constructor(
         val KEY_TIMERS = stringPreferencesKey("timers")
 
         val KEY_RECORDS = stringPreferencesKey("records")
+
+        /** 이 기기가 자기 기록을 고친 횟수. 상대가 이 번호로 삭제 전달을 확인한다. */
+        val KEY_SEQ = longPreferencesKey("replica_seq")
+
+        /** 상대에게서 받은 마지막 판 번호. */
+        val KEY_ACK = longPreferencesKey("replica_ack")
         val KEY_PRESETS = stringPreferencesKey("presets")
         val KEY_ALERT_MODE = stringPreferencesKey("alert_mode")
     }
