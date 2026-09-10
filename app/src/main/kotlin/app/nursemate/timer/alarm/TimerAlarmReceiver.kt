@@ -15,10 +15,10 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerState
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope

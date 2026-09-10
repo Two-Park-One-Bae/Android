@@ -7,8 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.getSystemService
-import app.nursemate.core.data.timer.TimerAlarmScheduler
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.timer.TimerAlarmScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton

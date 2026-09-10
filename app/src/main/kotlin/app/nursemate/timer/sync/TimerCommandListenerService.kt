@@ -1,11 +1,11 @@
 package app.nursemate.timer.sync
 
 import android.util.Log
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.datalayer.DataLayerPaths
 import app.nursemate.core.model.TimerCommand
 import app.nursemate.core.model.decodeCommand
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService

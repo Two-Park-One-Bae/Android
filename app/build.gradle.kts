@@ -88,6 +88,7 @@ android {
 dependencies {
     implementation(projects.core.model)
     implementation(projects.core.data)
+    implementation(projects.core.timer)
     implementation(projects.core.network)
     implementation(projects.core.vision)
     implementation(projects.core.designsystem)

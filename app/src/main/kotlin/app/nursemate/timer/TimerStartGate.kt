@@ -1,8 +1,8 @@
 package app.nursemate.timer
 
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.AlertMode
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow

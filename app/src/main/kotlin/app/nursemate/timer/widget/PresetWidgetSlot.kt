@@ -3,8 +3,8 @@ package app.nursemate.timer.widget
 import android.content.Context
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn

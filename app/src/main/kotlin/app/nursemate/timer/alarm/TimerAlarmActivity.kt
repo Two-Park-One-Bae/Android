@@ -36,10 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerState
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch

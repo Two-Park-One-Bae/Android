@@ -1,13 +1,13 @@
 package app.nursemate.timer.sync
 
 import android.util.Log
-import app.nursemate.core.data.timer.TimerClock
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.datalayer.TimerSyncTransport
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerSnapshot
+import app.nursemate.core.timer.TimerClock
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import javax.inject.Inject
 import javax.inject.Singleton

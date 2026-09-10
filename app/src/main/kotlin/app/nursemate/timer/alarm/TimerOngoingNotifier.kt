@@ -10,8 +10,8 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton

@@ -3,9 +3,9 @@ package app.nursemate
 import android.app.Application
 import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
 import app.nursemate.timer.sync.TimerSnapshotPublisher

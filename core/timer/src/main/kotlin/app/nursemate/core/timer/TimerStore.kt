@@ -1,4 +1,4 @@
-package app.nursemate.core.data.timer
+package app.nursemate.core.timer
 
 import android.content.Context
 import androidx.datastore.core.DataStore

@@ -1,4 +1,4 @@
-package app.nursemate.core.data.timer
+package app.nursemate.core.timer
 
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerCategory

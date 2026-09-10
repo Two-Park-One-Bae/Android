@@ -1,6 +1,6 @@
 package app.nursemate.timer.alarm
 
-import app.nursemate.core.data.timer.TimerAlarmScheduler
+import app.nursemate.core.timer.TimerAlarmScheduler
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn

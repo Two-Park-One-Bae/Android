@@ -14,9 +14,9 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import app.nursemate.core.data.timer.TimerPresetRepository
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.timer.TimerPresetRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch

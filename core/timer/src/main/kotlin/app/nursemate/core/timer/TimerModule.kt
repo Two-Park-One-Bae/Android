@@ -1,4 +1,4 @@
-package app.nursemate.core.data.timer
+package app.nursemate.core.timer
 
 import dagger.Binds
 import dagger.Module
