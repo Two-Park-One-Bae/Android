@@ -43,9 +43,9 @@ class MainActivity : ComponentActivity() {
     /**
      * 만료를 손목에 알리려면 알림 권한이 필요하다(Android 13+).
      *
-     * ⚠️ **거부해도 앱을 막지 않는다.** 목록을 보고 시작하는 것까지는 권한 없이 되고,
-     * 알림 권한 판정은 폰 쪽 몫이다(스냅샷의 `alarmAuthorized`). 여기서 잠그면 워치가
-     * 폰보다 엄격해져 "폰에서는 되는데 워치에서는 안 된다"가 된다.
+     * ⚠️ **거부해도 앱을 막지 않는다.** 권한이 없어도 만료는 알린다 — 알람 화면은
+     * 포그라운드 서비스가 직접 띄우고, 진동은 `VIBRATE` 만 있으면 된다. 없어지는 것은
+     * 알림 카드와 진행 중 표시뿐이라, 그걸 이유로 기능을 잠글 일이 아니다.
      */
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return

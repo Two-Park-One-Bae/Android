@@ -18,7 +18,7 @@ import kotlinx.coroutines.runBlocking
  * 앱이 꺼져 있어도 시스템이 깨워 전달한다 — 워치에서 시작한 타이머가 폰 알람까지 걸리려면
  * 이 자리에서 받아야 한다.
  *
- * `runBlocking` 인 이유는 [TimerCommandListenerService] 와 같다 — 이 메서드가 돌아오는
+ * `runBlocking` 인 이유는 폰 쪽과 같다 — 이 메서드가 돌아오는
  * 순간 서비스가 죽을 수 있어, 코루틴을 띄워 보내면 합치는 도중에 끊긴다.
  */
 @AndroidEntryPoint

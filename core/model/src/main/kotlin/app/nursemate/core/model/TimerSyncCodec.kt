@@ -17,27 +17,12 @@ private val wireJson = Json {
     encodeDefaults = false
 }
 
-fun encodeSnapshot(snapshot: TimerSnapshot): String = wireJson.encodeToString(TimerSnapshot.serializer(), snapshot)
+fun encodePresets(snapshot: PresetSnapshot): String = wireJson.encodeToString(PresetSnapshot.serializer(), snapshot)
 
 /** @return 못 읽으면 null. 옛 폰이 보낸 알 수 없는 모양이어도 워치가 죽지 않는다. */
 @Suppress("TooGenericExceptionCaught", "SwallowedException")
-fun decodeSnapshot(json: String): TimerSnapshot? = try {
-    wireJson.decodeFromString(TimerSnapshot.serializer(), json)
-} catch (e: Exception) {
-    null
-}
-
-fun encodeCommand(command: TimerCommand): String = wireJson.encodeToString(TimerCommand.serializer(), command)
-
-/**
- * @return 못 읽으면 null.
- *
- * ⚠️ **모르는 명령은 조용히 버린다.** 새 워치가 옛 폰에 보내는 경우다. 여기서 던지면
- * 리시버가 죽어 그 뒤 정상 명령까지 놓친다.
- */
-@Suppress("TooGenericExceptionCaught", "SwallowedException")
-fun decodeCommand(json: String): TimerCommand? = try {
-    wireJson.decodeFromString(TimerCommand.serializer(), json)
+fun decodePresets(json: String): PresetSnapshot? = try {
+    wireJson.decodeFromString(PresetSnapshot.serializer(), json)
 } catch (e: Exception) {
     null
 }

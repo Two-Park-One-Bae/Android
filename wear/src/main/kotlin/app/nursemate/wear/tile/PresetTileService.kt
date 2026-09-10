@@ -13,7 +13,7 @@ import androidx.wear.tiles.TileService
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.MainActivity
 import app.nursemate.wear.R
-import app.nursemate.wear.sync.WearTimerStore
+import app.nursemate.wear.sync.WearPresetStore
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,13 +37,13 @@ import kotlinx.coroutines.launch
  * 여기서 그 프리셋을 시작한 뒤 새 화면을 그려 준다.
  *
  * ## 프리셋은 폰에서 온다
- * 워치는 프리셋을 만들지 않는다. 폰이 보낸 스냅샷을 [WearTimerStore] 가 들고 있고, 프로세스가
- * 죽어 비어 있으면 [WearTimerStore.restore] 로 마지막 스냅샷을 다시 읽는다.
+ * 워치는 프리셋을 만들지 않는다. 폰이 보낸 스냅샷을 [WearPresetStore] 가 들고 있고, 프로세스가
+ * 죽어 비어 있으면 [WearPresetStore.restore] 로 마지막 스냅샷을 다시 읽는다.
  */
 @AndroidEntryPoint
 class PresetTileService : TileService() {
 
-    @Inject lateinit var store: WearTimerStore
+    @Inject lateinit var store: WearPresetStore
 
     @Inject lateinit var repository: TimerRepository
 

@@ -78,13 +78,13 @@
             보내는 쪽이 Google Play 서비스라 exported 여야 한다.
         -->
         <service
-            android:name=".sync.TimerSnapshotListenerService"
+            android:name=".sync.PresetListenerService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
                 <data
                     android:host="*"
-                    android:pathPrefix="/nursemate/timer/snapshot"
+                    android:pathPrefix="/nursemate/timer/presets"
                     android:scheme="wear" />
             </intent-filter>
         </service>

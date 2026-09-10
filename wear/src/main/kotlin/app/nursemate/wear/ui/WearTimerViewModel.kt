@@ -5,11 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.CareTimerTransitions
+import app.nursemate.core.model.PresetSnapshot
 import app.nursemate.core.model.TimerPreset
-import app.nursemate.core.model.TimerSnapshot
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
-import app.nursemate.wear.sync.WearTimerStore
+import app.nursemate.wear.sync.WearPresetStore
 import app.nursemate.wear.tile.TileInstallation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -42,12 +42,12 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class WearTimerViewModel @Inject constructor(
     private val repository: TimerRepository,
-    private val store: WearTimerStore,
+    private val store: WearPresetStore,
     private val tiles: TileInstallation
 ) : ViewModel() {
 
     /** 프리셋을 실어 오는 통로. 타이머는 더 이상 여기서 오지 않는다. */
-    val snapshot: StateFlow<TimerSnapshot?> = store.snapshot
+    val snapshot: StateFlow<PresetSnapshot?> = store.snapshot
 
     val presets: StateFlow<List<TimerPreset>> = store.snapshot
         .map { it?.presets.orEmpty() }

@@ -3,14 +3,12 @@ package app.nursemate.core.datalayer
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import app.nursemate.core.model.TimerCommand
+import app.nursemate.core.model.PresetSnapshot
 import app.nursemate.core.model.TimerReplica
-import app.nursemate.core.model.TimerSnapshot
+import app.nursemate.core.model.decodePresets
 import app.nursemate.core.model.decodeReplica
-import app.nursemate.core.model.decodeSnapshot
-import app.nursemate.core.model.encodeCommand
+import app.nursemate.core.model.encodePresets
 import app.nursemate.core.model.encodeReplica
-import app.nursemate.core.model.encodeSnapshot
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.PutDataRequest
@@ -18,7 +16,7 @@ import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.tasks.await
 
 /**
- * 폰↔워치를 오가는 실제 배선. 무엇을 주고받는지는 [TimerSnapshot]·[TimerCommand] 가 정한다.
+ * 폰↔워치를 오가는 실제 배선. 무엇을 주고받는지는 [PresetSnapshot]·[TimerCommand] 가 정한다.
  *
  * ## 상태는 DataClient, 명령은 MessageClient
  * 성격이 달라 채널을 나눈다(공식 문서 기준).
@@ -31,8 +29,6 @@ import kotlinx.coroutines.tasks.await
 class TimerSyncTransport(private val context: Context) {
 
     private val dataClient by lazy { Wearable.getDataClient(context) }
-    private val messageClient by lazy { Wearable.getMessageClient(context) }
-    private val nodeClient by lazy { Wearable.getNodeClient(context) }
 
     /**
      * 폰 → 워치. 전체 상태를 덮어쓴다.
@@ -44,9 +40,9 @@ class TimerSyncTransport(private val context: Context) {
      * `setUrgent()` — 이걸 안 붙이면 시스템이 최대 30분까지 미룰 수 있다. 타이머는 그 지연을
      * 감당하지 못한다.
      */
-    suspend fun publish(snapshot: TimerSnapshot) {
-        val request = PutDataMapRequest.create(DataLayerPaths.TIMER_SNAPSHOT).apply {
-            dataMap.putString(DataLayerPaths.KEY_SNAPSHOT_JSON, encodeSnapshot(snapshot))
+    suspend fun publishPresets(snapshot: PresetSnapshot) {
+        val request = PutDataMapRequest.create(DataLayerPaths.PRESET_SNAPSHOT).apply {
+            dataMap.putString(DataLayerPaths.KEY_PRESET_JSON, encodePresets(snapshot))
         }
         dataClient.putDataItem(request.asPutDataRequest().setUrgent()).await()
     }
@@ -57,12 +53,12 @@ class TimerSyncTransport(private val context: Context) {
      * 워치 앱이 새로 뜰 때 쓴다 — DataItem 은 앱 수명과 무관하게 남아 있어, 폰이 꺼져 있어도
      * 마지막으로 본 상태를 그릴 수 있다(spec: 연결이 끊겨도 화면이 있어야 한다).
      */
-    suspend fun latestSnapshot(): TimerSnapshot? {
-        val items = dataClient.getDataItems(pathUri(DataLayerPaths.TIMER_SNAPSHOT)).await()
+    suspend fun latestPresets(): PresetSnapshot? {
+        val items = dataClient.getDataItems(pathUri(DataLayerPaths.PRESET_SNAPSHOT)).await()
         return items.use { buffer ->
             buffer.asSequence()
-                .mapNotNull { DataMapItem.fromDataItem(it).dataMap.getString(DataLayerPaths.KEY_SNAPSHOT_JSON) }
-                .mapNotNull(::decodeSnapshot)
+                .mapNotNull { DataMapItem.fromDataItem(it).dataMap.getString(DataLayerPaths.KEY_PRESET_JSON) }
+                .mapNotNull(::decodePresets)
                 .maxByOrNull { it.snapshotAt }
         }
     }
@@ -98,34 +94,6 @@ class TimerSyncTransport(private val context: Context) {
                 .filter { it.origin != myOrigin }
                 .toList()
         }
-    }
-
-    /**
-     * 워치 → 폰. 연결된 노드 전부에 보낸다.
-     *
-     * 노드를 하나로 특정하지 않는다 — 워치가 여럿일 수도 있고, 어느 쪽이 폰인지 가리려면
-     * 능력(capability) 선언이 하나 더 필요한데 명령은 폰만 처리하므로 그냥 뿌려도 안전하다.
-     *
-     * @return 한 곳이라도 받았으면 true. 전부 실패하면 false — 호출자가 화면에 알린다.
-     */
-    @Suppress("TooGenericExceptionCaught")
-    suspend fun send(command: TimerCommand): Boolean {
-        val payload = encodeCommand(command).toByteArray()
-        val nodes = runCatching { nodeClient.connectedNodes.await() }.getOrElse {
-            Log.w(TAG, "연결된 노드를 못 읽었다", it)
-            return false
-        }
-        var delivered = false
-        nodes.forEach { node ->
-            try {
-                messageClient.sendMessage(node.id, DataLayerPaths.TIMER_COMMAND, payload).await()
-                delivered = true
-            } catch (t: Throwable) {
-                // 상대가 꺼져 있으면 여기로 온다. 다른 노드는 계속 시도한다.
-                Log.w(TAG, "명령 전달 실패 (${node.displayName})", t)
-            }
-        }
-        return delivered
     }
 
     /**

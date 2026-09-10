@@ -9,7 +9,7 @@ import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
-import app.nursemate.timer.sync.TimerSnapshotPublisher
+import app.nursemate.timer.sync.TimerPresetPublisher
 import app.nursemate.timer.widget.PresetWidgetRefresher
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -50,7 +50,7 @@ class NurseMateApplication :
     lateinit var timerRepository: TimerRepository
 
     @Inject
-    lateinit var snapshotPublisher: TimerSnapshotPublisher
+    lateinit var presetPublisher: TimerPresetPublisher
 
     @Inject
     lateinit var replicaPublisher: TimerReplicaPublisher
@@ -107,9 +107,8 @@ class NurseMateApplication :
             // 복원이 실패해도 진행 중 표시는 켠다 — 저장된 타이머가 있으면 보여 줘야 한다.
             ongoingNotifier.start(applicationScope)
 
-            // 워치에 상태를 계속 흘려보낸다(NM-445). 복원 뒤에 켜야 첫 스냅샷이
-            // 현재 시각에 맞춰진 목록을 담는다.
-            snapshotPublisher.start(applicationScope)
+            // 워치에 프리셋을 계속 흘려보낸다(NM-445).
+            presetPublisher.start(applicationScope)
 
             // 워치와 서로 맞춘다(NM-445). 스냅샷과 나란히 돈다 — 워치 화면이 아직
             // 스냅샷을 보고 있어, 워치가 자기 타이머를 갖게 되면 위쪽을 걷어낸다.
