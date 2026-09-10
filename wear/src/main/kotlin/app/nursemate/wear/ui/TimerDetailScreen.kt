@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,9 +73,12 @@ fun TimerDetailScreen(
     ) {
         DetailHeader(timer, onBack)
         ProgressRing(timer, now, paused)
+        // ⚠️ **버튼 행은 화면 폭을 다 쓰면 안 된다.** 원형이라 이 높이(화면 중심 아래
+        // 약 73dp)에서 쓸 수 있는 폭은 142dp 뿐인데 `fillMaxWidth` 는 181dp 를 쓴다 —
+        // 좌우 끝이 곡면에 먹힌다(실기기 확인). 곡면에 맞춰 좁힌다.
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
         ) {
             ActionButton(
                 icon = if (paused) R.drawable.nm_ic_play else R.drawable.nm_ic_pause,
@@ -99,9 +103,14 @@ fun TimerDetailScreen(
 /**
  * 조작 버튼.
  *
- * ⚠️ Wear `Button` 은 최소 높이 52dp 를 바깥에서 강제해 못 낮춘다. 둘을 세로로 쌓으면
- * 104dp 라 링이 설 자리가 없어, 정본 높이(30dp)를 지키려면 직접 그리는 수밖에 없다.
- * 가로 배치라 각 버튼 폭이 86dp 로 넉넉해 터치는 문제없다.
+ * ⚠️ **아이콘과 글자를 한 줄에 둔다.** 위아래로 쌓으면 48dp 가 되어 링을 그만큼 깎아야
+ * 했다(84dp 까지 내려갔었다). 한 줄이면 30dp — 정본 버튼 높이(`padding [16, 0]`)와 같고,
+ * 링도 정본 100dp 를 그대로 쓸 수 있다.
+ *
+ * 폭은 (203 − 좌우여백 22 − 사이 6) ÷ 2 ≈ 87dp. 가장 긴 「일시정지」가 아이콘 13 +
+ * 간격 4 + 글자 4자(12sp ≈ 48dp) = 65dp 라 들어간다.
+ *
+ * Wear `Button` 을 쓰지 않는 이유는 최소 높이 52dp 를 바깥에서 강제해 못 낮추기 때문이다.
  */
 @Composable
 private fun ActionButton(
@@ -112,17 +121,39 @@ private fun ActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = modifier
-            .clip(ActionShape)
-            .background(WearTimerColors.Card)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 8.dp)
+    // 보이는 알약은 37dp 지만 **누르는 영역은 그보다 넓다**(WO-V2 는 48dp 를 권한다). 그래서
+    // `clickable` 은 바깥 Box 가 갖고 배경·모서리는 안쪽 Row 가 갖는다 — 한 덩어리로 만들면
+    // 둘 중 하나를 포기하게 된다.
+    //
+    // 실기기 측정으로는 **44dp** 가 나온다(y 320~414px @340dpi). 확장분이 아래로만 붙어서
+    // 48dp 를 다 못 채운다 — 위쪽은 링이 차지한 자리라 더 못 넓힌다. 늘리려면 링을 깎아야 한다.
+    Box(
+        modifier = modifier.heightIn(min = MinTouchTarget).clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(painter = painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
-        Text(text = label, style = WearTimerType.Action, color = tint, maxLines = 1)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(ActionShape)
+                .background(WearTimerColors.Card)
+                .padding(horizontal = 4.dp, vertical = 7.dp)
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = label,
+                style = WearTimerType.ActionCompact,
+                color = tint,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -198,8 +229,14 @@ private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean) {
     }
 }
 
-/** 정본 링 200(=100dp)을 화면 비율(203/242)만큼 줄인 값. */
-private val RingSize = 84.dp
+/**
+ * 진행 링 지름 — **정본 `Progress Ring 200`(=100dp) 그대로.**
+ *
+ * 버튼을 한 줄로 줄인 덕에 정본 값이 그대로 들어간다:
+ * 24(시계) + 20(헤더) + 5 + 100 + 5 + 30(버튼) + 8 = 192dp ≤ 203dp.
+ */
+private val RingSize = 100.dp
 
 /** 정본 버튼 `cornerRadius: 30`. */
+private val MinTouchTarget = 48.dp
 private val ActionShape = RoundedCornerShape(15.dp)

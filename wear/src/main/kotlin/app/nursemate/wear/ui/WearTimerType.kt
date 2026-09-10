@@ -67,6 +67,14 @@ internal object WearTimerType {
     /** W2 링 아래 전체 시간 — 정본 21px/normal. */
     val DetailTotal = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
 
+    /**
+     * W2 의 가로 배치 버튼.
+     *
+     * 원형 곡면 때문에 버튼 행이 141dp 로 좁아, 한 버튼이 67dp 다. 「일시정지」 4자 +
+     * 아이콘 13 + 간격 4 가 들어가려면 11sp 여야 한다.
+     */
+    val ActionCompact = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+
     /** 「완료」 — 정본 22px/600. */
     val Action = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 }
