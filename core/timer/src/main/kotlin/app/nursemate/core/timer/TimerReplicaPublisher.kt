@@ -1,10 +1,8 @@
-package app.nursemate.timer.sync
+package app.nursemate.core.timer
 
 import android.util.Log
 import app.nursemate.core.datalayer.TimerSyncTransport
 import app.nursemate.core.model.TimerReplica
-import app.nursemate.core.timer.ReplicaOrigin
-import app.nursemate.core.timer.TimerRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -16,11 +14,10 @@ import kotlinx.coroutines.launch
  * 이 기기가 아는 타이머를 상대에게 내놓고, 상대가 내놓은 것을 합친다.
  *
  * ## 스냅샷과 무엇이 다른가
- * [TimerSnapshotPublisher] 는 **폰이 주인**이라는 전제로 전체를 덮어쓴다. 이건 양쪽이 각자
- * 갖고 있다 맞추는 구조라, 받은 것을 **합쳐서** 자기 것으로 만든다.
+ * 옛 스냅샷 경로(`:app` 의 `TimerSnapshotPublisher`)는 **폰이 주인**이라는 전제로 전체를
+ * 덮어쓴다. 이건 양쪽이 각자 갖고 있다 맞추는 구조라, 받은 것을 **합쳐서** 자기 것으로 만든다.
  *
- * 둘은 당분간 나란히 돈다 — 워치 화면이 아직 스냅샷을 보고 있어서다. 워치가 자기 타이머를
- * 갖게 되면 스냅샷 쪽을 걷어낸다.
+ * 폰·워치가 **같은 코드를 쓴다.** 자기가 누구인지만 [ReplicaOrigin] 으로 다르게 받는다.
  *
  * ## 되받는 발행을 끊는 자리
  * 합친 결과가 갖고 있던 것과 같으면 **아무것도 내놓지 않는다.** 그러지 않으면

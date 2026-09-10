@@ -74,10 +74,9 @@ internal fun categoryColor(category: TimerCategory): Color = when (category) {
  * 끄는 길은 [완료] 하나다(폰 C1 과 같은 규칙). 일시정지·정지는 만료 전에만 의미가 있다.
  */
 @Composable
-internal fun ExpiredTimerCard(timer: CareTimer, now: Long, pending: Boolean, onComplete: () -> Unit) {
+internal fun ExpiredTimerCard(timer: CareTimer, now: Long, onComplete: () -> Unit) {
     Card(
         onClick = onComplete,
-        enabled = !pending,
         colors = CardDefaults.cardColors(containerColor = WearTimerColors.ExpiredSurface),
         // 정본 `stroke: $warning-600, 1.5`. 만료 카드는 다른 카드와 확실히 갈라져 보여야 한다.
         border = BorderStroke(1.dp, WearTimerColors.WarningStrong),
@@ -212,7 +211,7 @@ internal fun RunningTimerCard(timer: CareTimer, now: Long, onOpen: () -> Unit) {
  * `Button` 은 기본 높이가 52dp 로, 터치 타깃 최소 48dp(WO-V2)를 지키는 선에서 가장 낮다.
  */
 @Composable
-internal fun PresetCard(preset: TimerPreset, pending: Boolean, onStart: () -> Unit) {
+internal fun PresetCard(preset: TimerPreset, onStart: () -> Unit) {
     // ⚠️ **`CompactButton` 이 아니라 `Button` 이다 — 되돌리지 말 것.**
     // `CompactButton` 은 보이는 높이가 32dp 로 정본(31.9dp)과 딱 맞지만, 터치 타깃 48dp
     // (WO-V2)를 채우려고 위아래 8dp 씩 투명 여백을 붙인다 — 간격을 0 으로 둬도 행 사이가
@@ -229,12 +228,11 @@ internal fun PresetCard(preset: TimerPreset, pending: Boolean, onStart: () -> Un
             Icon(
                 painter = painterResource(R.drawable.nm_ic_circle_play),
                 contentDescription = null,
-                tint = if (pending) WearTimerColors.Muted else WearTimerColors.Primary,
+                tint = WearTimerColors.Primary,
                 // 정본 30px(=15dp). 행이 52dp 라 그대로 두면 비어 보여 20dp 로 키웠다.
                 modifier = Modifier.size(20.dp)
             )
         },
-        enabled = !pending,
         colors = ButtonDefaults.buttonColors(containerColor = WearTimerColors.Card),
         shape = PresetShape,
         // 정본 `padding: [16, 18]`. 내용은 Button 이 세로 가운데로 잡아 준다.

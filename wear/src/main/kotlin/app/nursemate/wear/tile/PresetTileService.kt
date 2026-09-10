@@ -10,7 +10,7 @@ import androidx.wear.protolayout.material3.materialScope
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
-import app.nursemate.core.model.TimerCommand
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.MainActivity
 import app.nursemate.wear.R
 import app.nursemate.wear.sync.WearTimerStore
@@ -45,6 +45,8 @@ class PresetTileService : TileService() {
 
     @Inject lateinit var store: WearTimerStore
 
+    @Inject lateinit var repository: TimerRepository
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onDestroy() {
@@ -56,13 +58,14 @@ class PresetTileService : TileService() {
         scope.future {
             val clicked = requestParams.currentState.lastClickableId
                 .takeIf { it.isNotEmpty() && it != MORE_ID }
-            if (clicked != null && claimStart(clicked)) {
-                store.send(TimerCommand.Start(clicked))
-                scheduleRevert()
-            }
-
             if (store.snapshot.value == null) store.restore()
             val presets = store.snapshot.value?.presets.orEmpty()
+
+            // 타일에서도 워치가 직접 시작한다 — 폰에 묻지 않는다.
+            if (clicked != null && claimStart(clicked)) {
+                presets.firstOrNull { it.id == clicked }?.let { repository.start(it) }
+                scheduleRevert()
+            }
 
             val layout = materialScope(this@PresetTileService, requestParams.deviceConfiguration) {
                 presetTileLayout(presets, justStarted(), ::startClickable, ::moreClickable)

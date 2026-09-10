@@ -3,20 +3,28 @@ package app.nursemate.wear.sync
 import android.util.Log
 import app.nursemate.core.datalayer.DataLayerPaths
 import app.nursemate.core.model.decodeReplica
+import app.nursemate.core.timer.TimerReplicaPublisher
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.runBlocking
 
 /**
- * 폰이 내놓은 복제본을 받는다.
+ * 폰이 내놓은 복제본을 받아 합친다.
  *
- * ## 지금은 받았다는 것만 적는다
- * 워치가 자기 타이머를 갖는 것은 다음 단계다. 화면·알람은 아직 스냅샷을 보고 돌아간다.
- * 여기서 미리 붙여 두는 이유는 **전달 경로가 실제로 뚫렸는지를 기기에서 확인**하기
- * 위해서다 — 저장·알람까지 한꺼번에 바꾸면 안 될 때 어디가 문제인지 가릴 수 없다.
+ * 앱이 꺼져 있어도 시스템이 깨워 전달한다 — 폰에서 시작한 타이머가 **워치 알람까지**
+ * 걸리려면 이 자리에서 받아야 한다. 합치는 김에 `TimerRepository` 가 예약을 다시 맞춘다.
+ *
+ * `runBlocking` 인 이유는 폰 쪽과 같다 — 이 메서드가 돌아오는 순간 서비스가 죽을 수 있어,
+ * 코루틴을 띄워 보내면 합치는 도중에 끊긴다.
  */
+@AndroidEntryPoint
 class TimerReplicaListenerService : WearableListenerService() {
+
+    @Inject lateinit var publisher: TimerReplicaPublisher
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         dataEvents.use { events ->
@@ -30,9 +38,7 @@ class TimerReplicaListenerService : WearableListenerService() {
                     Log.w(TAG, "읽을 수 없는 복제본을 버렸다")
                     return@forEach
                 }
-                val live = replica.records.count { !it.isRemoved }
-                val gone = replica.records.size - live
-                Log.i(TAG, "복제본 수신 (${replica.origin}) 살아있음=$live 자리표=$gone")
+                runBlocking { publisher.ingest(replica) }
             }
         }
     }

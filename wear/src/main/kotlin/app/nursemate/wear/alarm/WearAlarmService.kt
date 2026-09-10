@@ -14,14 +14,16 @@ import androidx.core.content.getSystemService
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TIMER_SUSTAINED_VIBRATION
 import app.nursemate.core.model.TimerState
-import app.nursemate.wear.sync.WearTimerStore
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * 만료가 울리는 동안 도는 포그라운드 서비스 — spec §워치 "울림 방식과 무관하게 항상 햅틱".
@@ -37,13 +39,13 @@ import kotlinx.coroutines.launch
  * ([androidx.wear.ongoing.OngoingActivity]) 같은 서비스가 그 몫도 한다.
  *
  * ## 스스로 멈춘다
- * 스냅샷에서 울리는 타이머가 사라지면 끝낸다 — 폰에서 [완료] 를 눌러도, 워치에서 눌러도
- * 결국 스냅샷으로 돌아오므로 멈추는 길이 하나다.
+ * 저장소에서 울리는 타이머가 사라지면 끝낸다 — 워치에서 [완료] 를 눌러도, 폰에서 눌러
+ * 복제로 넘어와도 결국 같은 저장소를 거치므로 멈추는 길이 하나다.
  */
 @AndroidEntryPoint
 class WearAlarmService : Service() {
 
-    @Inject lateinit var store: WearTimerStore
+    @Inject lateinit var repository: TimerRepository
 
     @Inject lateinit var notifier: WearTimerNotifier
 
@@ -54,7 +56,7 @@ class WearAlarmService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val ringing = store.snapshot.value?.timers.orEmpty().filter { it.state == TimerState.RINGING }
+        val ringing = runBlocking { repository.timers.first() }.filter { it.state == TimerState.RINGING }
         if (ringing.isEmpty()) {
             stopSelf()
             return START_NOT_STICKY
@@ -87,13 +89,9 @@ class WearAlarmService : Service() {
     private fun watch() {
         if (watching?.isActive == true) return
         watching = scope.launch {
-            store.snapshot.collect { snapshot ->
-                val ringing = snapshot?.timers.orEmpty().filter { it.state == TimerState.RINGING }
-                if (ringing.isEmpty()) {
-                    stopSelf()
-                } else {
-                    notifier.sync(snapshot?.timers.orEmpty())
-                }
+            repository.timers.collect { timers ->
+                val ringing = timers.filter { it.state == TimerState.RINGING }
+                if (ringing.isEmpty()) stopSelf() else notifier.sync(timers)
             }
         }
     }

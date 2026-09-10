@@ -5,8 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import app.nursemate.core.model.TimerCommand
-import app.nursemate.wear.sync.WearTimerStore
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +24,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class WearTimerActionReceiver : BroadcastReceiver() {
 
-    @Inject lateinit var store: WearTimerStore
+    @Inject lateinit var repository: TimerRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -38,11 +37,9 @@ class WearTimerActionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         scope.launch {
             try {
-                if (!store.send(TimerCommand.Remove(timerId))) {
-                    // 폰이 꺼져 있거나 연결이 끊겼다. 알림은 그대로 두는 게 맞다 —
-                    // 지우면 사용자는 처리된 줄 알고 넘어간다.
-                    Log.w(TAG, "완료 명령을 폰에 전달하지 못했다 ($timerId)")
-                }
+                // 워치가 자기 저장소를 직접 고친다 — 폰에 닿지 않아도 완료는 완료다.
+                // 폰에는 복제가 알리고, 끊겨 있으면 다시 붙을 때 전해진다.
+                repository.remove(timerId)
             } catch (t: Throwable) {
                 Log.e(TAG, "완료 처리 실패 ($timerId)", t)
             } finally {

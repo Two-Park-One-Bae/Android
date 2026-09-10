@@ -26,6 +26,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!--
+        워치가 **자기 만료 알람을 직접 건다** (NM-445).
+
+        ⚠️ 폰은 `SCHEDULE_EXACT_ALARM` 을 쓰고 사용자에게 설정을 유도하지만, 워치에서
+        같은 걸 하면 **워치 설정으로 들어가라고 해야 한다** — 손목에서 할 일이 아니다.
+        `USE_EXACT_ALARM` 은 자동 허용이고, Play 정책이 허용하는 범주가 「타이머·알람」인데
+        이 앱이 정확히 그것이다. 삼성 기본 워치 타이머도 같은 권한을 쓴다(실기기 확인:
+        `com.samsung.android.watch.timer` → `USE_EXACT_ALARM: granted=true`).
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!--
         만료 알람 화면을 화면이 꺼진 손목 위로 띄운다 (NM-444).
 
         ⚠️ **이게 없으면 시스템이 `fullScreenIntent` 를 조용히 버린다** — 워치 로그에
@@ -79,7 +89,16 @@
             </intent-filter>
         </service>
 
-        <!-- 폰이 내놓은 타이머 복제본을 받는다 (NM-445). 지금은 수신 확인용 로그만 남긴다. -->
+        <!-- 폰이 내놓은 타이머 복제본을 받아 합친다 (NM-445). -->
+        <!--
+            워치가 건 만료 알람이 울리는 자리 (NM-445).
+
+            `exported=false` — 우리 스케줄러만 부른다. 밖에서 만료를 흉내 낼 이유가 없다.
+        -->
+        <receiver
+            android:name=".alarm.WearTimerAlarmReceiver"
+            android:exported="false" />
+
         <service
             android:name=".sync.TimerReplicaListenerService"
             android:exported="true">

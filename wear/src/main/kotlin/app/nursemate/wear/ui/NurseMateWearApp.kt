@@ -71,13 +71,12 @@ fun NurseMateWearApp(openPresets: Boolean = false, viewModel: WearTimerViewModel
         onPauseOrDispose {}
     }
 
-    val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
+    val timers by viewModel.timers.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
-    val pending by viewModel.pending.collectAsStateWithLifecycle()
 
     val pagerState = rememberPagerState(initialPage = if (openPresets) PAGE_PRESETS else PAGE_ACTIVE) { PAGE_COUNT }
 
-    // 시작이 폰에서 확인되면 활성 페이지로 돌아간다 — 방금 만든 타이머를 바로 보여 준다.
+    // 시작하면 활성 페이지로 돌아간다 — 방금 만든 타이머를 바로 보여 준다.
     LaunchedEffect(Unit) {
         viewModel.startConfirmed.collect { pagerState.animateScrollToPage(PAGE_ACTIVE) }
     }
@@ -91,19 +90,17 @@ fun NurseMateWearApp(openPresets: Boolean = false, viewModel: WearTimerViewModel
             composable(ROUTE_LIST) { TimerPages(pagerState, viewModel, navController) }
             composable("$ROUTE_DETAIL/{$ARG_TIMER_ID}") { entry ->
                 val id = entry.arguments?.getString(ARG_TIMER_ID).orEmpty()
-                val timer = snapshot?.timers?.firstOrNull { it.id == id }
+                val timer = timers.firstOrNull { it.id == id }
 
-                // 다른 데서 끝났으면 목록으로 돌린다.
-                // ⚠️ **스냅샷을 아직 못 받았을 때는 나가지 않는다.** 그때도 timer 가 null 이라,
-                // 구분하지 않으면 앱을 켜자마자 화면이 튕긴다.
-                LaunchedEffect(snapshot, timer) {
-                    if (snapshot != null && timer == null) navController.popBackStack()
+                // 다른 데서 끝났으면 목록으로 돌린다. 저장소를 직접 보므로 "아직 못 받았다"는
+                // 상태가 없다 — 없으면 정말 없는 것이다.
+                LaunchedEffect(timer) {
+                    if (timer == null) navController.popBackStack()
                 }
                 timer?.let {
                     TimerDetailScreen(
                         timer = it,
                         now = now,
-                        pending = pending == it.id,
                         onBack = { navController.popBackStack() },
                         onPauseOrResume = { viewModel.pauseOrResume(it) },
                         onStop = { viewModel.stop(it) }
@@ -120,10 +117,9 @@ private fun TimerPages(
     viewModel: WearTimerViewModel,
     navController: androidx.navigation.NavController
 ) {
-    val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
+    val timers by viewModel.timers.collectAsStateWithLifecycle()
+    val presets by viewModel.presets.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
-    val pending by viewModel.pending.collectAsStateWithLifecycle()
-    val notice by viewModel.notice.collectAsStateWithLifecycle()
     val tilePrompt by viewModel.tilePrompt.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
@@ -133,73 +129,19 @@ private fun TimerPages(
             HorizontalPager(state = pagerState) { page ->
                 when (page) {
                     PAGE_ACTIVE -> ActivePage(
-                        timers = snapshot?.let { viewModel.ordered(it, now) }.orEmpty(),
+                        timers = viewModel.ordered(timers, now),
                         now = now,
-                        pending = pending,
                         onComplete = viewModel::complete,
                         onOpen = { navController.navigate("$ROUTE_DETAIL/${it.id}") },
                         onGoToPresets = { scope.launch { pagerState.animateScrollToPage(PAGE_PRESETS) } }
                     )
 
-                    else -> PresetPage(
-                        presets = snapshot?.presets.orEmpty(),
-                        pending = pending,
-                        onStart = viewModel::start
-                    )
+                    else -> PresetPage(presets = presets, onStart = viewModel::start)
                 }
             }
         }
 
-        // 워치가 스스로 못 푸는 사정은 화면을 덮어 알린다 — 폰을 꺼내야 풀린다.
-        notice?.let { NoticeOverlay(notice = it, onDismiss = viewModel::dismissNotice) }
-
-        // 타일 안내는 사정이 아니라 권유라 뒤에 온다 — 폰을 꺼내야 하는 안내가 있으면 그게 먼저다.
-        if (notice == null) {
-            tilePrompt?.let { TileAddDialog(prompt = it, onDismiss = viewModel::dismissTilePrompt) }
-        }
-    }
-}
-
-/** [WearNotice] 를 화면 위에 덮는다. 손목에서 할 수 있는 것은 확인뿐이라 버튼도 하나다. */
-@Composable
-private fun NoticeOverlay(notice: WearNotice, onDismiss: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(WearTimerColors.Background)
-            .padding(horizontal = 14.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = notice.title,
-            style = WearTimerType.Header,
-            color = WearTimerColors.OnBackground,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = notice.body,
-            style = WearTimerType.Hint,
-            color = WearTimerColors.Muted,
-            textAlign = TextAlign.Center,
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(17.dp))
-                .background(WearTimerColors.Card)
-                .clickable(onClick = onDismiss)
-                .padding(vertical = 9.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text("확인", style = WearTimerType.Action, color = WearTimerColors.OnBackground)
-        }
+        tilePrompt?.let { TileAddDialog(prompt = it, onDismiss = viewModel::dismissTilePrompt) }
     }
 }
 
@@ -207,7 +149,6 @@ private fun NoticeOverlay(notice: WearNotice, onDismiss: () -> Unit) {
 private fun ActivePage(
     timers: List<app.nursemate.core.model.CareTimer>,
     now: Long,
-    pending: String?,
     onComplete: (app.nursemate.core.model.CareTimer) -> Unit,
     onOpen: (app.nursemate.core.model.CareTimer) -> Unit,
     onGoToPresets: () -> Unit
@@ -233,7 +174,6 @@ private fun ActivePage(
                         ExpiredTimerCard(
                             timer = timer,
                             now = now,
-                            pending = pending == timer.id,
                             onComplete = { onComplete(timer) }
                         )
                     } else {
@@ -248,7 +188,6 @@ private fun ActivePage(
 @Composable
 private fun PresetPage(
     presets: List<app.nursemate.core.model.TimerPreset>,
-    pending: String?,
     onStart: (app.nursemate.core.model.TimerPreset) -> Unit
 ) {
     val listState = rememberScalingLazyListState()
@@ -275,11 +214,7 @@ private fun PresetPage(
                 )
             }
             items(presets, key = { it.id }) { preset ->
-                PresetCard(
-                    preset = preset,
-                    pending = pending == preset.id,
-                    onStart = { onStart(preset) }
-                )
+                PresetCard(preset = preset, onStart = { onStart(preset) })
             }
         }
     }

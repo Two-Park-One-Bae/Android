@@ -39,6 +39,8 @@ android {
 dependencies {
     implementation(projects.core.model)
     implementation(projects.core.datalayer)
+    // 워치도 폰과 같은 저장·상태 전이·복제 코드를 쓴다. 자기가 누구인지만 다르게 준다.
+    implementation(projects.core.timer)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)

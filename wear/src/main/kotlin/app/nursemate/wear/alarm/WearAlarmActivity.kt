@@ -38,10 +38,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.Text
-import app.nursemate.core.model.TimerCommand
 import app.nursemate.core.model.TimerState
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.R
-import app.nursemate.wear.sync.WearTimerStore
 import app.nursemate.wear.ui.WearTimerColors
 import app.nursemate.wear.ui.WearTimerType
 import dagger.hilt.android.AndroidEntryPoint
@@ -66,7 +65,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class WearAlarmActivity : ComponentActivity() {
 
-    @Inject lateinit var store: WearTimerStore
+    @Inject lateinit var repository: TimerRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,11 +80,9 @@ class WearAlarmActivity : ComponentActivity() {
             //
             // 그래서 **울리는 목록을 구독해 먼저 만료한 것부터** 보여 준다. 하나를 완료하면
             // 다음 것으로 저절로 갈아 끼워지고, 다 끝나야 화면이 닫힌다.
-            val snapshot by store.snapshot.collectAsStateWithLifecycle()
-            val ringing = remember(snapshot) {
-                snapshot?.timers.orEmpty()
-                    .filter { it.state == TimerState.RINGING }
-                    .sortedBy { it.endAtEpochMillis }
+            val timers by repository.timers.collectAsStateWithLifecycle(initialValue = emptyList())
+            val ringing = remember(timers) {
+                timers.filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
             }
             val current = ringing.firstOrNull()
 
@@ -110,7 +107,7 @@ class WearAlarmActivity : ComponentActivity() {
      * 사용자가 다시 누를 수 있다.
      */
     private fun complete(timerId: String) {
-        lifecycleScope.launch { store.send(TimerCommand.Remove(timerId)) }
+        lifecycleScope.launch { repository.remove(timerId) }
     }
 
     companion object {

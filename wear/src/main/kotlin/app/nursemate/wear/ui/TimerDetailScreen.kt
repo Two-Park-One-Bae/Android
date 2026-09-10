@@ -56,7 +56,6 @@ import app.nursemate.wear.R
 fun TimerDetailScreen(
     timer: CareTimer,
     now: Long,
-    pending: Boolean,
     onBack: () -> Unit,
     onPauseOrResume: () -> Unit,
     onStop: () -> Unit
@@ -84,7 +83,6 @@ fun TimerDetailScreen(
                 icon = if (paused) R.drawable.nm_ic_play else R.drawable.nm_ic_pause,
                 label = if (paused) "재개" else "일시정지",
                 tint = WearTimerColors.OnBackground,
-                enabled = !pending,
                 onClick = onPauseOrResume,
                 modifier = Modifier.weight(1f)
             )
@@ -92,7 +90,6 @@ fun TimerDetailScreen(
                 icon = R.drawable.nm_ic_square,
                 label = "정지",
                 tint = WearTimerColors.Danger,
-                enabled = !pending,
                 onClick = onStop,
                 modifier = Modifier.weight(1f)
             )
@@ -113,14 +110,7 @@ fun TimerDetailScreen(
  * Wear `Button` 을 쓰지 않는 이유는 최소 높이 52dp 를 바깥에서 강제해 못 낮추기 때문이다.
  */
 @Composable
-private fun ActionButton(
-    icon: Int,
-    label: String,
-    tint: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun ActionButton(icon: Int, label: String, tint: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     // 보이는 알약은 37dp 지만 **누르는 영역은 그보다 넓다**(WO-V2 는 48dp 를 권한다). 그래서
     // `clickable` 은 바깥 Box 가 갖고 배경·모서리는 안쪽 Row 가 갖는다 — 한 덩어리로 만들면
     // 둘 중 하나를 포기하게 된다.
@@ -128,7 +118,7 @@ private fun ActionButton(
     // 실기기 측정으로는 **44dp** 가 나온다(y 320~414px @340dpi). 확장분이 아래로만 붙어서
     // 48dp 를 다 못 채운다 — 위쪽은 링이 차지한 자리라 더 못 넓힌다. 늘리려면 링을 깎아야 한다.
     Box(
-        modifier = modifier.heightIn(min = MinTouchTarget).clickable(enabled = enabled, onClick = onClick),
+        modifier = modifier.heightIn(min = MinTouchTarget).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Row(

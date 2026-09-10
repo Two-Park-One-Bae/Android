@@ -3,10 +3,7 @@ package app.nursemate.wear.sync
 import android.util.Log
 import androidx.wear.tiles.TileService
 import app.nursemate.core.datalayer.DataLayerPaths
-import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.decodeSnapshot
-import app.nursemate.wear.alarm.WearAlarmService
-import app.nursemate.wear.alarm.WearTimerNotifier
 import app.nursemate.wear.tile.PresetTileService
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
@@ -16,17 +13,17 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * 폰이 보낸 스냅샷을 받는다.
+ * 폰이 보낸 스냅샷을 받는다 — **이제는 프리셋 때문에 남아 있다.**
  *
- * 앱이 꺼져 있어도 시스템이 이 서비스를 깨워 전달한다 — 그래서 사용자가 워치 앱을 열었을 때
- * 이미 최신 상태다.
+ * 타이머는 복제본(`TimerReplicaListenerService`)으로 오간다. 프리셋 편집은 폰 전용이라
+ * (spec §워치) 여전히 한 방향이고, 그 통로가 이 스냅샷이다.
+ *
+ * 앱이 꺼져 있어도 시스템이 이 서비스를 깨워 전달한다.
  */
 @AndroidEntryPoint
 class TimerSnapshotListenerService : WearableListenerService() {
 
     @Inject lateinit var store: WearTimerStore
-
-    @Inject lateinit var notifier: WearTimerNotifier
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         dataEvents.use { events ->
@@ -48,18 +45,6 @@ class TimerSnapshotListenerService : WearableListenerService() {
                 // 폰에서 프리셋이 바뀌면 타일도 따라가야 한다. 타일은 우리가 그리는 게 아니라
                 // 런처가 그리므로, 다시 물어봐 달라고 알리는 수밖에 없다.
                 TileService.getUpdater(this).requestUpdate(PresetTileService::class.java)
-
-                // 앱이 꺼져 있어도 이 서비스는 깨어난다 — 만료를 알리는 자리가 여기다.
-                // 화면이 떠 있을 때만 알리면 손목에서 아무 일도 안 일어난다.
-                val timers = store.snapshot.value?.timers.orEmpty()
-                val ringing = timers.filter { it.state == TimerState.RINGING }
-                if (ringing.isEmpty()) {
-                    notifier.sync(timers)
-                } else {
-                    // 진동을 [완료] 까지 이어 주려면 프로세스가 살아 있어야 한다.
-                    // 알림도 그 서비스가 포그라운드로 띄운다.
-                    WearAlarmService.start(this, ringing)
-                }
             }
         }
     }
