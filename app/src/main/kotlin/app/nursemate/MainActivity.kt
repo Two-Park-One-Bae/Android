@@ -9,10 +9,15 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
+import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.navigation.NurseMateApp
 import app.nursemate.timer.alarm.TimerAlarmIntents
+import app.nursemate.timer.widget.PresetWidget
+import app.nursemate.timer.widget.PresetWidgetLaunch
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -26,9 +31,27 @@ class MainActivity : ComponentActivity() {
      */
     private val openTimerTab = mutableStateOf(false)
 
+    /**
+     * 위젯에서 시작하려던 프리셋 — 권한이 없어 앱으로 넘어온 경우다(spec §위젯).
+     *
+     * 여기까지 들고 오지 않으면 앱은 타이머 탭만 열고 만다. 사용자는 왜 열렸는지 모른 채
+     * 위젯으로 돌아가 다시 눌러야 한다.
+     */
+    private val startPresetId = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openTimerTab.value = intent.wantsTimerTab()
+        // ⚠️ 위젯 요청은 **새로 열렸을 때만** 읽는다. onStartPresetHandled 가 비우는 것은
+        // 상태뿐이고 인텐트 extra 는 남아서, 액티비티가 다시 만들어질 때 여기서 또 읽으면
+        // **같은 타이머가 하나 더 생긴다**(화면 회전, 프로세스 사망 후 복귀).
+        // extra 를 지우는 것으로는 못 막는다 — 사망 복귀 때 인텐트가 새로 복원된다.
+        //
+        // 바로 윗줄의 탭 이동은 여러 번 해도 결과가 같아 이 가드를 두지 않는다. 오히려
+        // 시작 도중 재생성되면 요청이 사라져, 알람을 눌렀는데 홈에 남는다.
+        if (savedInstanceState == null) {
+            startPresetId.value = intent.widgetPresetId()
+        }
 
         // 시스템 바 뒤까지 그린다. 없으면 상·하단에 회색 띠가 남는다.
         //
@@ -53,17 +76,35 @@ class MainActivity : ComponentActivity() {
             NurseMateTheme {
                 NurseMateApp(
                     openTimerTab = openTimerTab.value,
-                    onTimerTabOpened = { openTimerTab.value = false }
+                    onTimerTabOpened = { openTimerTab.value = false },
+                    startPresetId = startPresetId.value,
+                    onStartPresetHandled = { startPresetId.value = null }
                 )
             }
         }
+    }
+
+    /**
+     * 앱을 떠날 때 위젯을 한 번 맞춘다.
+     *
+     * 위젯은 **그릴 때 권한을 판정해** 탭 동작을 정한다(콜백으로 바로 시작 / 앱 열기).
+     * 그런데 권한을 받는 자리는 앱이라, 받고 나서 위젯을 다시 그리지 않으면 위젯은 계속
+     * "권한 없음"인 줄 알고 앱만 연다. 앱을 떠나는 순간이 그 판정을 새로 하기에 가장 정확한
+     * 지점이다 — 곧 위젯이 보이는 화면으로 나가는 참이다.
+     */
+    override fun onStop() {
+        super.onStop()
+        lifecycleScope.launch { PresetWidget().updateAll(this@MainActivity) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.wantsTimerTab()) openTimerTab.value = true
+        intent.widgetPresetId()?.let { startPresetId.value = it }
     }
 }
 
 private fun Intent.wantsTimerTab(): Boolean = getBooleanExtra(TimerAlarmIntents.EXTRA_OPEN_TIMER, false)
+
+private fun Intent.widgetPresetId(): String? = getStringExtra(PresetWidgetLaunch.EXTRA_PRESET_ID)

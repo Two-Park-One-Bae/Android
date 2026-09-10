@@ -117,6 +117,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
+    // 위젯(NM-443). Glance 는 RemoteViews 를 Compose 문법으로 감싼 것이라, 위젯 안에서
+    // 쓸 수 있는 것은 여전히 RemoteViews 가 지원하는 범위뿐이다.
+    implementation(libs.androidx.glance.appwidget)
+
     // 후보·세부정보의 낱알 이미지(CDN). 없는 품목은 404 가 오므로 폴백이 필요하다(NM-347).
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

@@ -58,7 +58,13 @@ import app.nursemate.timer.TimerListRoute
  * 탭바가 필요한 루트는 각자 [NmTabScaffold] 로 감싼다.
  */
 @Composable
-fun NurseMateApp(openTimerTab: Boolean = false, onTimerTabOpened: () -> Unit = {}, modifier: Modifier = Modifier) {
+fun NurseMateApp(
+    openTimerTab: Boolean = false,
+    onTimerTabOpened: () -> Unit = {},
+    startPresetId: String? = null,
+    onStartPresetHandled: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val colors = NmTheme.semanticColors
     val sessionViewModel: AppSessionViewModel = hiltViewModel()
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
@@ -86,6 +92,8 @@ fun NurseMateApp(openTimerTab: Boolean = false, onTimerTabOpened: () -> Unit = {
                 entry = entry,
                 openTimerTab = openTimerTab,
                 onTimerTabOpened = onTimerTabOpened,
+                startPresetId = startPresetId,
+                onStartPresetHandled = onStartPresetHandled,
                 onUserUpdated = sessionViewModel::onUserUpdated
             )
         }
@@ -121,6 +129,8 @@ private fun NmNavHost(
     entry: AppEntry,
     openTimerTab: Boolean,
     onTimerTabOpened: () -> Unit,
+    startPresetId: String?,
+    onStartPresetHandled: () -> Unit,
     onUserUpdated: (User) -> Unit
 ) {
     val navController = rememberNavController()
@@ -256,7 +266,7 @@ private fun NmNavHost(
                 onPillTabLimitReached = { pillTabLimitReached = true },
                 onDismissPillTabLimit = { pillTabLimitReached = false }
             ) {
-                TimerListRoute()
+                TimerListRoute(startPresetId = startPresetId, onStartPresetHandled = onStartPresetHandled)
             }
         }
 
