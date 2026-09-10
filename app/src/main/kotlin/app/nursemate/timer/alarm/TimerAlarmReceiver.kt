@@ -47,16 +47,24 @@ class TimerAlarmReceiver : BroadcastReceiver() {
     // 리시버를 붙잡고 있다가 ANR 로 죽인다. 그래서 여기서는 넓게 잡는 게 맞다.
     @Suppress("TooGenericExceptionCaught")
     override fun onReceive(context: Context, intent: Intent) {
-        val timerId = intent.getStringExtra(EXTRA_TIMER_ID) ?: return
         val pending = goAsync()
+        val timerId = intent.getStringExtra(EXTRA_TIMER_ID)
 
         scope.launch {
             try {
                 when (intent.action) {
-                    ACTION_FIRE -> fire(context, timerId)
-                    ACTION_COMPLETE, ACTION_STOP -> repository.remove(timerId)
-                    ACTION_PAUSE -> repository.pause(timerId)
-                    ACTION_RESUME -> repository.resume(timerId)
+                    // 진행 중 알림은 묶음이라 어느 타이머인지 없다.
+                    ACTION_ONGOING_DISMISSED -> restoreOngoing(context)
+
+                    ACTION_ALARM_DISMISSED -> timerId?.let { restoreAlarm(context, it) }
+
+                    ACTION_FIRE -> timerId?.let { fire(context, it) }
+
+                    ACTION_COMPLETE, ACTION_STOP -> timerId?.let { repository.remove(it) }
+
+                    ACTION_PAUSE -> timerId?.let { repository.pause(it) }
+
+                    ACTION_RESUME -> timerId?.let { repository.resume(it) }
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "알람 처리 실패 ($timerId)", t)
@@ -64,6 +72,35 @@ class TimerAlarmReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+
+    /**
+     * 알림창의 [지우기] 로 사라진 표시를 되돌린다.
+     *
+     * `setOngoing(true)` 는 **스와이프만** 막는다(실기기 확인). [지우기] 버튼은 그것까지
+     * 걷어 가는데, 우리 알림은 지워지고 나면 **다음 상태 변화까지 다시 뜨지 않는다** —
+     * 목록이 바뀔 때만 그리기 때문이다. 2시간짜리가 돌고 있으면 2시간 동안 앱 밖에
+     * 아무 표시가 없다.
+     *
+     * 만료 알림은 더하다. spec 이 "[완료] 를 누를 때까지 지속"이라고 못박았는데 [지우기]
+     * 한 번에 사라지면 그대로 놓친다.
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun restoreOngoing(context: Context) {
+        if (!canPostNotifications(context)) return
+        val timers = repository.timers.first()
+        val notification = TimerOngoingNotification.build(context, timers, System.currentTimeMillis())
+        if (notification == null) return
+        Log.i(TAG, "[지우기] 로 사라진 진행 중 표시를 되돌린다 (${timers.size}개)")
+        NotificationManagerCompat.from(context).notify(TimerOngoingNotification.ID, notification)
+    }
+
+    /** 아직 울리는 중이면 만료 알림을 되돌린다. 이미 [완료] 됐으면 그대로 둔다. */
+    private suspend fun restoreAlarm(context: Context, timerId: String) {
+        val timer = repository.timers.first().firstOrNull { it.id == timerId } ?: return
+        if (timer.state != TimerState.RINGING) return
+        Log.i(TAG, "[지우기] 로 사라진 만료 알림을 되돌린다 ($timerId)")
+        notify(context, timer)
     }
 
     private suspend fun fire(context: Context, timerId: String) {
@@ -107,6 +144,8 @@ class TimerAlarmReceiver : BroadcastReceiver() {
             .setOngoing(true)
             .setAutoCancel(false)
             .addAction(0, COMPLETE_LABEL, complete)
+            // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
+            .setDeleteIntent(dismissPendingIntent(context, timer.id))
             // 잠금화면 풀스크린. Android 14+ 는 권한이 없으면 시스템이 헤드업으로 낮춰 표시한다.
             .setFullScreenIntent(open, true)
             .build()
@@ -132,7 +171,30 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         const val ACTION_RESUME = "app.nursemate.timer.RESUME"
         const val ACTION_STOP = "app.nursemate.timer.STOP"
 
+        /** 알림창의 [지우기] 로 사라졌을 때 시스템이 보내 준다. */
+        const val ACTION_ONGOING_DISMISSED = "app.nursemate.timer.ONGOING_DISMISSED"
+        const val ACTION_ALARM_DISMISSED = "app.nursemate.timer.ALARM_DISMISSED"
+
         const val EXTRA_TIMER_ID = "timer_id"
+
+        /** 만료 알림이 [지우기] 로 사라졌을 때 되돌리기 위한 인텐트. */
+        fun dismissPendingIntent(context: Context, timerId: String): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            AlarmManagerTimerScheduler.requestCode(timerId) + DISMISS_OFFSET,
+            Intent(context, TimerAlarmReceiver::class.java).apply {
+                action = ACTION_ALARM_DISMISSED
+                putExtra(EXTRA_TIMER_ID, timerId)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        /** 진행 중 알림(묶음)이 사라졌을 때. 타이머 하나를 가리키지 않아 고정 코드를 쓴다. */
+        fun ongoingDismissPendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            ONGOING_DISMISS_REQUEST_CODE,
+            Intent(context, TimerAlarmReceiver::class.java).setAction(ACTION_ONGOING_DISMISSED),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         /**
          * 액션마다 `PendingIntent` 요청 코드를 달리 준다.
@@ -167,5 +229,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         private const val PAUSE_OFFSET = 2
         private const val RESUME_OFFSET = 3
         private const val STOP_OFFSET = 4
+        private const val DISMISS_OFFSET = 5
+
+        /** 타이머 요청 코드와 겹치지 않도록 멀리 띄운다. */
+        private const val ONGOING_DISMISS_REQUEST_CODE = 990_001
     }
 }

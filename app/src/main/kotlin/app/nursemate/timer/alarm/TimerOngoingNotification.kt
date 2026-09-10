@@ -58,6 +58,10 @@ object TimerOngoingNotification {
             .setContentTitle(lead.headline())
             .setContentText(others(ordered.drop(1)))
             .setContentIntent(TimerAlarmIntents.openTimerTabPending(context))
+            // ⚠️ `setOngoing(true)` 는 **스와이프만** 막는다. 알림창의 [지우기] 는 이것도
+            // 걷어 가는데, 우리는 목록이 바뀔 때만 다시 그리므로 그대로 두면 타이머가 도는
+            // 내내 앱 밖 표시가 없다. 사라지면 리시버가 되돌린다.
+            .setDeleteIntent(TimerAlarmReceiver.ongoingDismissPendingIntent(context))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
