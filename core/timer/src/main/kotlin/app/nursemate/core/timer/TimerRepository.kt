@@ -11,6 +11,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** 현재 시각. 테스트가 실제 시계에 묶이지 않도록 주입한다. */
 fun interface TimerClock {
@@ -68,6 +70,12 @@ class TimerRepository @Inject constructor(
     private val clock: TimerClock
 ) {
 
+    /** 복원이 겹치지 않게 막는다 — 앱 시작과 `BOOT_COMPLETED` 가 함께 올 수 있다. */
+    private val restoreLock = Mutex()
+
+    /** 이 프로세스에서 복원이 한 번이라도 돌았는가. 고아 알림 청소를 한 번으로 묶는다. */
+    private var restoredOnce = false
+
     val timers: Flow<List<CareTimer>> = store.timers
 
     /** 상대에게 보낼 복제본. 동기화 계층만 본다. */
@@ -85,7 +93,9 @@ class TimerRepository @Inject constructor(
      * **이미 울렸거나 사용자가 놓친 것**이므로 다시 예약하지 않는다. 아직 안 만료한
      * RUNNING 은 예약을 되살린다 — 기기 재부팅으로 AlarmManager 가 비었을 수 있다.
      */
-    suspend fun restore() {
+    suspend fun restore() = restoreLock.withLock {
+        val firstOfProcess = !restoredOnce
+        restoredOnce = true
         val now = clock.now()
         var restored = emptyList<CareTimer>()
         store.mutateTimers { current ->
@@ -99,7 +109,10 @@ class TimerRepository @Inject constructor(
         //
         // 고아 알림은 앱 데이터가 비워졌을 때 남는데, 그때는 목록도 비어 있다. 그 경우로
         // 좁히면 방금 울린 알림을 건드리지 않으면서 고아는 여전히 걷어낸다.
-        if (restored.isEmpty()) scheduler.dismissAllAlarms()
+        // ⚠️ **한 프로세스에서 한 번만 걷는다.** 설치 직후 시스템이 `BOOT_COMPLETED` 를
+        // 함께 배달해(부팅한 지 7시간이 지난 기기에서도 그랬다) 복원이 **동시에 두 번**
+        // 돈다. 그때마다 걷으면 방금 띄운 알림을 지울 창이 두 배가 된다.
+        if (firstOfProcess && restored.isEmpty()) scheduler.dismissAllAlarms()
     }
 
     /** 프리셋 원탭 → 즉시 시작 + 알람 예약. */

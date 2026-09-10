@@ -406,4 +406,19 @@ class TimerRepositoryTest {
 
         assertTrue(scheduler.cancelled.contains(timer.id))
     }
+
+    @Test
+    fun `복원이 두 번 돌아도 고아 알림은 한 번만 걷는다`() = runBlocking {
+        // 설치 직후 시스템이 `BOOT_COMPLETED` 를 함께 배달해 앱 시작과 부팅 리시버가
+        // **동시에** 복원을 돌린다(실기기 확인). 걷는 것은 프로세스마다 한 번이면 된다 —
+        // 두 번 걷으면 그 사이에 막 뜬 만료 알림을 지울 창이 두 배가 된다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+
+        repo.restore()
+        repo.restore()
+
+        assertEquals(1, scheduler.alarmSweeps)
+    }
 }
