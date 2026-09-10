@@ -53,8 +53,14 @@ class WearTimerViewModel @Inject constructor(
         .map { it?.presets.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
-    val timers: StateFlow<List<CareTimer>> = repository.timers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+    /**
+     * 진행 중인 타이머. **null 은 "아직 안 읽었다"** 이고 빈 목록과 다르다.
+     *
+     * 둘을 섞으면 화면이 뜨자마자 "없으니 나가자"로 읽는다 — 알람 화면이 0.46초 만에
+     * 스스로 닫히는 것으로 드러났다(실기기).
+     */
+    val timers: StateFlow<List<CareTimer>?> = repository.timers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
     /** 남은 시간 계산의 기준. 폰과 같은 이유로 1초마다 화면만 다시 그린다. */
     private val _now = MutableStateFlow(System.currentTimeMillis())

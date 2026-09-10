@@ -90,12 +90,13 @@ fun NurseMateWearApp(openPresets: Boolean = false, viewModel: WearTimerViewModel
             composable(ROUTE_LIST) { TimerPages(pagerState, viewModel, navController) }
             composable("$ROUTE_DETAIL/{$ARG_TIMER_ID}") { entry ->
                 val id = entry.arguments?.getString(ARG_TIMER_ID).orEmpty()
-                val timer = timers.firstOrNull { it.id == id }
+                val timer = timers?.firstOrNull { it.id == id }
 
-                // 다른 데서 끝났으면 목록으로 돌린다. 저장소를 직접 보므로 "아직 못 받았다"는
-                // 상태가 없다 — 없으면 정말 없는 것이다.
-                LaunchedEffect(timer) {
-                    if (timer == null) navController.popBackStack()
+                // 다른 데서 끝났으면 목록으로 돌린다.
+                // ⚠️ **아직 안 읽었을 때는 나가지 않는다.** 그때도 timer 가 null 이라,
+                // 구분하지 않으면 화면이 열리자마자 튕긴다.
+                LaunchedEffect(timers, timer) {
+                    if (timers != null && timer == null) navController.popBackStack()
                 }
                 timer?.let {
                     TimerDetailScreen(
@@ -129,7 +130,7 @@ private fun TimerPages(
             HorizontalPager(state = pagerState) { page ->
                 when (page) {
                     PAGE_ACTIVE -> ActivePage(
-                        timers = viewModel.ordered(timers, now),
+                        timers = viewModel.ordered(timers.orEmpty(), now),
                         now = now,
                         onComplete = viewModel::complete,
                         onOpen = { navController.navigate("$ROUTE_DETAIL/${it.id}") },

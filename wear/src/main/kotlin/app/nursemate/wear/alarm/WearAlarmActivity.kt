@@ -38,6 +38,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.Text
+import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.R
@@ -80,14 +81,17 @@ class WearAlarmActivity : ComponentActivity() {
             //
             // 그래서 **울리는 목록을 구독해 먼저 만료한 것부터** 보여 준다. 하나를 완료하면
             // 다음 것으로 저절로 갈아 끼워지고, 다 끝나야 화면이 닫힌다.
-            val timers by repository.timers.collectAsStateWithLifecycle(initialValue = emptyList())
+            // ⚠️ **초기값은 빈 목록이 아니라 null 이다.** 빈 목록으로 두면 첫 컴포지션에서
+            // "울릴 게 없다"로 읽혀 **화면이 뜨자마자 스스로 닫힌다** — 실기기에서 0.46초 만에
+            // 사라지는 것으로 나타났다. 저장소를 읽기 전과 정말 없는 것을 구분해야 한다.
+            val timers: List<CareTimer>? by repository.timers.collectAsStateWithLifecycle(initialValue = null)
             val ringing = remember(timers) {
-                timers.filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
+                timers.orEmpty().filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
             }
             val current = ringing.firstOrNull()
 
-            LaunchedEffect(current) {
-                if (current == null) finish()
+            LaunchedEffect(timers, current) {
+                if (timers != null && current == null) finish()
             }
 
             if (current != null) {
