@@ -15,7 +15,9 @@ import kotlinx.serialization.Serializable
  *
  * @param snapshotAt 만든 시각. 충돌 판정 기준이다([newerOf])
  * @param alarmAvailable 폰이 요건을 만족하는 알람을 **예약할 수 있는가**(플랫폼·OS 판정)
- * @param alarmAuthorized 폰의 알람 **권한이 허용됐는가**
+ * @param alarmAuthorized 폰에서 **지금 타이머를 시작할 수 있는가** — 알람 권한 셋과 울림 방식
+ *        최초 선택을 모두 지났는가. 권한만 담으면 워치가 "울림 방식을 아직 안 골랐다"를 몰라,
+ *        눌러도 폰이 조용히 거절하는 상태가 된다.
  */
 @Serializable
 data class TimerSnapshot(

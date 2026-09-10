@@ -16,7 +16,9 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val requestNotifications =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            // 허용하든 거부하든 폰에 알린다 — 폰은 이 값으로 안내를 띄울지 정한다.
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +36,10 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_PRESETS = "open_presets"
     }
 
+    private fun canPostNotifications(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+
     /**
      * 만료를 손목에 알리려면 알림 권한이 필요하다(Android 13+).
      *
@@ -43,8 +49,6 @@ class MainActivity : ComponentActivity() {
      */
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (!canPostNotifications()) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }

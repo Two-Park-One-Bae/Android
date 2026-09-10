@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -120,6 +123,7 @@ private fun TimerPages(
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val now by viewModel.now.collectAsStateWithLifecycle()
     val pending by viewModel.pending.collectAsStateWithLifecycle()
+    val notice by viewModel.notice.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     Box {
@@ -143,6 +147,52 @@ private fun TimerPages(
                     )
                 }
             }
+        }
+
+        // 워치가 스스로 못 푸는 사정은 화면을 덮어 알린다 — 폰을 꺼내야 풀린다.
+        notice?.let { NoticeOverlay(notice = it, onDismiss = viewModel::dismissNotice) }
+    }
+}
+
+/** [WearNotice] 를 화면 위에 덮는다. 손목에서 할 수 있는 것은 확인뿐이라 버튼도 하나다. */
+@Composable
+private fun NoticeOverlay(notice: WearNotice, onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WearTimerColors.Background)
+            .padding(horizontal = 14.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = notice.title,
+            style = WearTimerType.Header,
+            color = WearTimerColors.OnBackground,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = notice.body,
+            style = WearTimerType.Hint,
+            color = WearTimerColors.Muted,
+            textAlign = TextAlign.Center,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(17.dp))
+                .background(WearTimerColors.Card)
+                .clickable(onClick = onDismiss)
+                .padding(vertical = 9.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text("확인", style = WearTimerType.Action, color = WearTimerColors.OnBackground)
         }
     }
 }

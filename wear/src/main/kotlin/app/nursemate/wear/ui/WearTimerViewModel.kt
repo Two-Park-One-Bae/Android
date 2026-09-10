@@ -8,6 +8,7 @@ import app.nursemate.core.model.TimerCommand
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerSnapshot
 import app.nursemate.core.model.TimerState
+import app.nursemate.core.model.alarmPermissionMissing
 import app.nursemate.wear.sync.WearTimerStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -58,8 +59,8 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
     private var awaitingStart = false
 
     /** 마지막 명령이 폰에 닿지 못했다. 화면이 안내한다. */
-    private val _undelivered = MutableStateFlow(false)
-    val undelivered: StateFlow<Boolean> = _undelivered.asStateFlow()
+    private val _notice = MutableStateFlow<WearNotice?>(null)
+    val notice: StateFlow<WearNotice?> = _notice.asStateFlow()
 
     init {
         viewModelScope.launch { store.restore() }
@@ -92,9 +93,24 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
         viewModelScope.launch { store.restore() }
     }
 
+    /**
+     * 프리셋을 시작한다.
+     *
+     * ⚠️ **폰에 알람 권한이 없으면 보내지 않는다.** 폰은 받아도 조용히 거절하는데
+     * (`TimerCommandListenerService`), 워치가 그걸 모르면 눌러도 아무 일이 없는 것처럼 보인다.
+     * 스냅샷이 실어 온 `alarmAuthorized` 로 미리 가려 **이유를 알려 준다.**
+     */
     fun start(preset: TimerPreset) {
+        if (snapshot.value?.alarmPermissionMissing == true) {
+            _notice.value = WearNotice.PHONE_PERMISSION
+            return
+        }
         awaitingStart = true
         send(preset.id, TimerCommand.Start(preset.id))
+    }
+
+    fun dismissNotice() {
+        _notice.value = null
     }
 
     fun complete(timer: CareTimer) = send(timer.id, TimerCommand.Remove(timer.id))
@@ -110,13 +126,13 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
 
     private fun send(key: String, command: TimerCommand) {
         _pending.value = key
-        _undelivered.value = false
+        _notice.value = null
         viewModelScope.launch {
             if (!store.send(command)) {
                 // 폰이 꺼져 있거나 연결이 끊겼다. 기다리게 두면 영영 안 풀린다.
                 _pending.value = null
                 awaitingStart = false
-                _undelivered.value = true
+                _notice.value = WearNotice.UNDELIVERED
             }
         }
     }

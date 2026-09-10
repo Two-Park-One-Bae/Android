@@ -104,11 +104,14 @@ private fun MaterialScope.presetButton(preset: TimerPreset, click: Clickable, ju
     button(
         onClick = click,
         labelContent = {
+            // ⚠️ **한 줄로 두면 「수혈 바이탈」이 「수혈 …」로 잘린다**(실기기 확인). 셀 폭이
+            // 73dp 뿐이라 넉 자를 넘기면 남는 게 두 글자다. 두 줄까지 허용해 키워드를 살린다 —
+            // 정본도 「투약 반응…」처럼 넘치는 끝만 줄이지, 두 글자로 만들지는 않는다.
             text(
                 preset.label.layoutString,
                 typography = Typography.LABEL_SMALL,
                 color = KEYWORD.argb,
-                maxLines = 1,
+                maxLines = 2,
                 settings = listOf(FontSetting.weight(KEYWORD_WEIGHT))
             )
         },

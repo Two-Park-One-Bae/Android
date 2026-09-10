@@ -64,8 +64,11 @@ class TimerCommandListenerService : WearableListenerService() {
      * 보고 안내를 띄운다 — 여기서 굳이 되돌려 보내지 않아도 다음 스냅샷이 알려 준다.
      */
     private suspend fun start(presetId: String) {
-        if (!permissions.allGranted()) {
-            Log.w(TAG, "권한이 없어 워치 시작 요청을 거절했다 ($presetId)")
+        // ⚠️ **울림 방식까지 본다.** 권한만 보면 Android 12·12L 처럼 관문이 한 번도 안 걸리는
+        // 기기에서 사용자가 방식을 고른 적 없이 기본값(소리)으로 울린다 — spec §알람 권한
+        // 흐름을 건너뛴다. 위젯의 `canStartWithoutApp` 과 같은 기준이다.
+        if (!permissions.allGranted() || !repository.alertModeChosen.first()) {
+            Log.w(TAG, "폰 관문이 아직 안 끝나 워치 시작 요청을 거절했다 ($presetId)")
             return
         }
         val preset = presetRepository.presets.first().firstOrNull { it.id == presetId }

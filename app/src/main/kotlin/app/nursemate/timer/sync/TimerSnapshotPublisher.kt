@@ -69,7 +69,9 @@ class TimerSnapshotPublisher @Inject constructor(
             presets = presets,
             // 이 폰은 항상 예약할 수 있다(정확 알람 API 가 있는 버전만 지원). 권한이 별개다.
             alarmAvailable = true,
-            alarmAuthorized = permissions.allGranted()
+            // 워치가 이 값 하나로 "지금 시작할 수 있는가"를 판단한다 — 위젯의
+            // `canStartWithoutApp` 과 같은 기준이라야 세 표면이 어긋나지 않는다.
+            alarmAuthorized = permissions.allGranted() && repository.alertModeChosen.first()
         )
         try {
             transport.publish(snapshot)
