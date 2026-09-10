@@ -8,6 +8,7 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import androidx.core.content.getSystemService
 import app.nursemate.core.model.AlertMode
+import app.nursemate.core.model.TIMER_SUSTAINED_VIBRATION
 
 /**
  * 만료 알람용 알림 채널.
@@ -73,7 +74,7 @@ object TimerAlarmChannels {
         val vibrate = channel(VIBRATE_ID, "처치 타이머 알람 (진동)", "타이머가 끝나면 진동으로 알립니다.").apply {
             setSound(null, null)
             enableVibration(true)
-            vibrationPattern = SUSTAINED_PATTERN
+            vibrationPattern = TIMER_SUSTAINED_VIBRATION
         }
 
         val silent = channel(SILENT_ID, "처치 타이머 알람 (무음)", "타이머가 끝나면 화면 알림만 띄웁니다.").apply {
@@ -103,19 +104,4 @@ object TimerAlarmChannels {
             setBypassDnd(true)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
-
-    /**
-     * 진동을 약 1분간 이어 준다.
-     *
-     * `FLAG_INSISTENT` 는 **소리만** 반복한다. 채널 진동은 알림 1건당 패턴을 한 번 재생하고
-     * 끝나서, 짧은 패턴을 쓰면 '진동'이 [완료] 까지 지속되지 않는다(spec §만료·알람).
-     * 그래서 패턴 자체를 길게 만들어 지속을 흉내낸다 — 1분이 지나면 알림 표시만 남는다.
-     */
-    private val SUSTAINED_PATTERN: LongArray = LongArray(SUSTAIN_CYCLES * 2) { index ->
-        if (index % 2 == 0) VIBRATE_MS else PAUSE_MS
-    }
 }
-
-private const val VIBRATE_MS = 800L
-private const val PAUSE_MS = 400L
-private const val SUSTAIN_CYCLES = 50

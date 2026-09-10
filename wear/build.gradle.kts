@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.wear.ongoing)
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
