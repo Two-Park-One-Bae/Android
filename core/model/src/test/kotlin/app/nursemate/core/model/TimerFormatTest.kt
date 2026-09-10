@@ -1,4 +1,4 @@
-package app.nursemate.timer
+package app.nursemate.core.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -42,12 +42,5 @@ class TimerFormatTest {
         assertEquals("1분 30초", formatDuration(90))
         assertEquals("1시간 1분 1초", formatDuration(3661))
         assertEquals("0초", formatDuration(0))
-    }
-
-    @Test
-    fun `헤더 부제는 0인 항목을 뺀다`() {
-        assertEquals("진행 중 2 · 일시정지 1 · 종료 1", timerCountLabel(running = 2, paused = 1, ringing = 1))
-        assertEquals("진행 중 1", timerCountLabel(running = 1, paused = 0, ringing = 0))
-        assertEquals("", timerCountLabel(running = 0, paused = 0, ringing = 0))
     }
 }

@@ -56,6 +56,7 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.formatDuration
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

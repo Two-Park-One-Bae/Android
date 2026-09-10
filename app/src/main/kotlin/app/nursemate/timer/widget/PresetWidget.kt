@@ -40,7 +40,7 @@ import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
-import app.nursemate.timer.formatDuration
+import app.nursemate.core.model.formatDuration
 
 /**
  * 지정 프리셋 위젯 — 정본 `타이머 / 위젯 — 잠금화면 시안 비교`.
