@@ -79,6 +79,19 @@
             </intent-filter>
         </service>
 
+        <!-- 폰이 내놓은 타이머 복제본을 받는다 (NM-445). 지금은 수신 확인용 로그만 남긴다. -->
+        <service
+            android:name=".sync.TimerReplicaListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/nursemate/timer/replica"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
         <!--
             손목을 덮는 만료 알람 (NM-444). 정본 「W3 만료」.
 

@@ -4,6 +4,7 @@ import app.nursemate.core.model.AlertMode
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.TimerReplica
 import app.nursemate.core.model.TimerState
 import java.util.UUID
 import javax.inject.Inject
@@ -68,6 +69,10 @@ class TimerRepository @Inject constructor(
 ) {
 
     val timers: Flow<List<CareTimer>> = store.timers
+
+    /** 상대에게 보낼 복제본. 동기화 계층만 본다. */
+    val replica: Flow<TimerReplica> = store.replica
+
     val alertMode: Flow<AlertMode> = store.alertMode
 
     /** 울림 방식을 아직 한 번도 고르지 않았다면 첫 시작 시트를 띄운다(spec §알람 권한). */
@@ -152,6 +157,37 @@ class TimerRepository @Inject constructor(
             if (target == null) current else current.filterNot { it.id == timerId }
         }
         if (target?.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
+    }
+
+    /**
+     * 상대가 보낸 복제본을 합치고, 달라진 만큼 알람 예약을 다시 맞춘다.
+     *
+     * 저장은 [TimerStore.mergeReplica] 가 원자적으로 하고, 예약은 그 **뒤에** 손본다 —
+     * 저장 블록 안에서 부수효과를 일으키지 않는다는 규칙은 여기서도 같다.
+     *
+     * @return 무언가 바뀌었으면 true. 그때만 다시 발행해야 서로 되받는 발행이 멎는다.
+     */
+    suspend fun mergeReplica(incoming: TimerReplica): Boolean {
+        val before = store.currentTimers().associateBy { it.id }
+        if (!store.mergeReplica(incoming)) return false
+        reschedule(before, store.currentTimers().associateBy { it.id })
+        return true
+    }
+
+    /**
+     * 합친 결과에 맞춰 예약을 현실과 맞춘다.
+     *
+     * ⚠️ **사라진 타이머가 울리던 중이었으면 `dismiss` 다.** 상대가 끊긴 동안 [완료] 를
+     * 누른 경우가 여기로 오는데, `cancel` 만 하면 **이미 떠 있는 알림이 안 지워진다.**
+     */
+    private fun reschedule(before: Map<String, CareTimer>, after: Map<String, CareTimer>) {
+        (before.keys - after.keys).forEach { id ->
+            if (before[id]?.state == TimerState.RINGING) scheduler.dismiss(id) else scheduler.cancel(id)
+        }
+        after.values.forEach { timer ->
+            if (before[timer.id] == timer) return@forEach
+            if (timer.state == TimerState.RUNNING) scheduler.schedule(timer) else scheduler.cancel(timer.id)
+        }
     }
 
     suspend fun setAlertMode(mode: AlertMode) = store.updateAlertMode(mode)

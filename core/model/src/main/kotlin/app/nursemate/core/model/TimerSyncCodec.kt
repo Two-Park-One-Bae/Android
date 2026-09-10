@@ -41,3 +41,13 @@ fun decodeCommand(json: String): TimerCommand? = try {
 } catch (e: Exception) {
     null
 }
+
+fun encodeReplica(replica: TimerReplica): String = wireJson.encodeToString(TimerReplica.serializer(), replica)
+
+/** @return 못 읽으면 null. 상대가 새 필드를 붙여 보내도 여기서 멈추지 않는다. */
+@Suppress("TooGenericExceptionCaught", "SwallowedException")
+fun decodeReplica(json: String): TimerReplica? = try {
+    wireJson.decodeFromString(TimerReplica.serializer(), json)
+} catch (e: Exception) {
+    null
+}

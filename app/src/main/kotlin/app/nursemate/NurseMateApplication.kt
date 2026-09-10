@@ -8,6 +8,7 @@ import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
+import app.nursemate.timer.sync.TimerReplicaPublisher
 import app.nursemate.timer.sync.TimerSnapshotPublisher
 import app.nursemate.timer.widget.PresetWidgetRefresher
 import coil3.ImageLoader
@@ -50,6 +51,9 @@ class NurseMateApplication :
 
     @Inject
     lateinit var snapshotPublisher: TimerSnapshotPublisher
+
+    @Inject
+    lateinit var replicaPublisher: TimerReplicaPublisher
 
     @Inject
     lateinit var timerPresets: TimerPresetRepository
@@ -106,6 +110,10 @@ class NurseMateApplication :
             // 워치에 상태를 계속 흘려보낸다(NM-445). 복원 뒤에 켜야 첫 스냅샷이
             // 현재 시각에 맞춰진 목록을 담는다.
             snapshotPublisher.start(applicationScope)
+
+            // 워치와 서로 맞춘다(NM-445). 스냅샷과 나란히 돈다 — 워치 화면이 아직
+            // 스냅샷을 보고 있어, 워치가 자기 타이머를 갖게 되면 위쪽을 걷어낸다.
+            replicaPublisher.start(applicationScope)
         }
 
         // 앱 안에서 프리셋을 고치면 위젯도 따라 바뀌어야 한다. 지정 화면은 자기가 직접

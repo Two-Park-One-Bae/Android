@@ -163,6 +163,19 @@
             </intent-filter>
         </service>
 
+        <!-- 워치가 내놓은 타이머 복제본을 받는다 (NM-445). -->
+        <service
+            android:name="app.nursemate.timer.sync.TimerReplicaListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/nursemate/timer/replica"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name="app.nursemate.timer.alarm.TimerBootReceiver"
             android:exported="false">

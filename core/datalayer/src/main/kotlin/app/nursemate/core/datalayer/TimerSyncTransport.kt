@@ -4,9 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import app.nursemate.core.model.TimerCommand
+import app.nursemate.core.model.TimerReplica
 import app.nursemate.core.model.TimerSnapshot
+import app.nursemate.core.model.decodeReplica
 import app.nursemate.core.model.decodeSnapshot
 import app.nursemate.core.model.encodeCommand
+import app.nursemate.core.model.encodeReplica
 import app.nursemate.core.model.encodeSnapshot
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.PutDataMapRequest
@@ -55,12 +58,45 @@ class TimerSyncTransport(private val context: Context) {
      * 마지막으로 본 상태를 그릴 수 있다(spec: 연결이 끊겨도 화면이 있어야 한다).
      */
     suspend fun latestSnapshot(): TimerSnapshot? {
-        val items = dataClient.getDataItems(snapshotUri()).await()
+        val items = dataClient.getDataItems(pathUri(DataLayerPaths.TIMER_SNAPSHOT)).await()
         return items.use { buffer ->
             buffer.asSequence()
                 .mapNotNull { DataMapItem.fromDataItem(it).dataMap.getString(DataLayerPaths.KEY_SNAPSHOT_JSON) }
                 .mapNotNull(::decodeSnapshot)
                 .maxByOrNull { it.snapshotAt }
+        }
+    }
+
+    /**
+     * 이 기기가 아는 것을 내놓는다. 폰·워치 양쪽이 같은 경로에 쓰지만 항목은 기기별로 따로다.
+     *
+     * ⚠️ **내용이 한 글자도 안 바뀌면 상대는 아무 일도 겪지 않는다.** DataClient 는 같은 값을
+     * 다시 써도 변경으로 치지 않아 `onDataChanged` 가 안 온다. 복제본에는 스냅샷의
+     * `snapshotAt` 같은 매번 달라지는 필드가 **없다** — 일부러 그렇게 뒀다. 바뀐 게 없으면
+     * 조용한 것이 맞고, 그래야 서로 되받는 발행이 멎는다.
+     */
+    suspend fun publishReplica(replica: TimerReplica) {
+        val request = PutDataMapRequest.create(DataLayerPaths.TIMER_REPLICA).apply {
+            dataMap.putString(DataLayerPaths.KEY_REPLICA_JSON, encodeReplica(replica))
+        }
+        dataClient.putDataItem(request.asPutDataRequest().setUrgent()).await()
+    }
+
+    /**
+     * 붙어 있는 기기들이 내놓은 복제본 중 **내 것이 아닌 것**.
+     *
+     * 내 항목을 걸러 내는 이유는 낭비를 줄이려는 것뿐이다 — 합쳐도 결과가 같아(멱등) 틀리진
+     * 않는다. 앱이 새로 뜰 때 한 번 당겨오는 데 쓴다. DataItem 은 앱 수명과 무관하게 남아
+     * 있어, 끊겨 있던 동안 상대가 써 둔 것을 여기서 받는다.
+     */
+    suspend fun replicasExcept(myOrigin: String): List<TimerReplica> {
+        val items = dataClient.getDataItems(pathUri(DataLayerPaths.TIMER_REPLICA)).await()
+        return items.use { buffer ->
+            buffer.asSequence()
+                .mapNotNull { DataMapItem.fromDataItem(it).dataMap.getString(DataLayerPaths.KEY_REPLICA_JSON) }
+                .mapNotNull(::decodeReplica)
+                .filter { it.origin != myOrigin }
+                .toList()
         }
     }
 
@@ -93,15 +129,15 @@ class TimerSyncTransport(private val context: Context) {
     }
 
     /**
-     * 스냅샷 DataItem 을 가리키는 URI.
+     * DataItem 을 가리키는 URI.
      *
      * ⚠️ **authority 를 `*` 로 둔다.** 비워 두면 이 기기가 쓴 것만 찾는데, 워치가 읽고 싶은
      * 것은 **폰이 쓴** 항목이다. 와일드카드가 "붙어 있는 모든 노드"를 뜻한다.
      */
-    private fun snapshotUri(): Uri = Uri.Builder()
+    private fun pathUri(path: String): Uri = Uri.Builder()
         .scheme(PutDataRequest.WEAR_URI_SCHEME)
         .authority(ALL_NODES)
-        .path(DataLayerPaths.TIMER_SNAPSHOT)
+        .path(path)
         .build()
 
     private companion object {
