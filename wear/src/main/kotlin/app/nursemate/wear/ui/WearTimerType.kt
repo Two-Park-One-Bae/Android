@@ -77,4 +77,7 @@ internal object WearTimerType {
 
     /** 「완료」 — 정본 22px/600. */
     val Action = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+    /** 정본 「W3 만료」의 제목 — 34px ÷2. 화면을 덮는 알람이라 목록 헤더보다 크다. */
+    val AlarmTitle = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold)
 }

@@ -183,6 +183,14 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
 
     private fun build(timer: CareTimer) = base(timer).build()
 
+    /** 손목을 덮는 알람 화면을 여는 인텐트. */
+    private fun alarmScreenIntent(context: Context, timer: CareTimer): PendingIntent = PendingIntent.getActivity(
+        context,
+        notificationId(timer.id),
+        WearAlarmActivity.intent(context, timer.id, timer.alarmTitle),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
     private fun base(timer: CareTimer) = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(R.drawable.nm_ic_bell_ring)
         // spec §만료·알람 — title = `❗ [분류] 라벨`. 폰과 같은 문구를 쓴다.
@@ -195,6 +203,8 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         // 기대면 워치 앱을 지웠다 깔 때 같은 만료가 두 번 울릴 여지가 남는다.
         .setLocalOnly(true)
         .addAction(0, COMPLETE_LABEL, WearTimerActionReceiver.completeIntent(context, timer.id))
+        // 정본 「W3 만료」는 시스템 알림 모양이 아니다 — 우리 화면을 띄운다.
+        .setFullScreenIntent(alarmScreenIntent(context, timer), true)
 
     /**
      * ⚠️ **채널은 만들고 나면 진동 설정을 못 바꾼다.** 지우고 같은 id 로 다시 만들어도 옛

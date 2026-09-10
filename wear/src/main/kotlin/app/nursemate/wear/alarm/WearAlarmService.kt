@@ -59,10 +59,28 @@ class WearAlarmService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(WearTimerNotifier.FOREGROUND_ID, notifier.foregroundNotification(ringing.first()))
+        val lead = ringing.first()
+        startForeground(WearTimerNotifier.FOREGROUND_ID, notifier.foregroundNotification(lead))
+        showAlarmScreen(lead)
         startVibrating()
         watch()
         return START_STICKY
+    }
+
+    /**
+     * 손목을 덮는 알람 화면을 띄운다.
+     *
+     * ⚠️ **알림의 `fullScreenIntent` 로는 안 된다.** Android 14+ 의 백그라운드 액티비티 제한에
+     * 걸려 시스템이 막는다 — 실기기 로그에 `BAL_BLOCK` · `balAllowedByPiCreator: BSP.NONE`.
+     * `ActivityOptions` 로 열어 보려 했지만 `PendingIntent` 경로에서는 반영되지 않았다.
+     *
+     * 대신 **포그라운드 서비스가 직접 띄운다.** 방금 `startForeground` 를 부른 참이라 이
+     * 프로세스는 포그라운드고, 그 자격으로 시작하는 액티비티는 막히지 않는다(시계 앱의 알람이
+     * 쓰는 길과 같다).
+     */
+    private fun showAlarmScreen(timer: CareTimer) {
+        runCatching { startActivity(WearAlarmActivity.intent(this, timer.id, timer.alarmTitle)) }
+            .onFailure { Log.w(TAG, "알람 화면을 띄우지 못했다 (${timer.id})", it) }
     }
 
     /** 울리는 것이 없어지는 순간 스스로 끝낸다. */

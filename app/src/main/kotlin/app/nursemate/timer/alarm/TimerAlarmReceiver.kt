@@ -2,6 +2,7 @@ package app.nursemate.timer.alarm
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -9,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -185,8 +187,23 @@ class TimerAlarmReceiver : BroadcastReceiver() {
                 context,
                 AlarmManagerTimerScheduler.requestCode(timer.id) + FULL_SCREEN_OFFSET,
                 TimerAlarmActivity.intent(context, timer.id, timer.alarmTitle),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                // 워치에서 이것 없이 `BAL_BLOCK` 으로 막혔다. 폰은 지금 뜨지만 같은 규칙
+                // 아래 있으므로 함께 열어 둔다 — Android 14+ 는 `PendingIntent` 로 액티비티를
+                // 띄울 때 **만든 쪽의 명시적 허용**을 요구한다.
+                backgroundLaunchOptions()
             )
+
+        private fun backgroundLaunchOptions(): Bundle? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ActivityOptions.makeBasic()
+                    .setPendingIntentCreatorBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                    .toBundle()
+            } else {
+                null
+            }
 
         /** 만료 알림이 [지우기] 로 사라졌을 때 되돌리기 위한 인텐트. */
         fun dismissPendingIntent(context: Context, timerId: String): PendingIntent = PendingIntent.getBroadcast(
