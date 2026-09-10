@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -75,14 +76,18 @@ class TimerAlarmActivity : ComponentActivity() {
             // ⚠️ **인텐트에 실린 타이머 하나에 매달리지 않는다.** 그러면 나중에 울린 것이
             // 앞 것을 덮고, [완료] 를 누르면 화면이 닫혀 **아직 울리는 앞 알람이 화면 없이
             // 남는다.** spec §만료·알람은 "하나씩 순서대로"를 요구한다.
-            val timers by repository.timers.collectAsStateWithLifecycle(emptyList())
+            // ⚠️ **초기값은 빈 목록이 아니라 null 이다.** 빈 목록으로 두면 첫 컴포지션에서
+            // "울릴 게 없다"로 읽혀 **화면이 뜨자마자 스스로 닫힌다.** 실기기에서 그대로
+            // 겪었다 — 시스템 로그에는 `TimerAlarmActivity` 가 뜬 것으로 찍히는데 눈에는
+            // 잠금화면이 그대로 보인다. 저장소를 읽기 전과 정말 없는 것을 구분해야 한다.
+            val timers: List<CareTimer>? by repository.timers.collectAsStateWithLifecycle(null)
             val ringing = remember(timers) {
-                timers.filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
+                timers.orEmpty().filter { it.state == TimerState.RINGING }.sortedBy { it.endAtEpochMillis }
             }
             val current = ringing.firstOrNull()
 
-            LaunchedEffect(current) {
-                if (current == null) finish()
+            LaunchedEffect(timers, current) {
+                if (timers != null && current == null) finish()
             }
 
             if (current != null) {
