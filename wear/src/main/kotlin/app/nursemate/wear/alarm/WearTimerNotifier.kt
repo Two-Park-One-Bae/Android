@@ -62,11 +62,98 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         val ringing = timers.filter { it.state == TimerState.RINGING }
 
         // 더 이상 울리지 않는 것은 걷는다. 이게 없으면 폰에서 완료해도 워치에 남는다.
+        // ⚠️ 진행 중 표시(`ONGOING_ID`)는 여기서 걷지 않는다 — 아래에서 따로 맞춘다.
         manager.activeNotifications
-            .filter { it.id != 0 && ringing.none { timer -> notificationId(timer.id) == it.id } }
+            .filter { it.id != 0 && it.id != ONGOING_ID }
+            .filter { active -> ringing.none { timer -> notificationId(timer.id) == active.id } }
             .forEach { manager.cancel(it.id) }
 
         ringing.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
+        syncOngoing(manager, timers)
+    }
+
+    /**
+     * 도는 중인 타이머를 **워치 페이스에서** 보이게 한다.
+     *
+     * 여기가 없으면 손목을 들었을 때 아무것도 안 보인다 — 앱을 열어야만 남은 시간을 알 수
+     * 있었다. 폰은 잠금화면 알림이 그 몫을 하는데(`TimerOngoingNotification`) 워치에는
+     * 대응물이 없었다.
+     *
+     * ## 남은 시간은 시스템이 센다
+     * [Status.TimerPart] 에 만료 시각을 넘기면 워치 페이스 쪽에서 카운트다운이 흐른다 —
+     * 우리가 매초 깨어나 다시 그릴 필요가 없다(폰에서 크로노미터를 쓴 것과 같은 이유).
+     * 일시정지 중에는 셀 것이 없으므로 글자로 바꾼다.
+     */
+    @SuppressLint("MissingPermission")
+    private fun syncOngoing(manager: NotificationManagerCompat, timers: List<CareTimer>) {
+        val running = timers.filter { it.state != TimerState.RINGING }
+        val lead = running.minByOrNull { it.endAtEpochMillis }
+        if (lead == null) {
+            manager.cancel(ONGOING_ID)
+            return
+        }
+        ensureOngoingChannel()
+
+        val open = PendingIntent.getActivity(
+            context,
+            ONGOING_ID,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(context, ONGOING_CHANNEL_ID)
+            .setSmallIcon(R.drawable.nm_ic_timer)
+            .setContentTitle(lead.label)
+            .setContentText(othersLabel(running.size))
+            .setContentIntent(open)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setLocalOnly(true)
+
+        val status = Status.Builder()
+            .addTemplate(STATUS_TEMPLATE)
+            .addPart("label", Status.TextPart(lead.label))
+            .addPart(
+                "remaining",
+                if (lead.state == TimerState.PAUSED) {
+                    Status.TextPart(PAUSED_LABEL)
+                } else {
+                    Status.TimerPart(lead.endAtEpochMillis)
+                }
+            )
+            .build()
+
+        OngoingActivity.Builder(context, ONGOING_ID, builder)
+            .setStaticIcon(R.drawable.nm_ic_timer)
+            .setTouchIntent(open)
+            .setStatus(status)
+            .build()
+            .apply(context)
+
+        manager.notify(ONGOING_ID, builder.build())
+    }
+
+    /** 「외 2개」 — 하나뿐이면 붙이지 않는다. */
+    private fun othersLabel(count: Int): String? = if (count > 1) "외 ${count - 1}개 진행 중" else null
+
+    /** 진행 중 표시는 조용해야 한다 — 손목을 울리는 것은 만료뿐이다. */
+    private fun ensureOngoingChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService<NotificationManager>()
+        if (manager != null && manager.getNotificationChannel(ONGOING_CHANNEL_ID) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    ONGOING_CHANNEL_ID,
+                    "진행 중인 타이머",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "도는 동안 남은 시간을 워치 페이스에 보여 줍니다"
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                }
+            )
+        }
     }
 
     /**
@@ -149,5 +236,13 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
          * Wear 가 채널 패턴을 무시한다. 이제 채널은 진동을 끄고 서비스가 직접 몬다.
          */
         private const val CHANNEL_ID = "wear_timer_alarm_v2"
+
+        /** 진행 중 표시가 쓰는 고정 id. 가장 임박한 하나만 띄운다(폰과 같은 규칙). */
+        private const val ONGOING_ID = 444_002
+        private const val ONGOING_CHANNEL_ID = "wear_timer_ongoing_v1"
+        private const val PAUSED_LABEL = "일시정지"
+
+        /** 워치 페이스에 올라가는 한 줄. 자리 이름은 `addPart` 의 키와 맞아야 한다. */
+        private const val STATUS_TEMPLATE = "#label# #remaining#"
     }
 }
