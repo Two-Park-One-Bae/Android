@@ -35,6 +35,26 @@
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
 
+        <!--
+            잠금화면을 덮는 만료 알람 (NM-442).
+
+            ⚠️ **`showWhenLocked` 가 핵심이다.** 예전에는 풀스크린 인텐트로 `MainActivity` 를
+            넘겼는데 그 액티비티에는 이 속성이 없어, 시스템이 조용히 헤드업으로 낮추고
+            잠금화면에는 아무것도 안 띄웠다(실기기 확인).
+
+            `excludeFromRecents` — 알람은 최근 목록에 남을 일이 아니다.
+            `singleTask` — 여러 개가 동시에 만료해도 화면은 하나다.
+        -->
+        <activity
+            android:name=".timer.alarm.TimerAlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/Theme.NurseMate" />
+
         <activity
             android:name=".MainActivity"
             android:theme="@style/Theme.NurseMate.Splash"

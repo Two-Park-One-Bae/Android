@@ -146,8 +146,10 @@ class TimerAlarmReceiver : BroadcastReceiver() {
             .addAction(0, COMPLETE_LABEL, complete)
             // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
             .setDeleteIntent(dismissPendingIntent(context, timer.id))
-            // 잠금화면 풀스크린. Android 14+ 는 권한이 없으면 시스템이 헤드업으로 낮춰 표시한다.
-            .setFullScreenIntent(open, true)
+            // 잠금화면 풀스크린 — **알람 전용 화면**을 띄운다(spec §만료·알람 "잠금: 풀스크린").
+            // 여기에 `MainActivity` 를 넘기면 `showWhenLocked` 가 없어 시스템이 조용히
+            // 헤드업으로 낮춘다. Android 14+ 는 권한도 있어야 한다.
+            .setFullScreenIntent(fullScreenPendingIntent(context, timer), true)
             .build()
 
         // 취소될 때까지 소리를 반복한다(spec: [완료] 까지 지속).
@@ -176,6 +178,15 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         const val ACTION_ALARM_DISMISSED = "app.nursemate.timer.ALARM_DISMISSED"
 
         const val EXTRA_TIMER_ID = "timer_id"
+
+        /** 잠금화면을 덮는 알람 화면을 여는 인텐트. */
+        private fun fullScreenPendingIntent(context: Context, timer: CareTimer): PendingIntent =
+            PendingIntent.getActivity(
+                context,
+                AlarmManagerTimerScheduler.requestCode(timer.id) + FULL_SCREEN_OFFSET,
+                TimerAlarmActivity.intent(context, timer.id, timer.alarmTitle),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
         /** 만료 알림이 [지우기] 로 사라졌을 때 되돌리기 위한 인텐트. */
         fun dismissPendingIntent(context: Context, timerId: String): PendingIntent = PendingIntent.getBroadcast(
@@ -230,6 +241,7 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         private const val RESUME_OFFSET = 3
         private const val STOP_OFFSET = 4
         private const val DISMISS_OFFSET = 5
+        private const val FULL_SCREEN_OFFSET = 6
 
         /** 타이머 요청 코드와 겹치지 않도록 멀리 띄운다. */
         private const val ONGOING_DISMISS_REQUEST_CODE = 990_001
