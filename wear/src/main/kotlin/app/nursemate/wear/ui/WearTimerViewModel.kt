@@ -1,5 +1,6 @@
 package app.nursemate.wear.ui
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.model.CareTimer
@@ -10,6 +11,7 @@ import app.nursemate.core.model.TimerSnapshot
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.alarmPermissionMissing
 import app.nursemate.wear.sync.WearTimerStore
+import app.nursemate.wear.tile.TileInstallation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -33,7 +35,8 @@ import kotlinx.coroutines.launch
  * 플랫폼이 정한다"고 열어 뒀다 — [pending] 으로 눌린 항목을 표시한다.
  */
 @HiltViewModel
-class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) : ViewModel() {
+class WearTimerViewModel @Inject constructor(private val store: WearTimerStore, private val tiles: TileInstallation) :
+    ViewModel() {
 
     val snapshot: StateFlow<TimerSnapshot?> = store.snapshot
 
@@ -62,6 +65,16 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
     private val _notice = MutableStateFlow<WearNotice?>(null)
     val notice: StateFlow<WearNotice?> = _notice.asStateFlow()
 
+    /**
+     * 타일 추가를 권하는 안내가 떠 있다. null 이면 안 떠 있다.
+     *
+     * **워치에서 처음 시작한 직후**에만 한 번 뜬다 — 방금 앱을 열어 시작해 본 그 순간이
+     * "다음엔 안 열어도 된다"가 가장 잘 와닿는 자리다. 타일에서 시작한 경우는 이 경로를
+     * 타지 않아 뜨지 않는다(이미 타일을 쓰고 있으니 권할 이유도 없다).
+     */
+    private val _tilePrompt = MutableStateFlow<TilePrompt?>(null)
+    val tilePrompt: StateFlow<TilePrompt?> = _tilePrompt.asStateFlow()
+
     init {
         viewModelScope.launch { store.restore() }
         viewModelScope.launch {
@@ -76,6 +89,7 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
                 if (_pending.value != null && awaitingStart) {
                     awaitingStart = false
                     _startConfirmed.tryEmit(Unit)
+                    offerTileAfterStart()
                 }
                 _pending.value = null
             }
@@ -113,6 +127,31 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
         _notice.value = null
     }
 
+    /**
+     * 타일 안내를 닫는다. [추가하기]·[나중에] 어느 쪽이든 **다시 묻지 않는다.**
+     *
+     * 목록을 열어 줬어도 실제로 붙였는지는 알 수 없지만, 안 붙였다면 그건 사용자의 선택이다.
+     */
+    fun dismissTilePrompt() {
+        _tilePrompt.value = null
+        viewModelScope.launch { tiles.markAsked() }
+    }
+
+    /**
+     * 시작이 확인된 뒤 잠깐 두고 타일 안내를 띄운다.
+     *
+     * ⚠️ **바로 띄우지 않는다.** 이 순간 화면은 활성 페이지로 넘어가는 중이라, 겹쳐 띄우면
+     * 방금 만든 타이머를 못 보고 안내부터 본다 — 무엇에 대한 안내인지 알 수 없게 된다.
+     */
+    private fun offerTileAfterStart() {
+        viewModelScope.launch {
+            delay(TILE_PROMPT_DELAY_MS)
+            if (tiles.shouldOfferAdd()) {
+                _tilePrompt.value = TilePrompt(intent = tiles.addTileIntent())
+            }
+        }
+    }
+
     fun complete(timer: CareTimer) = send(timer.id, TimerCommand.Remove(timer.id))
 
     /** W2 [일시정지/재개]. 어느 쪽인지는 현재 상태가 정한다 — 화면이 판단하지 않는다. */
@@ -139,5 +178,16 @@ class WearTimerViewModel @Inject constructor(private val store: WearTimerStore) 
 
     private companion object {
         const val TICK_MS = 1000L
+
+        /** 시작 확인 → 안내까지 두는 시간. 페이지 전환이 끝나고 타이머가 눈에 들어올 만큼만. */
+        const val TILE_PROMPT_DELAY_MS = 1_500L
     }
 }
+
+/**
+ * 타일 추가 안내에 필요한 것.
+ *
+ * @param intent 「타일 추가」 목록을 여는 인텐트. **null 이면 그 화면이 없는 워치라**
+ *   버튼 대신 직접 추가하는 방법을 글로 안내한다.
+ */
+data class TilePrompt(val intent: Intent?)

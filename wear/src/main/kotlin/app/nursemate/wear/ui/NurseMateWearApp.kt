@@ -124,6 +124,7 @@ private fun TimerPages(
     val now by viewModel.now.collectAsStateWithLifecycle()
     val pending by viewModel.pending.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    val tilePrompt by viewModel.tilePrompt.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     Box {
@@ -151,6 +152,11 @@ private fun TimerPages(
 
         // 워치가 스스로 못 푸는 사정은 화면을 덮어 알린다 — 폰을 꺼내야 풀린다.
         notice?.let { NoticeOverlay(notice = it, onDismiss = viewModel::dismissNotice) }
+
+        // 타일 안내는 사정이 아니라 권유라 뒤에 온다 — 폰을 꺼내야 하는 안내가 있으면 그게 먼저다.
+        if (notice == null) {
+            tilePrompt?.let { TileAddDialog(prompt = it, onDismiss = viewModel::dismissTilePrompt) }
+        }
     }
 }
 
