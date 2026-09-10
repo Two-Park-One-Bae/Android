@@ -186,7 +186,22 @@ class TimerRepository @Inject constructor(
         }
         after.values.forEach { timer ->
             if (before[timer.id] == timer) return@forEach
-            if (timer.state == TimerState.RUNNING) scheduler.schedule(timer) else scheduler.cancel(timer.id)
+            when (timer.state) {
+                TimerState.RUNNING -> scheduler.schedule(timer)
+
+                TimerState.PAUSED -> scheduler.cancel(timer.id)
+
+                // 상대가 먼저 만료를 알렸다.
+                //
+                // ⚠️ **예약을 취소하면 안 된다.** 이 기기의 알람도 곧 제 시각에 울리는데,
+                // 상대 소식이 몇 백 밀리초 먼저 왔다는 이유로 취소하면 **이 기기가 조용해진다.**
+                // 실기기에서 그대로 겪었다 — 워치 복제본이 23:08:23.255 에 닿았고 폰 알람은
+                // 23:08:23.578 이었는데, 취소돼서 폰만 안 울렸다.
+                //
+                // 처음 보는 타이머라면 이 기기엔 예약이 없으니 새로 건다. `endAt` 이 이미
+                // 지났으므로 곧바로 울린다.
+                TimerState.RINGING -> if (before[timer.id] == null) scheduler.schedule(timer)
+            }
         }
     }
 

@@ -1,8 +1,11 @@
 package app.nursemate.core.timer
 
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.ORIGIN_WATCH
 import app.nursemate.core.model.TimerCategory
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.TimerRecord
+import app.nursemate.core.model.TimerReplica
 import app.nursemate.core.model.TimerState
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -330,5 +333,77 @@ class TimerRepositoryTest {
         repo.restore()
 
         assertEquals("타이머가 남아 있는데 알림을 걷었다", 0, scheduler.alarmSweeps)
+    }
+
+    // ── 복제본을 합친 뒤의 예약 ────────────────────────────────────────
+
+    @Test
+    fun `상대가 만료를 먼저 알려도 내 예약을 취소하지 않는다`() = runBlocking {
+        // ⚠️ 이걸 취소하면 **이 기기만 조용해진다.** 상대 소식이 내 알람보다 몇 백 밀리초
+        // 먼저 닿는 일이 흔한데(양쪽이 같은 시각에 걸려 있으므로), 그때마다 안 울리게 된다.
+        // 실기기에서 폰이 그렇게 안 울렸다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val timer = repo.start(preset)
+
+        repo.mergeReplica(
+            TimerReplica(
+                origin = ORIGIN_WATCH,
+                records = listOf(
+                    TimerRecord(
+                        id = timer.id,
+                        rev = 9,
+                        origin = ORIGIN_WATCH,
+                        timer = timer.copy(state = TimerState.RINGING)
+                    )
+                )
+            )
+        )
+
+        assertEquals(now + 900_000L, scheduler.scheduledAt(timer.id))
+        assertTrue(scheduler.cancelled.isEmpty())
+    }
+
+    @Test
+    fun `처음 보는 만료 타이머는 예약을 걸어 곧바로 울린다`() = runBlocking {
+        // 끊겨 있는 동안 상대에서 만료한 것이 재연결 때 넘어오는 경우. 이 기기엔 예약이
+        // 없으므로 걸어 준다 — `endAt` 이 지난 값이라 시스템이 즉시 발화한다.
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+
+        val expired = CareTimer(
+            id = "from-watch",
+            label = "AST",
+            category = TimerCategory.TEST,
+            durationSeconds = 900,
+            endAtEpochMillis = now - 1_000,
+            state = TimerState.RINGING
+        )
+        repo.mergeReplica(
+            TimerReplica(ORIGIN_WATCH, listOf(TimerRecord("from-watch", 1, ORIGIN_WATCH, expired)))
+        )
+
+        assertEquals(now - 1_000, scheduler.scheduledAt("from-watch"))
+    }
+
+    @Test
+    fun `합쳐서 일시정지로 바뀌면 예약을 지운다`() = runBlocking {
+        val store = FakeTimerStore()
+        val scheduler = FakeScheduler()
+        val repo = repository(store, scheduler)
+        val timer = repo.start(preset)
+
+        repo.mergeReplica(
+            TimerReplica(
+                origin = ORIGIN_WATCH,
+                records = listOf(
+                    TimerRecord(timer.id, 9, ORIGIN_WATCH, timer.copy(state = TimerState.PAUSED))
+                )
+            )
+        )
+
+        assertTrue(scheduler.cancelled.contains(timer.id))
     }
 }
