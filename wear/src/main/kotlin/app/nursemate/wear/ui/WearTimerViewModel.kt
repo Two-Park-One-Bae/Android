@@ -86,10 +86,8 @@ class WearTimerViewModel @Inject constructor(
     }
 
     /** 화면에 보여 줄 순서 — 폰과 같은 규칙(만료 먼저). */
-    fun ordered(timers: List<CareTimer>, now: Long): List<CareTimer> = CareTimerTransitions.ordered(
-        timers.map { if (it.isExpiredAt(now)) CareTimerTransitions.ring(it) else it },
-        now
-    )
+    fun ordered(timers: List<CareTimer>, now: Long): List<CareTimer> =
+        CareTimerTransitions.projectedAndOrdered(timers, now)
 
     /** 기기에 남아 있는 마지막 스냅샷(프리셋)을 다시 읽는다. 화면이 열릴 때마다 부른다. */
     fun refresh() {

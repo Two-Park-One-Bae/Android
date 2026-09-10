@@ -151,11 +151,7 @@ fun TimerListScreen(
     // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫이지만, 알람이 못 오는 경우가 있다 —
     // 정확 알람 권한이 꺼졌거나, 예약이 실패했거나. 그때 화면만 믿고 있으면 카드가 「진행 중
     // 00:00」으로 굳어 사용자가 손댈 수 없다. 보이는 것만이라도 만료로 바꿔 [완료]를 준다.
-    val ordered = remember(timers, now) {
-        CareTimerTransitions.ordered(timers, now).map { timer ->
-            if (timer.isExpiredAt(now)) CareTimerTransitions.ring(timer) else timer
-        }
-    }
+    val ordered = remember(timers, now) { CareTimerTransitions.projectedAndOrdered(timers, now) }
 
     Box(modifier.fillMaxSize().background(colors.bgApp)) {
         Column(Modifier.fillMaxSize()) {

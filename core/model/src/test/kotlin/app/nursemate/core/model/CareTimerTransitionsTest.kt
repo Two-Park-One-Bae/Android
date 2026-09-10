@@ -347,4 +347,34 @@ class CareTimerTransitionsTest {
 
         assertEquals(302f, degrees, 1f, "정본 프레임의 링 각도와 다르다")
     }
+
+    @Test
+    fun `알람이 못 온 만료 타이머가 나중에 만료한 울림보다 위다`() {
+        // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫인데 못 오는 경우가 있다 —
+        // 정확 알람 권한이 꺼졌거나 예약이 실패했거나. 그 타이머는 `RUNNING` 인 채 만료한다.
+        //
+        // ⚠️ **정렬을 먼저 하면 이 타이머가 진행 중 묶음에 남아**, 나중에 만료해 제대로
+        // 울린 타이머보다 아래로 간다. "울리는 것끼리는 먼저 만료한 것이 위"라는 규칙이
+        // 깨진다. 투영을 먼저 해야 둘이 같은 묶음에서 만료 시각으로 겨룬다.
+        fun timer(id: String, endAt: Long, state: TimerState) = CareTimer(
+            id = id,
+            label = id,
+            category = TimerCategory.TEST,
+            durationSeconds = 900,
+            endAtEpochMillis = endAt,
+            state = state
+        )
+        // 오래전에 만료했지만 알람이 못 와서 아직 RUNNING 인 것
+        val missed = timer("놓친것", t0 - 600_000, TimerState.RUNNING)
+        // 방금 만료해 제대로 울리고 있는 것
+        val ringing = timer("울리는것", t0 - 1_000, TimerState.RINGING)
+
+        val result = CareTimerTransitions.projectedAndOrdered(
+            listOf(ringing, missed),
+            t0
+        )
+
+        assertEquals(listOf("놓친것", "울리는것"), result.map { it.id }, "오래 놓친 것이 위로 안 왔다")
+        assertTrue(result.all { it.state == TimerState.RINGING })
+    }
 }

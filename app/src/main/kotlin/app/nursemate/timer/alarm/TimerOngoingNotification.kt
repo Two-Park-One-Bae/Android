@@ -49,8 +49,7 @@ object TimerOngoingNotification {
         // ⚠️ 다만 다시 그리는 계기가 목록의 변화뿐이라, 만료하는 **그 순간**에는 갱신되지
         // 않는다. 다음 신호가 올 때까지 옛 모습이 남는다 — 트리거를 따로 두려면 주기 갱신이
         // 필요해 크로노미터로 얻은 이점을 잃는다.
-        val projected = timers.map { if (it.isExpiredAt(now)) CareTimerTransitions.ring(it) else it }
-        val ordered = CareTimerTransitions.ordered(projected, now)
+        val ordered = CareTimerTransitions.projectedAndOrdered(timers, now)
         val lead = ordered.firstOrNull() ?: return null
 
         val builder = NotificationCompat.Builder(context, TimerAlarmChannels.ONGOING_ID)
