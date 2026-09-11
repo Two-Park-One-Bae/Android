@@ -82,35 +82,48 @@ NM-445 브랜치에서 건드리지 않았다.
 **어떻게 할까.** 그대로 둔다. 개수가 적고(수십 개, 수 KB) 되살아날 위험은 없다.
 새 삭제부터는 왕복 한 번에 정리된다.
 
-## ⑥ 워치 화면이 꺼져 있으면 알람 화면이 안 뜬다 — 알림·진동만 남는다
+## ⑥ 워치는 만료 때 자체 알람 화면을 띄울 수 없다 — 알림이 그 자리를 대신한다
 
-**무엇이.** 만료 때 `WearAlarmActivity` 가 뜨지 않고 알림과 진동만 울린다. 화면이 켜져 있으면
-정상적으로 뜬다.
+**무엇이.** 화면이 꺼진 워치에서 타이머가 만료되면 [WearAlarmActivity] 가 뜨지 않는다.
+화면이 켜져 있으면 뜬다.
 
-**재현.** 워치를 충전기에 올려(손목에서 벗겨) 화면이 꺼진 상태로 타이머를 만료시킨다.
-`adb logcat` 에 세 번 연속 찍힌다 — 서비스가 직접 부른 것 하나, `fullScreenIntent` 로
-시스템이 부른 것 둘:
+**왜 그런가.** Android 14+ 의 백그라운드 액티비티 시작(BAL) 제한이다. 전체화면 인텐트에는
+면제가 있지만 **기기가 잠겨 있을 때만** 붙는다. 손목에 찬 워치는 잠금이 아니다:
 
-```
-Background activity launch blocked! ... cmp=app.nursemate/.wear.alarm.WearAlarmActivity
-  callingUidProcState: FOREGROUND_SERVICE
-  callingUidHasVisibleActivity: false ... callingUidHasNonAppVisibleWindow: false
-  appSwitchState: 2
-START ... (BAL_BLOCK) result code=102
-```
+| | 폰 | 워치(착용 중) |
+|---|---|---|
+| `deviceLocked` | 1 | **0** |
+| 알람 화면 | 뜬다 | **안 뜬다** |
 
-화면이 켜진 채로 같은 것을 돌리면 `BAL_ALLOW_VISIBLE_WINDOW`, `result code=0` 으로 뜬다.
-(2026-09-11 릴리스 스모크, 릴리스 빌드 실기기)
+**앱이 고칠 수 없다.** 아래를 전부 실기기에서 시도했고 전부 `BAL_BLOCK` 이었다
+(2026-09-11):
 
-**왜 그런가.** 포그라운드 서비스라는 자격만으로는 백그라운드 액티비티 시작이 허용되지 않는다.
-`fullScreenIntent` 를 통한 경로도 마찬가지로 막힌다 — 알림은 뜨므로 사용자가 아예 모르지는
-않는다. 같은 만료에서 **알림 게시와 진동은 정상 동작했다**(`VibratorManagerService vibrate`,
-800/400 반복).
+| 시도 | 확인된 것 | 결과 |
+|---|---|---|
+| `PendingIntent` 생성자 옵트인 | `balAllowedByPiCreator` 가 `BSP.NONE` → `BSP.ALLOW_BAL` 로 바뀜 | ✗ |
+| 포그라운드 서비스가 아니라 **알람 리시버**에서 호출 | `callingUidProcState` 가 `FOREGROUND_SERVICE` → `RECEIVER` 로 바뀜 | ✗ |
+| `setExactAndAllowWhileIdle` → **`setAlarmClock`** | `RTC_WAKEUP flags=0x3` 으로 폰과 동일해짐 | ✗ |
+| 알림의 `fullScreenIntent` | 시스템이 실제로 시도함(`originatingPendingIntent ... NOTIFICATION_SERVICE`) | ✗ |
 
-**아직 확인 못 한 것.** **손목에 찬 채로 화면만 꺼진 경우**는 재현하지 못했다. 위 로그에는
-`[WearSdkAlertingProcessor] Not alerting: Device is off-body` 도 함께 찍혀 있어, 벗겨 둔 것이
-판정에 함께 작용했을 수 있다. 실제 사용 형태는 이쪽이므로 먼저 확인할 것.
+즉 권한·플래그를 더 맞춘다고 열리는 문이 아니다. 폰이 되는 것은 **잠겨 있어서**다.
 
-**어떻게 할까.** 손목에 찬 상태에서도 막힌다면, 손목을 들어 화면이 켜질 때 알림의
-`fullScreenIntent` 가 다시 평가되는지부터 본다. 알림만으로 충분하다고 볼 여지도 있다 —
-진동이 [완료] 까지 이어지므로 놓치지는 않는다.
+**대신 하는 것.** 워치에서는 **알림이 알람 표면**이다. 만료 알림에서 다음을 손봤다:
+
+- `setOngoing` 을 껐다. ongoing 알림은 Wear 가 알릴 대상에서 뺀다.
+- 채널 진동을 다시 켰다. 소리도 진동도 없으면 Wear 가 **표시 자체를 건너뛴다** —
+  `Not alerting: Notification is not noisy`.
+
+이 둘로 거부 사유가 `not noisy` 에서 사라졌다. 남은 것은 `Device is off-body` 뿐인데, 그건
+워치를 벗어 뒀을 때만 걸리는 관문이다.
+
+진동은 처음부터 정상이었다 — [WearAlarmService] 가 모는 파형이 [완료] 까지 돈다. 즉 만료를
+놓치는 상태는 아니었고, 빠져 있던 것은 **시각적 표시**다.
+
+**아직 확인 못 한 것.** 손목에 **찬 채로** 만료시켜 알림이 실제로 크게 뜨는지. 워치를 벗어
+둔 상태에서만 돌려 봤다(`Not alerting: Device is off-body`).
+
+**어떻게 할까.** 알림으로 정리하는 것이 Wear 의 설계와도 맞다 — 삼성 기본 타이머의 만료
+화면도 시스템이 알림으로 그리는 것이다. 정본 「W3 만료」의 모양(종 아이콘·긴 [완료] 버튼)은
+워치에서 그대로 낼 수 없으므로 `docs/SPEC-FEEDBACK.md` 에 올린다.
+
+[WearAlarmActivity] 는 지운 게 아니라 **화면이 켜져 있을 때의 경로**로 남는다.

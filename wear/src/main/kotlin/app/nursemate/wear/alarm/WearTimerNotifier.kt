@@ -166,7 +166,7 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
      */
     fun foregroundNotification(timer: CareTimer): Notification {
         ensureChannel()
-        val builder = base(timer)
+        val builder = base(timer, ongoing = true)
         val touch = PendingIntent.getActivity(
             context,
             0,
@@ -183,7 +183,7 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         return builder.build()
     }
 
-    private fun build(timer: CareTimer) = base(timer).build()
+    private fun build(timer: CareTimer) = base(timer, ongoing = false).build()
 
     /**
      * 손목을 덮는 알람 화면을 여는 인텐트.
@@ -208,13 +208,18 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         backgroundLaunchOptions()
     )
 
-    private fun base(timer: CareTimer) = NotificationCompat.Builder(context, CHANNEL_ID)
+    /**
+     * @param ongoing 포그라운드 서비스 알림만 `true` 다. 만료 알림은 **끈다** — Wear 가
+     *   ongoing 알림을 알릴 대상에서 빼는지 확인 중이고, 어차피 [완료] 로만 사라지는 것은
+     *   서비스가 저장소를 보고 지킨다(스와이프로 지워도 다시 뜬다).
+     */
+    private fun base(timer: CareTimer, ongoing: Boolean) = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(R.drawable.nm_ic_bell_ring)
         // spec §만료·알람 — title = `❗ [분류] 라벨`. 폰과 같은 문구를 쓴다.
         .setContentTitle(timer.alarmTitle)
         .setCategory(NotificationCompat.CATEGORY_ALARM)
         .setPriority(NotificationCompat.PRIORITY_MAX)
-        .setOngoing(true)
+        .setOngoing(ongoing)
         .setAutoCancel(false)
         // 폰 알림으로 다시 브리징되지 않게 못박는다. 시스템이 이미 끊지만, 기본 동작에
         // 기대면 워치 앱을 지웠다 깔 때 같은 만료가 두 번 울릴 여지가 남는다.
@@ -235,8 +240,17 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
                 NotificationChannel(CHANNEL_ID, "처치 타이머 만료", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "타이머가 끝나면 손목을 울립니다"
                     setSound(null, null)
-                    // ⚠️ 끈다. 켜 두면 서비스가 모는 진동 위에 시스템 햅틱이 한 번 더 겹친다.
-                    enableVibration(false)
+                    // ⚠️ **켜 둬야 한다.** Wear 는 소리도 진동도 없는 알림을 "조용한 알림"으로
+                    // 보고 **표시 자체를 건너뛴다** — 실기기 로그에 그대로 찍힌다:
+                    //   [WearSdkAlertingProcessor] Not alerting: Notification is not noisy
+                    //   ... shouldVibrate=false, hasSound=false
+                    // 그러면 손목을 들어도 만료가 안 보인다. 소리는 spec 이 막으므로(워치는
+                    // 항상 햅틱) 진동으로 켠다.
+                    //
+                    // 대가로 시작할 때 시스템 햅틱이 한 번 겹친다 — [WearAlarmService] 가 모는
+                    // 파형과 같은 리듬으로 줘서 티가 덜 나게 한다.
+                    enableVibration(true)
+                    vibrationPattern = CHANNEL_VIBRATION
                 }
             )
         }
@@ -257,12 +271,18 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         private const val COMPLETE_LABEL = "완료"
 
         /**
-         * 채널 id 의 `_v2` — 진동을 바꾸려면 번호를 올려야 한다(위 주석 참고).
+         * 채널 id 의 `_v3` — 진동을 바꾸려면 번호를 올려야 한다(위 주석 참고).
          *
-         * `_v1` 은 3회짜리(2초), `_v2` 는 폰과 같은 60초 패턴이었다. **둘 다 한 번만 울렸다** —
-         * Wear 가 채널 패턴을 무시한다. 이제 채널은 진동을 끄고 서비스가 직접 몬다.
+         * - `_v1` 3회짜리(2초) · `_v2` 폰과 같은 60초 패턴 — **둘 다 한 번만 울렸다.**
+         *   Wear 가 채널 패턴을 무시하고 자기 햅틱을 한 번 재생한다. 그래서 지속 진동은
+         *   [WearAlarmService] 가 직접 몬다.
+         * - 그 뒤 채널 진동을 **껐더니** Wear 가 알림을 "조용한 알림"으로 보고 표시 자체를
+         *   건너뛰었다. `_v3` 은 다시 켠 것이다 — 지속이 아니라 **표시 자격**을 얻기 위해서다.
          */
-        private const val CHANNEL_ID = "wear_timer_alarm_v2"
+        private const val CHANNEL_ID = "wear_timer_alarm_v3"
+
+        /** 채널 햅틱은 어차피 한 번만 울린다 — 서비스가 모는 파형의 첫 마디와 같은 길이로 준다. */
+        private val CHANNEL_VIBRATION = longArrayOf(0L, 800L)
 
         /** 진행 중 표시가 쓰는 고정 id. 가장 임박한 하나만 띄운다(폰과 같은 규칙). */
         private const val ONGOING_ID = 444_002

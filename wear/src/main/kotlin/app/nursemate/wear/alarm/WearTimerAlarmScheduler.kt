@@ -6,11 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.getSystemService
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.timer.TimerAlarmScheduler
+import app.nursemate.wear.MainActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,16 +24,23 @@ import javax.inject.Singleton
  * 없어, 워치만 차고 있는 동안 만료를 통째로 놓친다. 같은 갤럭시 워치의 삼성 기본 타이머도
  * 자기 알람을 건다(`EXPLICIT_TIMER_ALERT`, `window=0`).
  *
- * ## 폰과 다른 점 둘
- * - **[AlarmManager.ELAPSED_REALTIME_WAKEUP] 을 쓴다.** 폰은 `setAlarmClock`(벽시계)인데,
- *   워치는 시계가 폰과 어긋날 수 있다. 남은 시간으로 환산해 걸면 **예약한 뒤의** 시계 보정이
- *   발화 시각을 밀지 않는다. 삼성 기본 타이머도 이 방식이다.
+ * ## 폰과 같은 `setAlarmClock` 을 쓴다
  *
- *   ⚠️ **화면과는 갈릴 수 있다.** `endAt` 은 벽시계 값이고 화면은 그것으로 남은 시간을
- *   계산한다(`CareTimer.remainingAt`). 예약해 둔 사이에 시계가 보정되면 알람(경과시간 기준)과
- *   숫자(벽시계 기준)가 그 보정폭만큼 어긋난다. 창이 좁아 실사용에서 드러날 일은 적지만,
- *   "시계에 전혀 안 흔들린다"는 뜻은 아니다.
- * - **상태바 알람 아이콘용 `showIntent` 가 없다.** 워치에는 그 자리가 없다.
+ * 한때 경과시간 기준 `setExactAndAllowWhileIdle` 을 썼다. 예약해 둔 사이에 시계가 보정돼도
+ * 발화가 안 밀리는 이점이 있고 삼성 기본 타이머도 그 방식이다. 그런데도 바꾼 이유는 둘이다.
+ *
+ * 1. **폰과 같은 모델로 둔다.** 두 표면이 같은 API 를 쓰면 복제·재예약·복구를 한 가지로
+ *    설명할 수 있다. 갈라 두면 "워치만 왜 다른가"를 매번 따져야 한다.
+ * 2. **알람과 화면이 같은 시계를 본다.** `endAt` 은 벽시계 값이고 화면도 그것으로 남은
+ *    시간을 센다(`CareTimer.remainingAt`). 경과시간으로 걸면 둘의 기준이 갈려, 시계가
+ *    보정되면 숫자와 울림이 그 폭만큼 어긋났다. 이제는 어긋날 수 없다.
+ *
+ * 대가로 예약 뒤의 시계 보정에 노출된다. 워치가 폰과 시각을 맞출 때 생기는 폭이라 작고,
+ * 위 2번이 그 폭을 화면에도 똑같이 반영해 준다.
+ *
+ * ⚠️ **BAL 을 통과시켜 주지는 않는다.** `setAlarmClock` 이면 만료 때 액티비티를 띄울 수
+ * 있으리라 보고 한 번 바꿔 봤지만 아니었다 — 실기기에서 `RTC_WAKEUP flags=0x3` 으로
+ * 폰과 똑같이 걸린 상태에서도 `BAL_BLOCK` 이었다. 사정은 `docs/KNOWN-ISSUES.md` ⑥.
  *
  * ## 권한을 묻지 않는다
  * 매니페스트가 `USE_EXACT_ALARM` 을 선언하고, 그건 자동 허용이다. 폰처럼 사용자에게
@@ -68,13 +75,19 @@ class WearTimerAlarmScheduler @Inject constructor(@param:ApplicationContext priv
     @SuppressLint("MissingPermission")
     override fun schedule(timer: CareTimer) {
         val manager = alarmManager ?: return
-        val remaining = (timer.endAtEpochMillis - System.currentTimeMillis()).coerceAtLeast(0)
-        manager.setExactAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            SystemClock.elapsedRealtime() + remaining,
+        manager.setAlarmClock(
+            AlarmManager.AlarmClockInfo(timer.endAtEpochMillis, showPendingIntent()),
             firePendingIntent(timer.id)
         )
     }
+
+    /** 알람 시계 자리를 눌렀을 때 열 화면. 워치엔 그 자리가 없지만 API 가 요구한다. */
+    private fun showPendingIntent(): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     override fun cancel(timerId: String) {
         alarmManager?.cancel(firePendingIntent(timerId))
