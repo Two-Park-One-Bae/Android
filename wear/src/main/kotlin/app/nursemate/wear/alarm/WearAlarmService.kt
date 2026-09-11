@@ -130,7 +130,12 @@ class WearAlarmService : Service() {
         watching = scope.launch {
             repository.timers.collect { timers ->
                 val ringing = timers.filter { it.state == TimerState.RINGING }
-                if (ringing.isEmpty()) stopSelf() else notifier.sync(timers)
+                // ⚠️ **끝낼 때도 한 번 쓸고 나간다.** 평소에는 [완료] 가 스케줄러를 거치며
+                // 알림을 걷지만, [WearTimerNotifier.realert] 는 지웠다 다시 올리는 두 단계라
+                // 그 사이에 [완료] 가 들어오면 순서가 뒤집혀 완료된 타이머의 알림이 남는다.
+                // 여기서 쓸면 어느 순서로 들어와도 남지 않는다.
+                notifier.sync(timers)
+                if (ringing.isEmpty()) stopSelf()
             }
         }
     }
