@@ -46,6 +46,11 @@ import javax.inject.Singleton
  * `wnotification.detail2.activity.DetailActivity2`, `BAL_ALLOW_ALLOWLISTED_COMPONENT`).
  * 시스템이 자기 권한으로 띄우므로 상태를 가리지 않는다.
  *
+ * ⚠️ **포그라운드 서비스 알림에 [OngoingActivity] 를 붙이면 안 된다.** 붙이면 Wear 가
+ * `FILTERED - ONGOING_ACTIVITY_TYPE` 으로 알림 대상에서 빼는데, 울리는 동안 그 알림이
+ * **맨 앞 타이머의 만료 알림 그 자체**라 결과적으로 아무것도 안 알려진다. WO-V4 의 진행 중
+ * 표시는 도는 동안 [syncOngoing] 이 `ONGOING_ID` 로 맡는다 — 울릴 때는 만료가 먼저다.
+ *
  * ⚠️ **그래서 `setFullScreenIntent` 를 붙이면 안 된다.** 붙어 있으면 Wear 가 그것을 띄우는
  * 것으로 알림 표시를 대신하는데, 그 시작이 막혀 **아무것도 안 나온다.** 빼 두어야 시스템
  * 팝업 경로를 탄다 — 실기기에서 붙였을 때 0건, 뺐을 때 정상으로 갈렸다.
@@ -192,21 +197,10 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
      */
     fun foregroundNotification(timer: CareTimer): Notification {
         ensureChannel()
-        val builder = base(timer, ongoing = true)
-        val touch = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        OngoingActivity.Builder(context, FOREGROUND_ID, builder)
-            // 정적 아이콘과 터치 인텐트는 **필수**다 — 없으면 IllegalArgumentException.
-            .setStaticIcon(R.drawable.nm_ic_bell_ring)
-            .setTouchIntent(touch)
-            .setStatus(Status.forPart(Status.TextPart(timer.alarmTitle)))
-            .build()
-            .apply(context)
-        return builder.build()
+        // 울리는 동안에는 이것이 **맨 앞 타이머의 만료 알림 그 자체**다 — [sync] 가 맨 앞을
+        // 따로 올리지 않는다. 그래서 알려질 수 있어야 하고, 알려져야 시스템이 전체화면
+        // 팝업을 띄운다(`docs/KNOWN-ISSUES.md` ⑥).
+        return base(timer, ongoing = true).build()
     }
 
     private fun build(timer: CareTimer) = base(timer, ongoing = false).build()
