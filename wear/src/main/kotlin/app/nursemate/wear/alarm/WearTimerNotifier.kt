@@ -2,6 +2,7 @@ package app.nursemate.wear.alarm
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -183,12 +185,27 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
 
     private fun build(timer: CareTimer) = base(timer).build()
 
-    /** 손목을 덮는 알람 화면을 여는 인텐트. */
+    /**
+     * 손목을 덮는 알람 화면을 여는 인텐트.
+     *
+     * ⚠️ **[backgroundLaunchOptions] 를 반드시 넘긴다.** 이것 없이는 화면이 꺼져 있을 때
+     * 시스템이 막는다 — 실기기 로그가 이유를 그대로 적어 준다:
+     *
+     * ```
+     * balAllowedByPiCreator: BSP.NONE        ← 만든 쪽이 허용하지 않았다
+     * balRequireOptInByPendingIntentCreator: true
+     * balAllowedByPiSender: BSP.ALLOW_BAL    ← 보내는 쪽(sysui)은 문제가 없다
+     * ```
+     *
+     * Android 14+ 는 `PendingIntent` 로 액티비티를 띄울 때 **보내는 쪽이 아니라 만든 쪽의
+     * 명시적 허용**을 본다. 폰은 같은 이유로 이미 열어 두었다(`TimerAlarmReceiver`).
+     */
     private fun alarmScreenIntent(context: Context, timer: CareTimer): PendingIntent = PendingIntent.getActivity(
         context,
         notificationId(timer.id),
         WearAlarmActivity.intent(context, timer.id, timer.alarmTitle),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        backgroundLaunchOptions()
     )
 
     private fun base(timer: CareTimer) = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -256,3 +273,19 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         private const val STATUS_TEMPLATE = "#label# #remaining#"
     }
 }
+
+/**
+ * `PendingIntent` 를 만드는 쪽이 「이걸로 액티비티를 띄워도 된다」고 밝히는 옵션.
+ *
+ * Android 14 부터 필요하다. 그 아래에서는 `null` 이어도 같은 동작이다.
+ */
+private fun backgroundLaunchOptions(): Bundle? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        ActivityOptions.makeBasic()
+            .setPendingIntentCreatorBackgroundActivityStartMode(
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            )
+            .toBundle()
+    } else {
+        null
+    }
