@@ -75,13 +75,22 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         val ringing = timers.filter { it.state == TimerState.RINGING }
 
         // 더 이상 울리지 않는 것은 걷는다. 이게 없으면 폰에서 완료해도 워치에 남는다.
-        // ⚠️ 진행 중 표시(`ONGOING_ID`)는 여기서 걷지 않는다 — 아래에서 따로 맞춘다.
+        //
+        // ⚠️ **우리가 id 를 정해 둔 둘은 여기서 걷지 않는다.** 진행 중 표시(`ONGOING_ID`)는
+        // 아래 [syncOngoing] 이 맞추고, 포그라운드 서비스 알림(`FOREGROUND_ID`)은 서비스가
+        // 자기 수명으로 관리한다 — 여기서 지우면 서비스는 살아 있는데 알림만 사라진다.
+        val others = ringing.drop(1)
         manager.activeNotifications
-            .filter { it.id != 0 && it.id != ONGOING_ID }
-            .filter { active -> ringing.none { timer -> notificationId(timer.id) == active.id } }
+            .filter { it.id != 0 && it.id != ONGOING_ID && it.id != FOREGROUND_ID }
+            .filter { active -> others.none { timer -> notificationId(timer.id) == active.id } }
             .forEach { manager.cancel(it.id) }
 
-        ringing.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
+        // **한 타이머에 알림 하나.** 맨 앞의 것은 포그라운드 서비스 알림이 대신하므로 여기서
+        // 다시 올리지 않는다 — 둘 다 [base] 로 만들어 제목도 [완료] 액션도 같아서, 올리면
+        // 손목에 같은 만료가 둘 뜬다.
+        others.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
+        // 맨 앞이 바뀌면(먼저 울린 것을 완료하면) 서비스 알림도 새 것으로 갈아 끼운다.
+        ringing.firstOrNull()?.let { manager.notify(FOREGROUND_ID, foregroundNotification(it)) }
         syncOngoing(manager, timers)
     }
 
@@ -211,9 +220,16 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
     )
 
     /**
-     * @param ongoing 포그라운드 서비스 알림만 `true` 다. 만료 알림은 **끈다** — Wear 가
-     *   ongoing 알림을 알릴 대상에서 빼는지 확인 중이고, 어차피 [완료] 로만 사라지는 것은
-     *   서비스가 저장소를 보고 지킨다(스와이프로 지워도 다시 뜬다).
+     * @param ongoing 포그라운드 서비스 알림만 `true` 다.
+     *
+     * 만료 알림에서는 **끈다.** Wear 가 ongoing 알림을 알릴 대상에서 빼기 때문이다
+     * (로그: `FILTERED - ONGOING_ACTIVITY_TYPE`). 채널 진동·`fullScreenIntent` 미사용과
+     * 함께 **세 전제 중 하나**이고, 하나만 어긋나도 손목에는 진동만 남는다
+     * (`docs/KNOWN-ISSUES.md` ⑥).
+     *
+     * ⚠️ 끈 대가로 **스와이프로 지울 수 있다.** [sync] 는 `repository.timers` 가 값을 낼
+     * 때만 도는데 스와이프는 타이머를 바꾸지 않으므로 **다시 뜨지 않는다.** 다만 맨 앞의
+     * 것은 `FOREGROUND_ID`(ongoing) 가 맡아 지워지지 않고, 진동도 [완료] 까지 이어진다.
      */
     private fun base(timer: CareTimer, ongoing: Boolean) = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(R.drawable.nm_ic_bell_ring)
@@ -227,10 +243,11 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         // 기대면 워치 앱을 지웠다 깔 때 같은 만료가 두 번 울릴 여지가 남는다.
         .setLocalOnly(true)
         .addAction(0, COMPLETE_LABEL, WearTimerActionReceiver.completeIntent(context, timer.id))
-        // ⚠️ **`setFullScreenIntent` 를 붙이지 않는다(실험).** 붙어 있으면 Wear 가 그것을
-        // 띄우는 것으로 알림 표시를 대신하는데, 그 시작이 BAL 에 막혀 아무것도 안 나온다.
-        // 빼면 Wear 가 자기 전체화면 팝업(`DataForFullPopup` → SysUI `DetailActivity2`)을
-        // 쓰는지 확인한다 — 그건 시스템이 자기 권한으로 띄우므로 BAL 과 무관하다.
+        // ⚠️ **`setFullScreenIntent` 를 붙이지 않는다.** 붙어 있으면 Wear 가 그것을 띄우는
+        // 것으로 알림 표시를 대신하는데, 그 시작이 BAL 에 막혀 아무것도 안 나온다. 빼면
+        // Wear 가 자기 전체화면 팝업(`DataForFullPopup` → SysUI `DetailActivity2`)을 쓰고,
+        // 그건 시스템이 자기 권한으로 띄우므로 BAL 과 무관하다. 실기기에서 붙였을 때 이
+        // 경로를 탄 횟수 0건, 뺐을 때 정상으로 갈렸다(`docs/KNOWN-ISSUES.md` ⑥).
         .setContentIntent(alarmScreenIntent(context, timer))
 
     /**
