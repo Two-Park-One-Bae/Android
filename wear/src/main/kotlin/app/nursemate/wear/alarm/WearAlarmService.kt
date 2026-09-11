@@ -117,6 +117,5 @@ class WearAlarmService : Service() {
         }
 
         private const val TAG = "NM444"
-
     }
 }
