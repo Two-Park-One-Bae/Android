@@ -186,19 +186,17 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
     private fun build(timer: CareTimer) = base(timer, ongoing = false).build()
 
     /**
-     * 손목을 덮는 알람 화면을 여는 인텐트.
+     * 손목을 덮는 알람 화면을 여는 인텐트 — **만료 화면은 이 길로 뜬다.**
      *
-     * ⚠️ **[backgroundLaunchOptions] 를 반드시 넘긴다.** 이것 없이는 화면이 꺼져 있을 때
-     * 시스템이 막는다 — 실기기 로그가 이유를 그대로 적어 준다:
+     * 앱이 직접 `startActivity` 로 띄우려는 시도는 백그라운드에서 막힌다. 실제로 뜨는 것은
+     * Wear SysUI 가 **알림을 알리기로 결정한 뒤** 자기 자격으로 이 인텐트를 발사할 때다
+     * (실기기 로그: `alerting an item` → `BAL_ALLOW_ALLOWLISTED_UID [realCaller] result code=0`).
      *
-     * ```
-     * balAllowedByPiCreator: BSP.NONE        ← 만든 쪽이 허용하지 않았다
-     * balRequireOptInByPendingIntentCreator: true
-     * balAllowedByPiSender: BSP.ALLOW_BAL    ← 보내는 쪽(sysui)은 문제가 없다
-     * ```
+     * ⚠️ 그래서 **알림이 알려지는 것이 전부다.** [ensureChannel] 과 `ongoing` 설정이
+     * 그 자격을 좌우한다 — 둘 중 하나만 어긋나도 화면은 영영 안 뜬다.
      *
-     * Android 14+ 는 `PendingIntent` 로 액티비티를 띄울 때 **보내는 쪽이 아니라 만든 쪽의
-     * 명시적 허용**을 본다. 폰은 같은 이유로 이미 열어 두었다(`TimerAlarmReceiver`).
+     * [backgroundLaunchOptions] 는 폰과 같은 형태로 맞춰 둔 것이다. 위 경로는 보내는 쪽
+     * 자격으로 통과하므로 이것 없이도 떴을 수 있지만, 빼고 확인하지 않았다.
      */
     private fun alarmScreenIntent(context: Context, timer: CareTimer): PendingIntent = PendingIntent.getActivity(
         context,

@@ -79,9 +79,8 @@ class WearAlarmService : Service() {
      * 화면이 켜져 있으면 통한다(`BAL_ALLOW_VISIBLE_WINDOW`). 그 경우 알림보다 먼저 떠서
      * 빠르므로 남겨 둔다.
      *
-     * **화면이 꺼져 있을 때 실제로 띄우는 것은 알림의 `fullScreenIntent` 다.** 그 쪽이
-     * 동작하려면 `PendingIntent` 를 만들 때 허용을 명시해야 한다 —
-     * [WearTimerNotifier.alarmScreenIntent] 에 이유를 적어 두었다.
+     * **화면이 꺼져 있을 때 실제로 띄우는 것은 Wear SysUI 다** — 알림을 알리기로 결정하면
+     * 자기 자격으로 `fullScreenIntent` 를 발사한다. 조건은 [WearTimerNotifier] 에 적었다.
      */
     private fun showAlarmScreen(timer: CareTimer) {
         runCatching { startActivity(WearAlarmActivity.intent(this, timer.id, timer.alarmTitle)) }

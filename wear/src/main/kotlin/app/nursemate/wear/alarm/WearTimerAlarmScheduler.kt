@@ -38,9 +38,10 @@ import javax.inject.Singleton
  * 대가로 예약 뒤의 시계 보정에 노출된다. 워치가 폰과 시각을 맞출 때 생기는 폭이라 작고,
  * 위 2번이 그 폭을 화면에도 똑같이 반영해 준다.
  *
- * ⚠️ **BAL 을 통과시켜 주지는 않는다.** `setAlarmClock` 이면 만료 때 액티비티를 띄울 수
- * 있으리라 보고 한 번 바꿔 봤지만 아니었다 — 실기기에서 `RTC_WAKEUP flags=0x3` 으로
- * 폰과 똑같이 걸린 상태에서도 `BAL_BLOCK` 이었다. 사정은 `docs/KNOWN-ISSUES.md` ⑥.
+ * ⚠️ **알람 화면이 뜨는 것과는 무관하다.** `setAlarmClock` 이면 만료 때 액티비티가 뜨리라
+ * 보고 바꿔 봤지만 아니었다 — `RTC_WAKEUP flags=0x3` 으로 폰과 똑같이 걸어도 앱이 직접
+ * 부르는 시작은 `BAL_BLOCK` 이다. 화면은 **알림이 알려질 때 시스템이** 띄운다
+ * ([WearTimerNotifier] 참고).
  *
  * ## 권한을 묻지 않는다
  * 매니페스트가 `USE_EXACT_ALARM` 을 선언하고, 그건 자동 허용이다. 폰처럼 사용자에게
