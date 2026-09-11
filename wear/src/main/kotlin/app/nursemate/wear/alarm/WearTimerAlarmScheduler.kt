@@ -26,13 +26,29 @@ import javax.inject.Singleton
  *
  * ## 폰과 다른 점 둘
  * - **[AlarmManager.ELAPSED_REALTIME_WAKEUP] 을 쓴다.** 폰은 `setAlarmClock`(벽시계)인데,
- *   워치는 시계가 폰과 어긋날 수 있다. 남은 시간으로 환산해 걸면 시계 보정에 흔들리지 않는다.
- *   삼성 기본 타이머도 이 방식이다.
+ *   워치는 시계가 폰과 어긋날 수 있다. 남은 시간으로 환산해 걸면 **예약한 뒤의** 시계 보정이
+ *   발화 시각을 밀지 않는다. 삼성 기본 타이머도 이 방식이다.
+ *
+ *   ⚠️ **화면과는 갈릴 수 있다.** `endAt` 은 벽시계 값이고 화면은 그것으로 남은 시간을
+ *   계산한다(`CareTimer.remainingAt`). 예약해 둔 사이에 시계가 보정되면 알람(경과시간 기준)과
+ *   숫자(벽시계 기준)가 그 보정폭만큼 어긋난다. 창이 좁아 실사용에서 드러날 일은 적지만,
+ *   "시계에 전혀 안 흔들린다"는 뜻은 아니다.
  * - **상태바 알람 아이콘용 `showIntent` 가 없다.** 워치에는 그 자리가 없다.
  *
  * ## 권한을 묻지 않는다
  * 매니페스트가 `USE_EXACT_ALARM` 을 선언하고, 그건 자동 허용이다. 폰처럼 사용자에게
  * 설정을 열게 하지 않는다 — 손목에서 할 일이 아니다.
+ *
+ * ## Doze 쿼터에 걸리지 않는다
+ * `setExactAndAllowWhileIdle` 은 Doze 중 앱당 발화 횟수 제한을 받는다. 예전 상수인
+ * **「9분에 한 번」을 걱정할 수 있는데, 그건 `allow_while_idle_compat_quota` 로 targetSdk 가
+ * 낮은 앱에만 적용된다.** 이 기기의 값은 이렇다(실기기 `dumpsys alarm`):
+ *
+ *     allow_while_idle_quota        = 72   / 1시간
+ *     allow_while_idle_compat_quota = 7    / 1시간
+ *
+ * 병동에서 서너 개를 같이 돌리는 게 이 기능의 전제라 실제로 확인했다 — 깊은 Doze(`IDLE`)
+ * 상태에서 8초 간격 세 개를 걸었더니 **하나도 밀리지 않고 전부 제때 울렸다.**
  */
 @Singleton
 class WearTimerAlarmScheduler @Inject constructor(@param:ApplicationContext private val context: Context) :

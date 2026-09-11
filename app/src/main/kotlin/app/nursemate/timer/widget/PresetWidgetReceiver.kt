@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,8 +26,21 @@ class PresetWidgetReceiver : AppWidgetProvider() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * ⚠️ **여기도 브로드캐스트다.** `goAsync` 없이 코루틴만 띄우면 `onReceive` 가 반환하는
+     * 순간 프로세스가 회수 대상이 된다. 이 경로는 위젯을 처음 놓을 때·재부팅 후에 오는데,
+     * **그 브로드캐스트 때문에 프로세스가 새로 뜨는** 상황이라 회수되기 쉽다. 렌더가 잘리면
+     * 위젯이 초기 레이아웃(`nm_widget_loading`)인 채로 남는다.
+     */
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
-        refresh(context, appWidgetIds)
+        val pending = goAsync()
+        scope.launch {
+            try {
+                refresh(context, appWidgetIds)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -46,10 +60,21 @@ class PresetWidgetReceiver : AppWidgetProvider() {
         }
     }
 
-    /** 위젯이 지워지면 슬롯도 지운다 — Glance 상태와 달리 저절로 사라지지 않는다. */
+    /**
+     * 위젯이 지워지면 슬롯도 지운다 — Glance 상태와 달리 저절로 사라지지 않는다.
+     *
+     * [onUpdate] 와 같은 이유로 `goAsync` 가 필요하다. 잘리면 고아 슬롯이 남는다.
+     */
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         val store = context.timerWidgetEntryPoint().slotStore()
-        scope.launch { appWidgetIds.forEach { store.clear(it) } }
+        val pending = goAsync()
+        scope.launch {
+            try {
+                appWidgetIds.forEach { store.clear(it) }
+            } finally {
+                pending.finish()
+            }
+        }
     }
 
     /**
@@ -69,7 +94,7 @@ class PresetWidgetReceiver : AppWidgetProvider() {
                 null
             }
 
-            !TapGuard.claim(presetId) -> {
+            !TapGuard.claim(appWidgetId) -> {
                 Log.i(TAG, "방금 시작해 이 탭은 넘긴다 ($presetId)")
                 null
             }
@@ -104,16 +129,18 @@ class PresetWidgetReceiver : AppWidgetProvider() {
         }
     }
 
-    private fun refresh(context: Context, appWidgetIds: IntArray) {
+    /**
+     * ⚠️ **여기서 코루틴을 새로 띄우지 않는다.** 띄우면 부르는 쪽이 잡아 둔 `goAsync` 밖으로
+     * 새어 나가 렌더가 보호받지 못한다. 부르는 쪽이 기다리도록 `suspend` 로 둔다.
+     */
+    private suspend fun refresh(context: Context, appWidgetIds: IntArray) {
         val entry = context.timerWidgetEntryPoint()
-        scope.launch {
-            val ready = entry.canStartWithoutApp()
-            val presets = entry.presetRepository().presets.first()
-            val slots = entry.slotStore().slots.first()
-            appWidgetIds.forEach { id ->
-                val preset = presets.firstOrNull { it.id == slots[id] }
-                PresetWidgetRenderer.render(context, id, preset, ready)
-            }
+        val ready = entry.canStartWithoutApp()
+        val presets = entry.presetRepository().presets.first()
+        val slots = entry.slotStore().slots.first()
+        appWidgetIds.forEach { id ->
+            val preset = presets.firstOrNull { it.id == slots[id] }
+            PresetWidgetRenderer.render(context, id, preset, ready)
         }
     }
 
@@ -128,16 +155,30 @@ class PresetWidgetReceiver : AppWidgetProvider() {
  *
  * 브로드캐스트는 같은 리시버에 **직렬로** 전달되므로, 리시버가 기다리는 동안 두 번째 탭이
  * 밀린다. 그래서 창을 시각으로 재고 프로세스 메모리에만 둔다 — 연타는 한 프로세스에서 일어난다.
+ *
+ * ⚠️ **위젯 id 로 나눈다.** 프리셋 id 로 재면 같은 프리셋을 담은 **다른 위젯**을 누른 것까지
+ * 막힌다. 위젯마다 다른 프리셋을 담는 건 권장일 뿐 강제가 아니고(`PresetWidgetSlot`),
+ * 막으려는 것은 "눌러도 화면이 안 바뀌어 같은 위젯을 또 누르는" 경우다.
  */
 private object TapGuard {
 
-    private val recent = java.util.concurrent.atomic.AtomicReference<Pair<String, Long>?>(null)
+    private val recent = AtomicReference<Map<Int, Long>>(emptyMap())
 
-    fun claim(presetId: String): Boolean {
+    /**
+     * @return 이 탭을 세어도 되면 true.
+     *
+     * ⚠️ **CAS 가 실패하면 다시 읽어 판단한다.** 예전에는 곧바로 false 를 돌려, 경합했을 뿐인
+     * **정상 탭까지 삼켰다** — 다른 위젯을 누른 탭도 함께 사라졌다.
+     */
+    fun claim(appWidgetId: Int): Boolean {
         val now = System.currentTimeMillis()
-        val prev = recent.get()
-        if (prev != null && prev.first == presetId && now - prev.second < WINDOW_MS) return false
-        return recent.compareAndSet(prev, presetId to now)
+        while (true) {
+            val prev = recent.get()
+            if (now - (prev[appWidgetId] ?: 0L) < WINDOW_MS) return false
+            // 창이 지난 항목은 함께 버린다 — 위젯을 지워도 여기 남기 때문이다.
+            val next = prev.filterValues { now - it < WINDOW_MS } + (appWidgetId to now)
+            if (recent.compareAndSet(prev, next)) return true
+        }
     }
 
     const val WINDOW_MS = 2_000L

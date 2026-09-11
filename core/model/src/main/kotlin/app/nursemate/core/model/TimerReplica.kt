@@ -190,7 +190,14 @@ fun mergeRecords(mine: List<TimerRecord>, theirs: List<TimerRecord>): List<Timer
     return merged.values.sortedBy { it.id }
 }
 
-/** [mergeRecords] 의 판정 하나. 규칙은 그쪽 문서에 적었다. */
+/**
+ * [mergeRecords] 의 판정 하나. 규칙은 그쪽 문서에 적었다.
+ *
+ * ⚠️ **전제: 한 기기가 같은 `rev` 로 두 가지 내용을 만들지 않는다.** `rev` 는 그 기기가
+ * 고칠 때마다 오르므로 이 전제는 지금 구조에서 저절로 성립한다. 깨지면 — `rev` 도 `origin`
+ * 도 같은데 내용만 다른 두 기록이 생기면 — `a` 를 고르는 쪽으로 기울어 **합치는 순서에 따라
+ * 결과가 갈린다.**
+ */
 fun winnerOf(a: TimerRecord, b: TimerRecord): TimerRecord = when {
     a.rev != b.rev -> if (a.rev > b.rev) a else b
     else -> if (a.origin >= b.origin) a else b
