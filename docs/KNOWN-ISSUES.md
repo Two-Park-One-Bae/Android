@@ -82,38 +82,39 @@ NM-445 브랜치에서 건드리지 않았다.
 **어떻게 할까.** 그대로 둔다. 개수가 적고(수십 개, 수 KB) 되살아날 위험은 없다.
 새 삭제부터는 왕복 한 번에 정리된다.
 
-## ⑥ 워치는 만료를 진동으로만 알린다 — 화면에는 아무것도 안 뜬다
+## ⑥ 워치는 만료 순간에 화면을 스스로 켜지 못한다 — 손목을 들면 뜬다
 
-**무엇이.** 화면이 꺼진 워치에서 타이머가 만료되면 진동은 [완료] 까지 돌지만 **화면에는
-아무것도 나타나지 않는다.** 손목을 들어야 알림 목록에서 볼 수 있다.
+**무엇이.** 화면이 꺼진 워치에서 타이머가 만료되면 진동은 즉시 돌지만 **화면이 저절로 켜지지는
+않는다.** 손목을 들면 그 순간 만료 화면([WearAlarmActivity])이 바로 뜬다.
 
-**재현.** 폰에서 타이머를 시작하고 워치 화면을 끈 채로 만료시킨다. 워치 앱을 직전에
-쓰지 않은 상태여야 한다 — 썼다면 아래 「예외」에 걸려 화면이 뜬다.
+**왜 그런가.** Android 14+ 의 백그라운드 액티비티 시작(BAL) 제한이다. 화면이 꺼져 있는 동안은
+어떤 방법으로도 통과하지 못했다 — 실기기에서 전부 `BAL_BLOCK` 이었다(2026-09-11):
 
-**왜 그런가.** 두 관문이 겹쳐 있고 **둘 다 앱 밖에 있다.**
+| 시도 | 확인된 것 | 결과 |
+|---|---|---|
+| `PendingIntent` 생성자 옵트인 | `balAllowedByPiCreator` 가 `BSP.NONE` → `BSP.ALLOW_BAL` | ✗ |
+| 포그라운드 서비스 대신 **알람 리시버**에서 호출 | `callingUidProcState` 가 `FOREGROUND_SERVICE` → `RECEIVER` | ✗ |
+| `setExactAndAllowWhileIdle` → `setAlarmClock` | `RTC_WAKEUP flags=0x3` 으로 폰과 동일 | ✗ |
+| 알림의 `fullScreenIntent` | 시스템이 실제로 시도함 | ✗ |
+| `SYSTEM_ALERT_WINDOW` | 워치에 **권한 부여 화면이 없다** — 인텐트가 설정 최상위로만 열린다 | 불가 |
 
-1. **자체 알람 화면([WearAlarmActivity])은 백그라운드에서 시작할 수 없다.** Android 14+ 의
-   BAL 제한이다. 아래를 전부 실기기에서 시도했고 전부 `BAL_BLOCK` 이었다(2026-09-11):
+**삼성 기본 타이머는 왜 되나.** 가질 수 없는 권한을 갖고 있다:
 
-   | 시도 | 확인된 것 | 결과 |
-   |---|---|---|
-   | `PendingIntent` 생성자 옵트인 | `balAllowedByPiCreator` 가 `BSP.NONE` → `BSP.ALLOW_BAL` | ✗ |
-   | 포그라운드 서비스 대신 **알람 리시버**에서 호출 | `callingUidProcState` 가 `FOREGROUND_SERVICE` → `RECEIVER` | ✗ |
-   | `setExactAndAllowWhileIdle` → `setAlarmClock` | `RTC_WAKEUP flags=0x3` 으로 폰과 동일 | ✗ |
-   | 알림의 `fullScreenIntent` | 시스템이 실제로 시도함 | ✗ |
-   | `SYSTEM_ALERT_WINDOW` | 워치에 **권한 부여 화면이 없다** — 인텐트가 설정 최상위로만 열린다 | 불가 |
+    com.samsung.android.watch.timer  (SYSTEM, PRIVILEGED)
+      android.permission.START_ACTIVITIES_FROM_BACKGROUND: granted=true
 
-2. **Wear 가 알림을 "알린다"고 하면서 아무것도 그리지 않는다.** 우리가 만든 필터는 모두
-   걷어냈고(`not noisy`·`ongoing`·`ONGOING_ACTIVITY_TYPE`), 로그에 `alerting an item` 이
-   세 번 찍힌다. 그런데도 화면은 `Dozing` 그대로다. 이 단계는 더 파고들지 못했다.
+`signature|privileged` 라 기기 시스템 파티션에 서명된 앱만 받는다. Play 로 배포하는 앱은
+매니페스트에 적어도 부여되지 않는다. **우리가 놓친 API 가 있어서가 아니다.**
 
-**예외 — 앱을 막 쓴 직후에는 뜬다.** 워치 앱이 최근에 포그라운드였다면 FSI 가
-`BAL_ALLOW_ALLOWLISTED_UID` 로 통과해 화면이 뜬다(실측). 워치에서 타이머를 시작한 직후가
-그렇다. **실사용 경로(폰에서 시작, 워치 유휴)에서는 해당되지 않는다.**
+**대신 하는 것 — 화면이 켜지는 순간 다시 올린다.** [WearAlarmService] 가 `ACTION_SCREEN_ON` 을
+받아 울리는 알림을 **지웠다 다시 게시**한다. 같은 id 로 덮어쓰면 Wear 가 갱신으로 보고 다시
+알리지 않으므로, 지우고 새로 올려야 알림 판정을 다시 타고 `fullScreenIntent` 가 재발사된다.
+그 시점에는 화면이 켜져 있어 통과한다:
 
-**지금 상태.** 만료를 놓치지는 않는다 — 진동이 [완료] 까지 돌고, 손목을 들면 알림에
-[완료] 버튼이 있다. 빠진 것은 **깨워서 보여 주는 것**이다.
+    15:30:53.828  만료 — FSI            BAL_BLOCK                  code=102
+    15:30:59.720  화면 켜짐 → 재게시    BAL_ALLOW_VISIBLE_WINDOW   code=0
 
-**어떻게 할까.** 별도 이슈다. 남은 실마리는 ②뿐이다 — Wear 가 `alerting an item` 을 찍고도
-그리지 않는 이유. 삼성 기본 타이머는 같은 상황에서 화면을 띄우므로 길이 있기는 하다.
-`docs/SPEC-FEEDBACK.md` 에 정본 「W3 만료」가 워치에서 그대로 나오지 않는다는 것도 함께 올린다.
+같은 순간 `startActivity` 를 직접 부르는 것은 여전히 막힌다 — 통하는 것은 재게시 쪽이다.
+
+**남는 제약.** 만료 순간 화면이 스스로 켜지지는 않는다. 진동으로 알아차리고 손목을 들어야
+한다. 병동에서 손목을 드는 동작이 자연스러우므로 실사용에서는 [완료] 까지 **두 동작**이다.

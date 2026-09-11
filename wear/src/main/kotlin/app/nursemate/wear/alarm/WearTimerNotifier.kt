@@ -44,6 +44,9 @@ import javax.inject.Singleton
  * [WearAlarmService] 가 `Vibrator` 로 직접 몬다. 채널에 진동을 켜 두면 그 위에 한 번 더
  * 겹쳐 울린다.
  */
+// 알림 종류가 둘(만료·진행 중)이고 각각 채널·빌더·재게시가 따로라 함수가 많다.
+// 쪼개면 셋이 같이 움직여야 하는 규칙(채널 진동·ongoing 여부)이 흩어진다.
+@Suppress("TooManyFunctions")
 @Singleton
 class WearTimerNotifier @Inject constructor(@param:ApplicationContext private val context: Context) {
 
@@ -72,6 +75,25 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
 
         ringing.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
         syncOngoing(manager, timers)
+    }
+
+    /**
+     * 울리는 알림을 **지웠다 다시 올린다.**
+     *
+     * 같은 id 로 덮어쓰면 Wear 가 갱신으로 보고 다시 알리지 않는다(`alertOnlyOnce` 취급).
+     * 지우고 새로 올려야 알림 판정을 다시 타고, 그때 `fullScreenIntent` 도 다시 발사된다.
+     * 화면이 켜진 순간에 쓴다 — 꺼져 있을 때는 그 발사가 BAL 에 막히기 때문이다.
+     */
+    @SuppressLint("MissingPermission")
+    fun realert(timers: List<CareTimer>) {
+        if (!canPost()) return
+        ensureChannel()
+        val manager = NotificationManagerCompat.from(context)
+        timers.filter { it.state == TimerState.RINGING }.forEach { timer ->
+            val id = notificationId(timer.id)
+            manager.cancel(id)
+            manager.notify(id, build(timer))
+        }
     }
 
     /**
