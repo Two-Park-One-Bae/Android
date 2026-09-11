@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
-// 릴리스 서명 주입 — 우선순위: secrets.properties > 환경변수. keystore는 certificates 레포 보관 (docs/RELEASE.md)
+// 카카오 앱 키 주입용. 릴리스 서명은 폰·워치가 같아야 해서 convention plugin 이 준다(ReleaseSigning.kt).
 val secrets = Properties().apply {
     val file = rootProject.file("secrets.properties")
     if (file.exists()) file.inputStream().use(::load)
@@ -45,19 +45,6 @@ android {
         versionName = "0.2.0"
     }
 
-    signingConfigs {
-        // 서명 정보가 없으면(PR CI 등) release는 미서명으로 빌드된다 — Play 업로드 산출물은 로컬/릴리스 CI에서만
-        val storeFilePath = secret("RELEASE_STORE_FILE")
-        if (storeFilePath != null) {
-            create("release") {
-                storeFile = rootProject.file(storeFilePath)
-                storePassword = secret("RELEASE_STORE_PASSWORD")
-                keyAlias = secret("RELEASE_KEY_ALIAS")
-                keyPassword = secret("RELEASE_KEY_PASSWORD")
-            }
-        }
-    }
-
     buildFeatures {
         buildConfig = true
     }
@@ -79,7 +66,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.findByName("release")
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
         }
     }
@@ -121,9 +107,12 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // 위젯(NM-443). Glance 는 RemoteViews 를 Compose 문법으로 감싼 것이라, 위젯 안에서
-    // 쓸 수 있는 것은 여전히 RemoteViews 가 지원하는 범위뿐이다.
-    implementation(libs.androidx.glance.appwidget)
+    // 위젯(NM-443)은 RemoteViews 로 직접 그린다. Glance 를 쓰다 걷어냈다 — 사정은
+    // [PresetWidgetRenderer]. 의존성도 함께 뺀다: glance-appwidget 이 WorkManager 2.7.1 을
+    // 끌고 오는데, 그 WorkManagerInitializer 가 androidx.startup 으로 프로세스 시작 때 돌면서
+    // release(R8)에서 WorkDatabase 생성에 실패해 앱이 바로 죽었다(2026-09-11 릴리스 스모크).
+    // 슬롯 저장에 쓰는 DataStore 는 그동안 Glance 를 타고 들어와 있었다 — 직접 선언한다.
+    implementation(libs.androidx.datastore.preferences)
 
     // 후보·세부정보의 낱알 이미지(CDN). 없는 품목은 404 가 오므로 폴백이 필요하다(NM-347).
     implementation(libs.coil.compose)
