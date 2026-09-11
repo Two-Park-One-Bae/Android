@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -74,6 +75,9 @@ class WearAlarmActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
+        // `turnScreenOn` 은 **켜기만** 한다. 이게 없으면 화면 시간초과가 그대로 걸려,
+        // 울리는 중인데 화면만 다시 꺼진다(워치는 기본 15초라 특히 짧다).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             // ⚠️ **인텐트에 실린 타이머 하나에 매달리지 않는다.** 그러면 나중에 울린 것이
             // `onNewIntent` 로 앞 것을 덮고, [완료] 를 누르면 화면이 닫혀 **아직 울리는 앞
