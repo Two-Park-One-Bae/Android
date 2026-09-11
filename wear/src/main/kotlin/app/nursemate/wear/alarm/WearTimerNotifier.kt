@@ -18,6 +18,7 @@ import androidx.core.content.getSystemService
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerState
 import app.nursemate.wear.MainActivity
 import app.nursemate.wear.R
@@ -72,7 +73,11 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         }
         ensureChannel()
         val manager = NotificationManagerCompat.from(context)
-        val ringing = timers.filter { it.state == TimerState.RINGING }
+        // ⚠️ **정렬해서 쓴다.** `repository.timers` 는 복제 레코드 순서, 곧 UUID 순이다.
+        // 맨 앞이 「가장 오래 놓친 것」이어야 그것이 스와이프 불가 알림(`FOREGROUND_ID`)과
+        // 진동을 가져간다. 화면도 같은 함수를 쓴다(`WearTimerViewModel`).
+        val ordered = CareTimerTransitions.projectedAndOrdered(timers, System.currentTimeMillis())
+        val ringing = ordered.filter { it.state == TimerState.RINGING }
 
         // 더 이상 울리지 않는 것은 걷는다. 이게 없으면 폰에서 완료해도 워치에 남는다.
         //
@@ -91,7 +96,7 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         others.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
         // 맨 앞이 바뀌면(먼저 울린 것을 완료하면) 서비스 알림도 새 것으로 갈아 끼운다.
         ringing.firstOrNull()?.let { manager.notify(FOREGROUND_ID, foregroundNotification(it)) }
-        syncOngoing(manager, timers)
+        syncOngoing(manager, ordered)
     }
 
     /**
@@ -107,9 +112,10 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
      * 일시정지 중에는 셀 것이 없으므로 글자로 바꾼다.
      */
     @SuppressLint("MissingPermission")
-    private fun syncOngoing(manager: NotificationManagerCompat, timers: List<CareTimer>) {
-        val running = timers.filter { it.state != TimerState.RINGING }
-        val lead = running.minByOrNull { it.endAtEpochMillis }
+    private fun syncOngoing(manager: NotificationManagerCompat, ordered: List<CareTimer>) {
+        // `ordered` 는 [sync] 가 이미 정렬해 넘긴 것이다 — 맨 앞이 가장 임박한 것이다.
+        val running = ordered.filter { it.state != TimerState.RINGING }
+        val lead = running.firstOrNull()
         if (lead == null) {
             manager.cancel(ONGOING_ID)
             return

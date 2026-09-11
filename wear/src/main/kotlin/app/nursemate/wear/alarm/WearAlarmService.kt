@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TIMER_SUSTAINED_VIBRATION
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
@@ -56,7 +57,10 @@ class WearAlarmService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val ringing = runBlocking { repository.timers.first() }.filter { it.state == TimerState.RINGING }
+        // ⚠️ **정렬해서 맨 앞을 고른다.** `repository.timers` 는 UUID 순이라 그냥 `first()` 를
+        // 쓰면 「가장 오래 놓친 것」이 아니다. 그 값이 스와이프 불가 알림과 진동의 주인이
+        // 되므로 화면·알림과 같은 규칙을 따라야 한다.
+        val ringing = ringingInOrder(runBlocking { repository.timers.first() })
         if (ringing.isEmpty()) {
             stopSelf()
             return START_NOT_STICKY
@@ -68,12 +72,17 @@ class WearAlarmService : Service() {
         return START_STICKY
     }
 
+    /** 울리는 것을 **화면·알림과 같은 규칙**으로 세운다 — 맨 앞이 가장 오래 놓친 것이다. */
+    private fun ringingInOrder(timers: List<CareTimer>): List<CareTimer> =
+        CareTimerTransitions.projectedAndOrdered(timers, System.currentTimeMillis())
+            .filter { it.state == TimerState.RINGING }
+
     /** 울리는 것이 없어지는 순간 스스로 끝낸다. */
     private fun watch() {
         if (watching?.isActive == true) return
         watching = scope.launch {
             repository.timers.collect { timers ->
-                val ringing = timers.filter { it.state == TimerState.RINGING }
+                val ringing = ringingInOrder(timers)
                 // 끝낼 때도 한 번 쓸고 나간다 — 어느 순서로 [완료] 가 들어와도 알림이
                 // 남지 않는다.
                 notifier.sync(timers)
