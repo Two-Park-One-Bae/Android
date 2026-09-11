@@ -2,7 +2,6 @@ package app.nursemate.wear.alarm
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -38,15 +36,25 @@ import javax.inject.Singleton
  *
  * 중복 걱정은 없다. 브리징이 이미 끊겨 있어 한 번만 울린다.
  *
+ * ## 만료 화면은 시스템이 그린다
+ * 정본 「W3 만료」를 우리 액티비티로 띄우려 했지만, 화면이 꺼진 워치에서는 백그라운드
+ * 액티비티 시작(BAL)이 막혀 되지 않는다. 옵트인·리시버에서 호출·`setAlarmClock`·
+ * `fullScreenIntent` 를 전부 시도했고 전부 `BAL_BLOCK` 이었다(`docs/KNOWN-ISSUES.md` ⑥).
+ *
+ * 대신 **Wear SysUI 가 자기 전체화면 팝업으로 그린다**(`DataForFullPopup` →
+ * `wnotification.detail2.activity.DetailActivity2`, `BAL_ALLOW_ALLOWLISTED_COMPONENT`).
+ * 시스템이 자기 권한으로 띄우므로 상태를 가리지 않는다.
+ *
+ * ⚠️ **그래서 `setFullScreenIntent` 를 붙이면 안 된다.** 붙어 있으면 Wear 가 그것을 띄우는
+ * 것으로 알림 표시를 대신하는데, 그 시작이 막혀 **아무것도 안 나온다.** 빼 두어야 시스템
+ * 팝업 경로를 탄다 — 실기기에서 붙였을 때 0건, 뺐을 때 정상으로 갈렸다.
+ *
  * ## 진동은 여기서 걸지 않는다
  * spec §워치 — "울림 방식 설정과 무관하게 워치는 항상 햅틱". 그런데 **Wear 는 알림 채널의
  * 진동 패턴을 무시하고 자기 햅틱을 한 번만 재생한다**(실기기 확인). 그래서 진동은
  * [WearAlarmService] 가 `Vibrator` 로 직접 몬다. 채널에 진동을 켜 두면 그 위에 한 번 더
  * 겹쳐 울린다.
  */
-// 알림 종류가 둘(만료·진행 중)이고 각각 채널·빌더·재게시가 따로라 함수가 많다.
-// 쪼개면 셋이 같이 움직여야 하는 규칙(채널 진동·ongoing 여부)이 흩어진다.
-@Suppress("TooManyFunctions")
 @Singleton
 class WearTimerNotifier @Inject constructor(@param:ApplicationContext private val context: Context) {
 
@@ -75,25 +83,6 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
 
         ringing.forEach { timer -> manager.notify(notificationId(timer.id), build(timer)) }
         syncOngoing(manager, timers)
-    }
-
-    /**
-     * 울리는 알림을 **지웠다 다시 올린다.**
-     *
-     * 같은 id 로 덮어쓰면 Wear 가 갱신으로 보고 다시 알리지 않는다(`alertOnlyOnce` 취급).
-     * 지우고 새로 올려야 알림 판정을 다시 타고, 그때 `fullScreenIntent` 도 다시 발사된다.
-     * 화면이 켜진 순간에 쓴다 — 꺼져 있을 때는 그 발사가 BAL 에 막히기 때문이다.
-     */
-    @SuppressLint("MissingPermission")
-    fun realert(timers: List<CareTimer>) {
-        if (!canPost()) return
-        ensureChannel()
-        val manager = NotificationManagerCompat.from(context)
-        timers.filter { it.state == TimerState.RINGING }.forEach { timer ->
-            val id = notificationId(timer.id)
-            manager.cancel(id)
-            manager.notify(id, build(timer))
-        }
     }
 
     /**
@@ -208,24 +197,17 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
     private fun build(timer: CareTimer) = base(timer, ongoing = false).build()
 
     /**
-     * 손목을 덮는 알람 화면을 여는 인텐트 — **만료 화면은 이 길로 뜬다.**
+     * 알림을 **눌렀을 때** 여는 우리 화면.
      *
-     * 앱이 직접 `startActivity` 로 띄우려는 시도는 백그라운드에서 막힌다. 실제로 뜨는 것은
-     * Wear SysUI 가 **알림을 알리기로 결정한 뒤** 자기 자격으로 이 인텐트를 발사할 때다
-     * (실기기 로그: `alerting an item` → `BAL_ALLOW_ALLOWLISTED_UID [realCaller] result code=0`).
-     *
-     * ⚠️ 그래서 **알림이 알려지는 것이 전부다.** [ensureChannel] 과 `ongoing` 설정이
-     * 그 자격을 좌우한다 — 둘 중 하나만 어긋나도 화면은 영영 안 뜬다.
-     *
-     * [backgroundLaunchOptions] 는 폰과 같은 형태로 맞춰 둔 것이다. 위 경로는 보내는 쪽
-     * 자격으로 통과하므로 이것 없이도 떴을 수 있지만, 빼고 확인하지 않았다.
+     * 만료를 덮는 화면은 이것이 아니라 **Wear SysUI 가 그린다** — 자세한 사정은 이 클래스
+     * KDoc 의 「만료 화면은 시스템이 그린다」 절에 있다. 여기는 사용자가 알림 본문을 눌러
+     * 더 보려 할 때의 목적지다.
      */
     private fun alarmScreenIntent(context: Context, timer: CareTimer): PendingIntent = PendingIntent.getActivity(
         context,
         notificationId(timer.id),
         WearAlarmActivity.intent(context, timer.id, timer.alarmTitle),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        backgroundLaunchOptions()
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
     /**
@@ -245,8 +227,11 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         // 기대면 워치 앱을 지웠다 깔 때 같은 만료가 두 번 울릴 여지가 남는다.
         .setLocalOnly(true)
         .addAction(0, COMPLETE_LABEL, WearTimerActionReceiver.completeIntent(context, timer.id))
-        // 정본 「W3 만료」는 시스템 알림 모양이 아니다 — 우리 화면을 띄운다.
-        .setFullScreenIntent(alarmScreenIntent(context, timer), true)
+        // ⚠️ **`setFullScreenIntent` 를 붙이지 않는다(실험).** 붙어 있으면 Wear 가 그것을
+        // 띄우는 것으로 알림 표시를 대신하는데, 그 시작이 BAL 에 막혀 아무것도 안 나온다.
+        // 빼면 Wear 가 자기 전체화면 팝업(`DataForFullPopup` → SysUI `DetailActivity2`)을
+        // 쓰는지 확인한다 — 그건 시스템이 자기 권한으로 띄우므로 BAL 과 무관하다.
+        .setContentIntent(alarmScreenIntent(context, timer))
 
     /**
      * ⚠️ **채널은 만들고 나면 진동 설정을 못 바꾼다.** 지우고 같은 id 로 다시 만들어도 옛
@@ -313,19 +298,3 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         private const val STATUS_TEMPLATE = "#label# #remaining#"
     }
 }
-
-/**
- * `PendingIntent` 를 만드는 쪽이 「이걸로 액티비티를 띄워도 된다」고 밝히는 옵션.
- *
- * Android 14 부터 필요하다. 그 아래에서는 `null` 이어도 같은 동작이다.
- */
-private fun backgroundLaunchOptions(): Bundle? =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        ActivityOptions.makeBasic()
-            .setPendingIntentCreatorBackgroundActivityStartMode(
-                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-            )
-            .toBundle()
-    } else {
-        null
-    }

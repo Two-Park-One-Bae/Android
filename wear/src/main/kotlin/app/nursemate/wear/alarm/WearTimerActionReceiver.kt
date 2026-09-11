@@ -35,6 +35,7 @@ class WearTimerActionReceiver : BroadcastReceiver() {
         if (intent.action != ACTION_COMPLETE) return
         val timerId = intent.getStringExtra(EXTRA_TIMER_ID) ?: return
         val pending = goAsync()
+        Log.i(TAG, "완료 눌림 ($timerId)")
         scope.launch {
             try {
                 // 워치가 자기 저장소를 직접 고친다 — 폰에 닿지 않아도 완료는 완료다.
