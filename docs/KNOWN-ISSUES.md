@@ -81,3 +81,36 @@ NM-445 브랜치에서 건드리지 않았다.
 
 **어떻게 할까.** 그대로 둔다. 개수가 적고(수십 개, 수 KB) 되살아날 위험은 없다.
 새 삭제부터는 왕복 한 번에 정리된다.
+
+## ⑥ 워치 화면이 꺼져 있으면 알람 화면이 안 뜬다 — 알림·진동만 남는다
+
+**무엇이.** 만료 때 `WearAlarmActivity` 가 뜨지 않고 알림과 진동만 울린다. 화면이 켜져 있으면
+정상적으로 뜬다.
+
+**재현.** 워치를 충전기에 올려(손목에서 벗겨) 화면이 꺼진 상태로 타이머를 만료시킨다.
+`adb logcat` 에 세 번 연속 찍힌다 — 서비스가 직접 부른 것 하나, `fullScreenIntent` 로
+시스템이 부른 것 둘:
+
+```
+Background activity launch blocked! ... cmp=app.nursemate/.wear.alarm.WearAlarmActivity
+  callingUidProcState: FOREGROUND_SERVICE
+  callingUidHasVisibleActivity: false ... callingUidHasNonAppVisibleWindow: false
+  appSwitchState: 2
+START ... (BAL_BLOCK) result code=102
+```
+
+화면이 켜진 채로 같은 것을 돌리면 `BAL_ALLOW_VISIBLE_WINDOW`, `result code=0` 으로 뜬다.
+(2026-09-11 릴리스 스모크, 릴리스 빌드 실기기)
+
+**왜 그런가.** 포그라운드 서비스라는 자격만으로는 백그라운드 액티비티 시작이 허용되지 않는다.
+`fullScreenIntent` 를 통한 경로도 마찬가지로 막힌다 — 알림은 뜨므로 사용자가 아예 모르지는
+않는다. 같은 만료에서 **알림 게시와 진동은 정상 동작했다**(`VibratorManagerService vibrate`,
+800/400 반복).
+
+**아직 확인 못 한 것.** **손목에 찬 채로 화면만 꺼진 경우**는 재현하지 못했다. 위 로그에는
+`[WearSdkAlertingProcessor] Not alerting: Device is off-body` 도 함께 찍혀 있어, 벗겨 둔 것이
+판정에 함께 작용했을 수 있다. 실제 사용 형태는 이쪽이므로 먼저 확인할 것.
+
+**어떻게 할까.** 손목에 찬 상태에서도 막힌다면, 손목을 들어 화면이 켜질 때 알림의
+`fullScreenIntent` 가 다시 평가되는지부터 본다. 알림만으로 충분하다고 볼 여지도 있다 —
+진동이 [완료] 까지 이어지므로 놓치지는 않는다.
