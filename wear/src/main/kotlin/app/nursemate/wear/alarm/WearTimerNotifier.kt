@@ -141,7 +141,8 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         val builder = NotificationCompat.Builder(context, ONGOING_CHANNEL_ID)
             .setSmallIcon(R.drawable.nm_ic_timer)
             .setContentTitle(lead.label)
-            .setContentText(othersLabel(shown.size))
+            // 맨 앞은 `setContentTitle` 이 이름으로 보여 준다 — 나머지만 센다.
+            .setContentText(othersLabel(shown.drop(1)))
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)
@@ -175,8 +176,23 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         manager.notify(ONGOING_ID, builder.build())
     }
 
-    /** 「외 2개」 — 하나뿐이면 붙이지 않는다. */
-    private fun othersLabel(count: Int): String? = if (count > 1) "외 ${count - 1}개 진행 중" else null
+    /**
+     * 「외 2개」 — 하나뿐이면 붙이지 않는다.
+     *
+     * ⚠️ **울리는 것을 「진행 중」으로 세지 않는다.** [syncOngoing] 은 도는 것이 없으면 울리는
+     * 맨 앞을 대신 세우고 목록도 울리는 것으로 넘긴다 — 그때 전부 「진행 중」이라 적으면 사실과
+     * 다르다. 폰(`TimerOngoingNotification.others`)과 같은 규칙으로 가른다.
+     */
+    private fun othersLabel(rest: List<CareTimer>): String? {
+        if (rest.isEmpty()) return null
+        val ended = rest.count { it.state == TimerState.RINGING }
+        val going = rest.size - ended
+        return when {
+            ended == 0 -> "외 ${going}개 진행 중"
+            going == 0 -> "외 ${ended}개 종료"
+            else -> "외 ${going}개 진행 중 · ${ended}개 종료"
+        }
+    }
 
     /** 진행 중 표시는 조용해야 한다 — 손목을 울리는 것은 만료뿐이다. */
     private fun ensureOngoingChannel() {
