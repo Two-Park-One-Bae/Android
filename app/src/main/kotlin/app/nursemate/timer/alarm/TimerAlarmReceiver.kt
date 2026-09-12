@@ -17,6 +17,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -102,7 +103,7 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         val timer = repository.timers.first().firstOrNull { it.id == timerId } ?: return
         if (timer.state != TimerState.RINGING) return
         Log.i(TAG, "[지우기] 로 사라진 만료 알림을 되돌린다 ($timerId)")
-        notify(context, timer)
+        syncAlarms(context)
     }
 
     private suspend fun fire(context: Context, timerId: String) {
@@ -112,61 +113,105 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         // 울림으로 올라가지 않았다면 아직 만료 전이다 — 만료 직전에 [+1분] 을 눌러 `endAt` 이
         // 밀렸는데 옛 알람이 뒤늦게 발화한 경우다. 알림을 띄우면 안 된다.
         if (timer.state != TimerState.RINGING) return
-        notify(context, timer)
+        syncAlarms(context)
     }
 
-    // 권한은 바로 아래에서 검사한다. lint 가 호출 지점을 따라가지 못해 오탐을 낸다.
-    @SuppressLint("MissingPermission")
-    private suspend fun notify(context: Context, timer: CareTimer) {
-        if (!canPostNotifications(context)) {
-            Log.w(TAG, "알림 권한이 없어 만료를 알리지 못했다 (${timer.id})")
-            return
-        }
-        val channel = TimerAlarmChannels.channelFor(repository.alertMode.first())
-
-        val complete = actionPendingIntent(context, timer.id, ACTION_COMPLETE)
-
-        val open = PendingIntent.getActivity(
-            context,
-            AlarmManagerTimerScheduler.requestCode(timer.id),
-            TimerAlarmIntents.openTimerTab(context),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, channel)
-            .setSmallIcon(DsR.drawable.nm_ic_timer)
-            // spec §만료·알람 — title = `❗ [분류] 라벨`
-            .setContentTitle(timer.alarmTitle)
-            .setContentText(COMPLETE_HINT)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setContentIntent(open)
-            // 스와이프로 지워지지 않게 한다 — 끄는 길은 [완료] 하나다.
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .addAction(0, COMPLETE_LABEL, complete)
-            // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
-            .setDeleteIntent(dismissPendingIntent(context, timer.id))
-            // 잠금화면 풀스크린 — **알람 전용 화면**을 띄운다(spec §만료·알람 "잠금: 풀스크린").
-            // 여기에 `MainActivity` 를 넘기면 `showWhenLocked` 가 없어 시스템이 조용히
-            // 헤드업으로 낮춘다. Android 14+ 는 권한도 있어야 한다.
-            .setFullScreenIntent(fullScreenPendingIntent(context, timer), true)
-            .build()
-
-        // 취소될 때까지 소리를 반복한다(spec: [완료] 까지 지속).
-        notification.flags = notification.flags or Notification.FLAG_INSISTENT
-
-        NotificationManagerCompat.from(context)
-            .notify(AlarmManagerTimerScheduler.notificationId(timer.id), notification)
+    /**
+     * 울리는 것 중 **맨 앞 하나만** 만료 알림을 갖게 맞춘다 — spec §만료·알람 「하나씩 순서대로」.
+     *
+     * ## 각자 띄우면 나중 것이 앞 것을 덮는다
+     * 타이머마다 알림을 올리면 상단 배너가 쌓이고, **맨 위는 나중에 울린 것**이 된다.
+     * 거기서 [완료] 를 누르면 나중 것이 꺼지고 먼저 울린 것이 남아 순서가 뒤집힌다
+     * (실기기에서 재현). 화면([TimerAlarmActivity])은 맨 앞을 제대로 고르는데 알림만
+     * 그 규칙을 안 따르고 있었다.
+     *
+     * 「맨 앞」의 뜻은 워치와 같다 — [CareTimerTransitions.projectedAndOrdered] 로 세운
+     * 첫 번째, 곧 **가장 오래 놓친 것**이다.
+     *
+     * 맨 앞이 바뀌는 것(먼저 울린 것을 완료)은 [TimerOngoingNotifier] 가 저장소 변화를 보고
+     * 다시 부른다 — 폰에는 워치의 포그라운드 서비스에 해당하는 것이 없어 그쪽이 그 몫을 한다.
+     */
+    private suspend fun syncAlarms(context: Context) {
+        syncAlarms(context, repository)
     }
-
-    private fun canPostNotifications(context: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
 
     companion object {
+
+        /**
+         * 울리는 것 중 **맨 앞 하나만** 만료 알림을 갖게 맞춘다 — spec §만료·알람 「하나씩 순서대로」.
+         *
+         * ## 각자 띄우면 나중 것이 앞 것을 덮는다
+         * 타이머마다 알림을 올리면 상단 배너가 쌓이고 **맨 위가 나중에 울린 것**이 된다.
+         * 거기서 [완료] 를 누르면 나중 것이 꺼지고 먼저 울린 것이 남아 순서가 뒤집힌다
+         * (실기기 재현). 화면([TimerAlarmActivity])은 맨 앞을 제대로 고르는데 알림만 그 규칙을
+         * 안 따르고 있었다.
+         *
+         * 「맨 앞」의 뜻은 워치와 같다 — [CareTimerTransitions.projectedAndOrdered] 로 세운
+         * 첫 번째, 곧 **가장 오래 놓친 것**이다.
+         */
+        internal suspend fun syncAlarms(context: Context, repository: TimerRepository) {
+            val ringing = CareTimerTransitions
+                .projectedAndOrdered(repository.timers.first(), System.currentTimeMillis())
+                .filter { it.state == TimerState.RINGING }
+            val manager = NotificationManagerCompat.from(context)
+            // 맨 앞이 아닌 것들의 알람 알림은 걷는다. 앱이 부르는 취소라 `deleteIntent` 는
+            // 발사되지 않는다 — 되돌리기([restoreAlarm])와 부딪히지 않는다.
+            ringing.drop(1).forEach { manager.cancel(AlarmManagerTimerScheduler.notificationId(it.id)) }
+            val lead = ringing.firstOrNull() ?: return
+            postAlarm(context, lead, repository)
+        }
+
+        // 권한은 바로 아래에서 검사한다. lint 가 호출 지점을 따라가지 못해 오탐을 낸다.
+        @SuppressLint("MissingPermission")
+        private suspend fun postAlarm(context: Context, timer: CareTimer, repository: TimerRepository) {
+            if (!canPostNotifications(context)) {
+                Log.w(TAG, "알림 권한이 없어 만료를 알리지 못했다 (${timer.id})")
+                return
+            }
+            val channel = TimerAlarmChannels.channelFor(repository.alertMode.first())
+
+            val complete = actionPendingIntent(context, timer.id, ACTION_COMPLETE)
+
+            val open = PendingIntent.getActivity(
+                context,
+                AlarmManagerTimerScheduler.requestCode(timer.id),
+                TimerAlarmIntents.openTimerTab(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val notification = NotificationCompat.Builder(context, channel)
+                .setSmallIcon(DsR.drawable.nm_ic_timer)
+                // spec §만료·알람 — title = `❗ [분류] 라벨`
+                .setContentTitle(timer.alarmTitle)
+                .setContentText(COMPLETE_HINT)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(open)
+                // 스와이프로 지워지지 않게 한다 — 끄는 길은 [완료] 하나다.
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .addAction(0, COMPLETE_LABEL, complete)
+                // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
+                .setDeleteIntent(dismissPendingIntent(context, timer.id))
+                // 잠금화면 풀스크린 — **알람 전용 화면**을 띄운다(spec §만료·알람 "잠금: 풀스크린").
+                // 여기에 `MainActivity` 를 넘기면 `showWhenLocked` 가 없어 시스템이 조용히
+                // 헤드업으로 낮춘다. Android 14+ 는 권한도 있어야 한다.
+                .setFullScreenIntent(fullScreenPendingIntent(context, timer), true)
+                .build()
+
+            // 취소될 때까지 소리를 반복한다(spec: [완료] 까지 지속).
+            notification.flags = notification.flags or Notification.FLAG_INSISTENT
+
+            NotificationManagerCompat.from(context)
+                .notify(AlarmManagerTimerScheduler.notificationId(timer.id), notification)
+        }
+
+        private fun canPostNotifications(context: Context): Boolean =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+
         const val ACTION_FIRE = "app.nursemate.timer.ALARM_FIRE"
         const val ACTION_COMPLETE = "app.nursemate.timer.ALARM_COMPLETE"
 
