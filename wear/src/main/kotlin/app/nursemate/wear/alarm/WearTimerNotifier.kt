@@ -120,11 +120,16 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
     private fun syncOngoing(manager: NotificationManagerCompat, ordered: List<CareTimer>) {
         // `ordered` 는 [sync] 가 이미 정렬해 넘긴 것이다 — 맨 앞이 가장 임박한 것이다.
         val running = ordered.filter { it.state != TimerState.RINGING }
-        val lead = running.firstOrNull()
+        // 도는 것이 없으면 **울리는 맨 앞으로 대신한다.** 포그라운드 서비스가 [완료] 까지
+        // 살아 있어 WO-V4 대상인데, 그 알림(`FOREGROUND_ID`)에는 [OngoingActivity] 를 못
+        // 붙인다 — 붙이면 알림 대상에서 빠져 만료가 안 알려진다. 그 몫을 여기서 맡는다.
+        // 이 알림은 조용한 채널(`ONGOING_CHANNEL_ID`)이라 만료 알림 판정을 방해하지 않는다.
+        val lead = running.firstOrNull() ?: ordered.firstOrNull()
         if (lead == null) {
             manager.cancel(ONGOING_ID)
             return
         }
+        val shown = if (lead.state == TimerState.RINGING) ordered else running
         ensureOngoingChannel()
 
         val open = PendingIntent.getActivity(
@@ -136,7 +141,7 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         val builder = NotificationCompat.Builder(context, ONGOING_CHANNEL_ID)
             .setSmallIcon(R.drawable.nm_ic_timer)
             .setContentTitle(lead.label)
-            .setContentText(othersLabel(running.size))
+            .setContentText(othersLabel(shown.size))
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)
@@ -148,10 +153,14 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
             .addPart("label", Status.TextPart(lead.label))
             .addPart(
                 "remaining",
-                if (lead.state == TimerState.PAUSED) {
-                    Status.TextPart(PAUSED_LABEL)
-                } else {
-                    Status.TimerPart(lead.endAtEpochMillis)
+                when (lead.state) {
+                    // ⚠️ 울리는 것에 [Status.TimerPart] 를 쓰면 **음수로 흐른다** — 이미 지난
+                    // 시각이라 워치 페이스에 `-00:42` 같은 값이 뜬다. 글자로 바꾼다.
+                    TimerState.RINGING -> Status.TextPart(RINGING_LABEL)
+
+                    TimerState.PAUSED -> Status.TextPart(PAUSED_LABEL)
+
+                    TimerState.RUNNING -> Status.TimerPart(lead.endAtEpochMillis)
                 }
             )
             .build()
@@ -190,16 +199,17 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
     }
 
     /**
-     * 포그라운드 서비스가 띄우는 알림 — 여기에 진행 중 표시([OngoingActivity])를 얹는다.
+     * 포그라운드 서비스가 띄우는 알림.
      *
-     * Wear 품질요건 WO-V4 — 1분 넘게 이어지는 일은 워치 페이스와 최근 목록에 보여야 한다.
-     * 만료 알람이 [완료] 까지 지속되므로 여기 해당한다.
+     * ⚠️ **[OngoingActivity] 를 얹지 않는다.** 얹으면 Wear 가 `FILTERED - ONGOING_ACTIVITY_TYPE`
+     * 으로 알림 대상에서 빼는데, 울리는 동안 이것이 **맨 앞 타이머의 만료 알림 그 자체**라
+     * 결과적으로 아무것도 안 알려진다(`docs/KNOWN-ISSUES.md` ⑥).
+     *
+     * WO-V4(1분 넘게 이어지는 일은 워치 페이스·최근 목록에 보여야 한다)는 [syncOngoing] 의
+     * `ONGOING_ID` 가 맡는다 — **울리는 동안에도** 맡도록 거기서 따로 처리한다.
      */
     fun foregroundNotification(timer: CareTimer): Notification {
         ensureChannel()
-        // 울리는 동안에는 이것이 **맨 앞 타이머의 만료 알림 그 자체**다 — [sync] 가 맨 앞을
-        // 따로 올리지 않는다. 그래서 알려질 수 있어야 하고, 알려져야 시스템이 전체화면
-        // 팝업을 띄운다(`docs/KNOWN-ISSUES.md` ⑥).
         return base(timer, ongoing = true).build()
     }
 
@@ -310,6 +320,7 @@ class WearTimerNotifier @Inject constructor(@param:ApplicationContext private va
         private const val ONGOING_ID = 444_002
         private const val ONGOING_CHANNEL_ID = "wear_timer_ongoing_v1"
         private const val PAUSED_LABEL = "일시정지"
+        private const val RINGING_LABEL = "종료"
 
         /** 워치 페이스에 올라가는 한 줄. 자리 이름은 `addPart` 의 키와 맞아야 한다. */
         private const val STATUS_TEMPLATE = "#label# #remaining#"

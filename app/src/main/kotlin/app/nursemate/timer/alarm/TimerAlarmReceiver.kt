@@ -100,39 +100,22 @@ class TimerAlarmReceiver : BroadcastReceiver() {
 
     /** 아직 울리는 중이면 만료 알림을 되돌린다. 이미 [완료] 됐으면 그대로 둔다. */
     private suspend fun restoreAlarm(context: Context, timerId: String) {
-        val timer = repository.timers.first().firstOrNull { it.id == timerId } ?: return
+        val timers = repository.timers.first()
+        val timer = timers.firstOrNull { it.id == timerId } ?: return
         if (timer.state != TimerState.RINGING) return
         Log.i(TAG, "[지우기] 로 사라진 만료 알림을 되돌린다 ($timerId)")
-        syncAlarms(context)
+        syncAlarms(context, repository, timers)
     }
 
     private suspend fun fire(context: Context, timerId: String) {
         repository.markRinging(timerId)
         // 저장소에 조회 함수를 늘리지 않고 기존 흐름에서 한 번만 읽는다.
-        val timer = repository.timers.first().firstOrNull { it.id == timerId } ?: return
+        val timers = repository.timers.first()
+        val timer = timers.firstOrNull { it.id == timerId } ?: return
         // 울림으로 올라가지 않았다면 아직 만료 전이다 — 만료 직전에 [+1분] 을 눌러 `endAt` 이
         // 밀렸는데 옛 알람이 뒤늦게 발화한 경우다. 알림을 띄우면 안 된다.
         if (timer.state != TimerState.RINGING) return
-        syncAlarms(context)
-    }
-
-    /**
-     * 울리는 것 중 **맨 앞 하나만** 만료 알림을 갖게 맞춘다 — spec §만료·알람 「하나씩 순서대로」.
-     *
-     * ## 각자 띄우면 나중 것이 앞 것을 덮는다
-     * 타이머마다 알림을 올리면 상단 배너가 쌓이고, **맨 위는 나중에 울린 것**이 된다.
-     * 거기서 [완료] 를 누르면 나중 것이 꺼지고 먼저 울린 것이 남아 순서가 뒤집힌다
-     * (실기기에서 재현). 화면([TimerAlarmActivity])은 맨 앞을 제대로 고르는데 알림만
-     * 그 규칙을 안 따르고 있었다.
-     *
-     * 「맨 앞」의 뜻은 워치와 같다 — [CareTimerTransitions.projectedAndOrdered] 로 세운
-     * 첫 번째, 곧 **가장 오래 놓친 것**이다.
-     *
-     * 맨 앞이 바뀌는 것(먼저 울린 것을 완료)은 [TimerOngoingNotifier] 가 저장소 변화를 보고
-     * 다시 부른다 — 폰에는 워치의 포그라운드 서비스에 해당하는 것이 없어 그쪽이 그 몫을 한다.
-     */
-    private suspend fun syncAlarms(context: Context) {
-        syncAlarms(context, repository)
+        syncAlarms(context, repository, timers)
     }
 
     companion object {
@@ -149,9 +132,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
          * 「맨 앞」의 뜻은 워치와 같다 — [CareTimerTransitions.projectedAndOrdered] 로 세운
          * 첫 번째, 곧 **가장 오래 놓친 것**이다.
          */
-        internal suspend fun syncAlarms(context: Context, repository: TimerRepository) {
+        internal suspend fun syncAlarms(context: Context, repository: TimerRepository, timers: List<CareTimer>) {
             val ringing = CareTimerTransitions
-                .projectedAndOrdered(repository.timers.first(), System.currentTimeMillis())
+                .projectedAndOrdered(timers, System.currentTimeMillis())
                 .filter { it.state == TimerState.RINGING }
             val manager = NotificationManagerCompat.from(context)
             // 맨 앞이 아닌 것들의 알람 알림은 걷는다. 앱이 부르는 취소라 `deleteIntent` 는
@@ -191,6 +174,12 @@ class TimerAlarmReceiver : BroadcastReceiver() {
                 // 스와이프로 지워지지 않게 한다 — 끄는 길은 [완료] 하나다.
                 .setOngoing(true)
                 .setAutoCancel(false)
+                // ⚠️ **갱신은 조용해야 한다.** [syncAlarms] 는 목록이 바뀔 때마다 맨 앞을 다시
+                // 올린다([TimerOngoingNotifier]). 이게 없으면 다른 타이머를 시작하거나
+                // 일시정지하는 것만으로 헤드업·`FLAG_INSISTENT` 소리·풀스크린이 **다시**
+                // 발사돼, 알람을 확인하고 나온 사용자가 알람 화면으로 끌려온다.
+                // 첫 게시의 반복 소리는 그대로 돈다 — 멈추는 것은 취소뿐이다.
+                .setOnlyAlertOnce(true)
                 .addAction(0, COMPLETE_LABEL, complete)
                 // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
                 .setDeleteIntent(dismissPendingIntent(context, timer.id))

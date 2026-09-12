@@ -48,7 +48,7 @@ class TimerOngoingNotifier @Inject constructor(
                     render(timers)
                     // 만료 알림도 여기서 맞춘다 — 맨 앞이 바뀌는 것(먼저 울린 것을 완료)을
                     // 알아채는 자리가 폰에는 여기뿐이다. 워치는 포그라운드 서비스가 그 몫을 한다.
-                    TimerAlarmReceiver.syncAlarms(context, repository)
+                    TimerAlarmReceiver.syncAlarms(context, repository, timers)
                 }
         }
     }
