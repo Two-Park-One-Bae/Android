@@ -4,11 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.RingtoneManager
 import androidx.core.content.getSystemService
-import app.nursemate.core.model.AlertMode
-import app.nursemate.core.model.TIMER_SUSTAINED_VIBRATION
 
 /**
  * 만료 알람용 알림 채널.
@@ -30,30 +26,39 @@ import app.nursemate.core.model.TIMER_SUSTAINED_VIBRATION
  */
 object TimerAlarmChannels {
 
-    // ⚠️ id 에 버전을 붙인다. 채널 설정은 만든 뒤 못 바꾸고, **지웠다 같은 id 로 다시 만들면
-    // 시스템이 옛 설정을 되살린다.** 진동 규칙이 바뀐 지금은 새 id 로 가야 의도대로 뜬다.
-    const val SOUND_ID = "timer_alarm_sound_v2"
-    const val VIBRATE_ID = "timer_alarm_vibrate_v2"
-    const val SILENT_ID = "timer_alarm_silent_v2"
+    /**
+     * 만료 알람 채널 — **하나뿐이고 조용하다.**
+     *
+     * 전에는 울림 방식마다 채널을 두고(`소리`·`진동`·`무음`) 채널의 소리·진동에 맡겼는데,
+     * 그건 **링어 모드에 걸려 무음에서 통째로 막힌다.** spec §만료·알람이 "기기 무음과
+     * 무관하게"를 요구하므로 채널로는 지킬 수 없다. 지금은 [TimerAlarmService] 가 알람
+     * 스트림·알람 진동으로 직접 내고, 채널은 **표시만** 맡는다.
+     *
+     * ⚠️ 채널에 소리나 진동을 켜지 않는다 — 켜면 같은 만료가 두 번 울린다.
+     *
+     * id 의 `_v3` — 채널 설정은 만든 뒤 못 바꾸고, 지웠다 같은 id 로 다시 만들면 시스템이
+     * 옛 설정을 되살린다. 방식별 채널(`_v2`)에서 넘어오며 올렸다.
+     */
+    const val ALARM_ID = "timer_alarm_v3"
 
     /**
      * 진행 중 표시용 — 만료 알람과 **채널이 달라야 한다.**
      *
-     * 이건 종일 떠 있는 조용한 알림이라 소리·진동·헤드업이 없어야 한다. 만료 알람과 같은
-     * 채널에 두면 사용자가 한쪽을 끄려다 다른 쪽까지 끈다.
+     * 이건 종일 떠 있는 조용한 알림이라 헤드업이 없어야 한다. 만료 알람과 같은 채널에 두면
+     * 사용자가 한쪽을 끄려다 다른 쪽까지 끈다.
      */
     const val ONGOING_ID = "timer_ongoing_v1"
 
-    private val LEGACY_IDS = listOf("timer_alarm_sound", "timer_alarm_silent")
-
-    fun channelFor(mode: AlertMode): String = when (mode) {
-        AlertMode.SOUND -> SOUND_ID
-        AlertMode.VIBRATE -> VIBRATE_ID
-        AlertMode.SILENT -> SILENT_ID
-    }
+    private val LEGACY_IDS = listOf(
+        "timer_alarm_sound",
+        "timer_alarm_silent",
+        "timer_alarm_sound_v2",
+        "timer_alarm_vibrate_v2",
+        "timer_alarm_silent_v2"
+    )
 
     /**
-     * 채널 3종을 만든다. 이미 있으면 시스템이 무시하므로 매번 불러도 된다.
+     * 채널을 만든다. 이미 있으면 시스템이 무시하므로 매번 불러도 된다.
      *
      * 앱 시작 시 한 번 부른다 — 알람이 울리는 시점에 만들면 늦다.
      */
@@ -61,23 +66,14 @@ object TimerAlarmChannels {
         val manager = context.getSystemService<NotificationManager>() ?: return
         LEGACY_IDS.forEach(manager::deleteNotificationChannel)
 
-        val alarmAudio = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-
-        val sound = channel(SOUND_ID, "처치 타이머 알람", "타이머가 끝나면 소리로 알립니다.").apply {
-            setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), alarmAudio)
-            enableVibration(true)
-        }
-
-        val vibrate = channel(VIBRATE_ID, "처치 타이머 알람 (진동)", "타이머가 끝나면 진동으로 알립니다.").apply {
-            setSound(null, null)
-            enableVibration(true)
-            vibrationPattern = TIMER_SUSTAINED_VIBRATION
-        }
-
-        val silent = channel(SILENT_ID, "처치 타이머 알람 (무음)", "타이머가 끝나면 화면 알림만 띄웁니다.").apply {
+        val alarm = NotificationChannel(
+            ALARM_ID,
+            "처치 타이머 알람",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "타이머가 끝나면 알립니다."
+            setBypassDnd(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             setSound(null, null)
             enableVibration(false)
         }
@@ -95,13 +91,6 @@ object TimerAlarmChannels {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
 
-        listOf(sound, vibrate, silent, ongoing).forEach(manager::createNotificationChannel)
+        listOf(alarm, ongoing).forEach(manager::createNotificationChannel)
     }
-
-    private fun channel(id: String, name: String, why: String) =
-        NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
-            description = why
-            setBypassDnd(true)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
 }

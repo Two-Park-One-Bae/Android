@@ -6,20 +6,18 @@ package app.nursemate.core.model
 // 상태는 없다"고 요구한다. 표면마다 길이가 다르면 워치만 먼저 조용해져 놓치게 된다.
 
 /**
- * 끊어 치는 긴 진동.
+ * 끊어 치는 진동 한 마디 — 0.4초 쉬고 0.8초 떤다.
  *
- * ⚠️ **짧게 만들면 안 된다.** 알림 채널의 진동은 **한 번만** 재생되고 반복 설정이 없다
- * (`FLAG_INSISTENT` 는 소리만 반복한다). 그래서 "지속"을 패턴 길이로 만들어야 한다.
- * 워치에서 3회짜리(2초)로 뒀더니 **한 번 울리고 마는 것처럼 느껴졌다.**
+ * ⚠️ **배열의 첫 값은 「켜기 전 대기」다.** 진동부터 적는 줄 알고 `[800, 400]` 으로 두어
+ * 실제로는 **0.8초 기다린 뒤 0.4초만 떨었다** — 의도의 반대다.
  *
- * 알림을 취소하면 남은 진동도 함께 멈춘다 — [완료] 를 누르면 바로 조용해진다.
+ * ⚠️ **한 마디로 충분하다 — 길게 늘이지 않는다.** "지속"은 패턴 길이가 아니라 **무한 반복**이
+ * 만든다(`createWaveform(pattern, repeat = 0)`). 폰·워치 모두 포그라운드 서비스가 이 파형을
+ * 직접 몰고 [완료] 에서 [android.os.Vibrator.cancel] 로 끊는다. 예전에는 알림 채널에 맡겨
+ * 한 번만 재생됐기 때문에 50마디(약 60초)를 배열에 박아 두었는데, 반복으로 도는 지금은
+ * 앞의 한 마디만 계속 반복돼 나머지 49마디가 그대로 죽은 값이었다.
  */
-val TIMER_SUSTAINED_VIBRATION: LongArray = LongArray(SUSTAIN_CYCLES * 2) { index ->
-    if (index % 2 == 0) VIBRATE_MS else PAUSE_MS
-}
+val TIMER_SUSTAINED_VIBRATION: LongArray = longArrayOf(PAUSE_MS, VIBRATE_MS)
 
 private const val VIBRATE_MS = 800L
 private const val PAUSE_MS = 400L
-
-/** 800 + 400 을 50번 = 약 60초. 병동에서 손이 바쁠 때 놓치지 않을 만큼. */
-private const val SUSTAIN_CYCLES = 50

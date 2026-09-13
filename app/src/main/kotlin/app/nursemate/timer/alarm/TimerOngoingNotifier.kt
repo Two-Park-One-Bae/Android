@@ -44,12 +44,9 @@ class TimerOngoingNotifier @Inject constructor(
             repository.timers
                 .map { timers -> timers to timerRenderSignature(timers) }
                 .distinctUntilChanged { old, new -> old.second == new.second }
-                .collect { (timers, _) ->
-                    render(timers)
-                    // 만료 알림도 여기서 맞춘다 — 맨 앞이 바뀌는 것(먼저 울린 것을 완료)을
-                    // 알아채는 자리가 폰에는 여기뿐이다. 워치는 포그라운드 서비스가 그 몫을 한다.
-                    TimerAlarmReceiver.syncAlarms(context, repository, timers)
-                }
+                // 만료 알림은 여기서 손대지 않는다 — [TimerAlarmService] 가 같은 저장소를
+                // 보며 맨 앞을 갈아 끼운다. 워치와 같은 구조다.
+                .collect { (timers, _) -> render(timers) }
         }
     }
 

@@ -2,22 +2,15 @@ package app.nursemate.timer.alarm
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.ActivityOptions
-import android.app.Notification
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import app.nursemate.core.designsystem.R as DsR
-import app.nursemate.core.model.CareTimer
-import app.nursemate.core.model.CareTimerTransitions
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -29,15 +22,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * 만료 시각에 깨어나 알람을 띄운다. [완료] 를 받아 타이머를 지우기도 한다.
+ * 만료 시각에 깨어나 [TimerAlarmService] 를 띄운다. 알림의 조작 버튼도 여기로 들어온다.
  *
- * ## [완료] 를 누를 때까지 지속시킨다
- * spec 이 "중간에 저절로 사라지거나 임의로 끄는 상태는 없다"고 요구한다. 알림 채널의 소리는
- * **한 번만** 재생되므로 그것만으로는 부족한데, 포그라운드 서비스로 소리를 반복 재생하는
- * 대신 **`FLAG_INSISTENT`** 를 쓴다 — 알림이 취소될 때까지 시스템이 소리를 반복해 준다.
- * 서비스·미디어 플레이어를 띄우지 않아 배터리·수명주기 문제가 없다.
+ * ## 울리는 일 자체는 서비스가 한다
+ * 리시버는 몇 초 안에 반환해야 해서 "[완료] 를 누를 때까지" 이어지는 소리·진동을 몰 수 없다.
+ * 전에는 알림 채널에 맡겼는데 **채널의 소리·진동은 링어 모드에 걸려 무음에서 통째로
+ * 막힌다** — spec §만료·알람의 "기기 무음과 무관하게"를 지킬 수 없었다. 지금은 워치와 같이
+ * 포그라운드 서비스가 알람 스트림으로 직접 낸다([TimerAlarmService]).
  *
- * `setOngoing(true)` 로 스와이프 해제도 막는다. 끄는 길은 [완료] 하나뿐이다.
+ * ## 포그라운드 서비스는 시간 창 안에서 띄운다
+ * 백그라운드에서 포그라운드 서비스를 시작하려면 허용이 필요한데, 알람으로 깨어난 경우
+ * 시스템이 **배달 시점 기준 10초**를 열어 준다(`ALARM_MANAGER_WHILE_IDLE`). 알림 버튼으로
+ * 들어온 경우도 같은 창이 열린다. 여기서 하는 일은 DataStore 갱신 한 번이라 여유가 있다.
  */
 @AndroidEntryPoint
 class TimerAlarmReceiver : BroadcastReceiver() {
@@ -59,10 +55,11 @@ class TimerAlarmReceiver : BroadcastReceiver() {
                     // 진행 중 알림은 묶음이라 어느 타이머인지 없다.
                     ACTION_ONGOING_DISMISSED -> restoreOngoing(context)
 
-                    ACTION_ALARM_DISMISSED -> timerId?.let { restoreAlarm(context, it) }
+                    ACTION_ALARM_DISMISSED -> restoreAlarm(context)
 
                     ACTION_FIRE -> timerId?.let { fire(context, it) }
 
+                    // 서비스는 저장소를 보고 있다 — 지우면 알아서 멈춘다.
                     ACTION_COMPLETE, ACTION_STOP -> timerId?.let { repository.remove(it) }
 
                     ACTION_PAUSE -> timerId?.let { repository.pause(it) }
@@ -77,16 +74,29 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         }
     }
 
+    private suspend fun fire(context: Context, timerId: String) {
+        repository.markRinging(timerId)
+        // 저장소에 조회 함수를 늘리지 않고 기존 흐름에서 한 번만 읽는다.
+        val timers = repository.timers.first()
+        val timer = timers.firstOrNull { it.id == timerId }
+        // 울림으로 올라가지 않았다면 아직 만료 전이다 — 만료 직전에 [+1분] 을 눌러 `endAt` 이
+        // 밀렸는데 옛 알람이 뒤늦게 발화한 경우다. 울리면 안 된다.
+        if (timer?.state != TimerState.RINGING) {
+            Log.i(TAG, "만료 알람이 울렸지만 울릴 것이 없다 ($timerId)")
+            return
+        }
+        // ⚠️ **저장이 끝난 뒤에 부른다.** 서비스는 저장소에서 울리는 것을 읽어 판단하므로,
+        // 순서가 뒤집히면 빈 목록을 보고 스스로 꺼진다.
+        TimerAlarmService.start(context)
+    }
+
     /**
-     * 알림창의 [지우기] 로 사라진 표시를 되돌린다.
+     * 알림창의 [지우기] 로 사라진 진행 중 표시를 되돌린다.
      *
      * `setOngoing(true)` 는 **스와이프만** 막는다(실기기 확인). [지우기] 버튼은 그것까지
      * 걷어 가는데, 우리 알림은 지워지고 나면 **다음 상태 변화까지 다시 뜨지 않는다** —
      * 목록이 바뀔 때만 그리기 때문이다. 2시간짜리가 돌고 있으면 2시간 동안 앱 밖에
      * 아무 표시가 없다.
-     *
-     * 만료 알림은 더하다. spec 이 "[완료] 를 누를 때까지 지속"이라고 못박았는데 [지우기]
-     * 한 번에 사라지면 그대로 놓친다.
      */
     @SuppressLint("MissingPermission")
     private suspend fun restoreOngoing(context: Context) {
@@ -98,103 +108,22 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         NotificationManagerCompat.from(context).notify(TimerOngoingNotification.ID, notification)
     }
 
-    /** 아직 울리는 중이면 만료 알림을 되돌린다. 이미 [완료] 됐으면 그대로 둔다. */
-    private suspend fun restoreAlarm(context: Context, timerId: String) {
-        val timers = repository.timers.first()
-        val timer = timers.firstOrNull { it.id == timerId } ?: return
-        if (timer.state != TimerState.RINGING) return
-        Log.i(TAG, "[지우기] 로 사라진 만료 알림을 되돌린다 ($timerId)")
-        syncAlarms(context, repository, timers)
-    }
-
-    private suspend fun fire(context: Context, timerId: String) {
-        repository.markRinging(timerId)
-        // 저장소에 조회 함수를 늘리지 않고 기존 흐름에서 한 번만 읽는다.
-        val timers = repository.timers.first()
-        val timer = timers.firstOrNull { it.id == timerId } ?: return
-        // 울림으로 올라가지 않았다면 아직 만료 전이다 — 만료 직전에 [+1분] 을 눌러 `endAt` 이
-        // 밀렸는데 옛 알람이 뒤늦게 발화한 경우다. 알림을 띄우면 안 된다.
-        if (timer.state != TimerState.RINGING) return
-        syncAlarms(context, repository, timers)
+    /**
+     * 아직 울리는 중이면 만료 알림을 되돌린다 — spec 이 "[완료] 를 누를 때까지 지속"을
+     * 요구하므로 [지우기] 한 번에 사라지면 안 된다.
+     *
+     * 서비스를 다시 부르면 같은 알림을 다시 올린다. 이미 [완료] 됐으면 울리는 것이 없어
+     * 서비스가 그대로 꺼진다. 앱이 부르는 취소(`stopForeground`)로는 이 인텐트가 발사되지
+     * 않으므로 [완료] 와 부딪히지 않는다.
+     */
+    private suspend fun restoreAlarm(context: Context) {
+        val ringing = repository.timers.first().any { it.state == TimerState.RINGING }
+        if (!ringing) return
+        Log.i(TAG, "[지우기] 로 사라진 만료 알림을 되돌린다")
+        TimerAlarmService.start(context, restore = true)
     }
 
     companion object {
-
-        /**
-         * 울리는 것 중 **맨 앞 하나만** 만료 알림을 갖게 맞춘다 — spec §만료·알람 「하나씩 순서대로」.
-         *
-         * ## 각자 띄우면 나중 것이 앞 것을 덮는다
-         * 타이머마다 알림을 올리면 상단 배너가 쌓이고 **맨 위가 나중에 울린 것**이 된다.
-         * 거기서 [완료] 를 누르면 나중 것이 꺼지고 먼저 울린 것이 남아 순서가 뒤집힌다
-         * (실기기 재현). 화면([TimerAlarmActivity])은 맨 앞을 제대로 고르는데 알림만 그 규칙을
-         * 안 따르고 있었다.
-         *
-         * 「맨 앞」의 뜻은 워치와 같다 — [CareTimerTransitions.projectedAndOrdered] 로 세운
-         * 첫 번째, 곧 **가장 오래 놓친 것**이다.
-         */
-        internal suspend fun syncAlarms(context: Context, repository: TimerRepository, timers: List<CareTimer>) {
-            val ringing = CareTimerTransitions
-                .projectedAndOrdered(timers, System.currentTimeMillis())
-                .filter { it.state == TimerState.RINGING }
-            val manager = NotificationManagerCompat.from(context)
-            // 맨 앞이 아닌 것들의 알람 알림은 걷는다. 앱이 부르는 취소라 `deleteIntent` 는
-            // 발사되지 않는다 — 되돌리기([restoreAlarm])와 부딪히지 않는다.
-            ringing.drop(1).forEach { manager.cancel(AlarmManagerTimerScheduler.notificationId(it.id)) }
-            val lead = ringing.firstOrNull() ?: return
-            postAlarm(context, lead, repository)
-        }
-
-        // 권한은 바로 아래에서 검사한다. lint 가 호출 지점을 따라가지 못해 오탐을 낸다.
-        @SuppressLint("MissingPermission")
-        private suspend fun postAlarm(context: Context, timer: CareTimer, repository: TimerRepository) {
-            if (!canPostNotifications(context)) {
-                Log.w(TAG, "알림 권한이 없어 만료를 알리지 못했다 (${timer.id})")
-                return
-            }
-            val channel = TimerAlarmChannels.channelFor(repository.alertMode.first())
-
-            val complete = actionPendingIntent(context, timer.id, ACTION_COMPLETE)
-
-            val open = PendingIntent.getActivity(
-                context,
-                AlarmManagerTimerScheduler.requestCode(timer.id),
-                TimerAlarmIntents.openTimerTab(context),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val notification = NotificationCompat.Builder(context, channel)
-                .setSmallIcon(DsR.drawable.nm_ic_timer)
-                // spec §만료·알람 — title = `❗ [분류] 라벨`
-                .setContentTitle(timer.alarmTitle)
-                .setContentText(COMPLETE_HINT)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setContentIntent(open)
-                // 스와이프로 지워지지 않게 한다 — 끄는 길은 [완료] 하나다.
-                .setOngoing(true)
-                .setAutoCancel(false)
-                // ⚠️ **갱신은 조용해야 한다.** [syncAlarms] 는 목록이 바뀔 때마다 맨 앞을 다시
-                // 올린다([TimerOngoingNotifier]). 이게 없으면 다른 타이머를 시작하거나
-                // 일시정지하는 것만으로 헤드업·`FLAG_INSISTENT` 소리·풀스크린이 **다시**
-                // 발사돼, 알람을 확인하고 나온 사용자가 알람 화면으로 끌려온다.
-                // 첫 게시의 반복 소리는 그대로 돈다 — 멈추는 것은 취소뿐이다.
-                .setOnlyAlertOnce(true)
-                .addAction(0, COMPLETE_LABEL, complete)
-                // [지우기] 로 사라지면 되돌린다 — 끄는 길은 [완료] 하나여야 한다.
-                .setDeleteIntent(dismissPendingIntent(context, timer.id))
-                // 잠금화면 풀스크린 — **알람 전용 화면**을 띄운다(spec §만료·알람 "잠금: 풀스크린").
-                // 여기에 `MainActivity` 를 넘기면 `showWhenLocked` 가 없어 시스템이 조용히
-                // 헤드업으로 낮춘다. Android 14+ 는 권한도 있어야 한다.
-                .setFullScreenIntent(fullScreenPendingIntent(context, timer), true)
-                .build()
-
-            // 취소될 때까지 소리를 반복한다(spec: [완료] 까지 지속).
-            notification.flags = notification.flags or Notification.FLAG_INSISTENT
-
-            NotificationManagerCompat.from(context)
-                .notify(AlarmManagerTimerScheduler.notificationId(timer.id), notification)
-        }
 
         private fun canPostNotifications(context: Context): Boolean =
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -214,30 +143,6 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         const val ACTION_ALARM_DISMISSED = "app.nursemate.timer.ALARM_DISMISSED"
 
         const val EXTRA_TIMER_ID = "timer_id"
-
-        /** 잠금화면을 덮는 알람 화면을 여는 인텐트. */
-        private fun fullScreenPendingIntent(context: Context, timer: CareTimer): PendingIntent =
-            PendingIntent.getActivity(
-                context,
-                AlarmManagerTimerScheduler.requestCode(timer.id) + FULL_SCREEN_OFFSET,
-                TimerAlarmActivity.intent(context, timer.id, timer.alarmTitle),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                // 워치에서 이것 없이 `BAL_BLOCK` 으로 막혔다. 폰은 지금 뜨지만 같은 규칙
-                // 아래 있으므로 함께 열어 둔다 — Android 14+ 는 `PendingIntent` 로 액티비티를
-                // 띄울 때 **만든 쪽의 명시적 허용**을 요구한다.
-                backgroundLaunchOptions()
-            )
-
-        private fun backgroundLaunchOptions(): Bundle? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ActivityOptions.makeBasic()
-                    .setPendingIntentCreatorBackgroundActivityStartMode(
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                    .toBundle()
-            } else {
-                null
-            }
 
         /** 만료 알림이 [지우기] 로 사라졌을 때 되돌리기 위한 인텐트. */
         fun dismissPendingIntent(context: Context, timerId: String): PendingIntent = PendingIntent.getBroadcast(
@@ -283,8 +188,6 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         }
 
         private const val TAG = "TimerAlarm"
-        private const val COMPLETE_LABEL = "완료"
-        private const val COMPLETE_HINT = "완료를 누르면 알람이 꺼집니다"
 
         /** [완료] PendingIntent 가 발화용과 같은 요청 코드를 쓰지 않도록 띄운다. */
         private const val COMPLETE_OFFSET = 1
@@ -292,7 +195,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         private const val RESUME_OFFSET = 3
         private const val STOP_OFFSET = 4
         private const val DISMISS_OFFSET = 5
-        private const val FULL_SCREEN_OFFSET = 6
+
+        /** [TimerAlarmNotification] 의 풀스크린 인텐트가 6 을 쓴다. */
+        internal const val FULL_SCREEN_OFFSET = 6
 
         /** 타이머 요청 코드와 겹치지 않도록 멀리 띄운다. */
         private const val ONGOING_DISMISS_REQUEST_CODE = 990_001
