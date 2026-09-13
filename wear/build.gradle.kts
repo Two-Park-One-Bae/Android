@@ -15,8 +15,11 @@ android {
         // Ongoing Activity API 하한 = Wear OS 3 (API 30)
         minSdk = 30
         // 폼팩터 간 versionCode 충돌 방지 오프셋 (폰 versionCode + 1_000_000_000)
-        versionCode = 1_000_000_001
-        versionName = "0.1.0"
+        // ⚠️ **versionName 은 폰과 같아야 한다** — docs/RELEASE.md. 한쪽만 올리면 어느 코드가
+        // 어느 기기에 깔렸는지 기기에서 구분할 수 없다(실제로 폰 0.2.0 / 워치 0.1.0 이 되어
+        // 새 빌드를 깔고도 옛 버전으로 보였다).
+        versionCode = 1_000_000_003
+        versionName = "0.2.0"
     }
 
     buildTypes {
