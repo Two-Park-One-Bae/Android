@@ -8,7 +8,9 @@
 -
 
 ## 테스트
-- [ ] 로컬 빌드/실행 확인 (`./gradlew spotlessCheck detekt testDebugUnitTest assembleDebug`)
+- [ ] 로컬에서 **CI 와 같은 것**을 돌렸다 (`./gradlew spotlessCheck detekt lint test`)
+      <!-- 일부만 돌리면 CI 에서 갈린다. lint 누락으로 실제로 두 번 빨개졌다. -->
+- [ ] 디버그 빌드 확인 (`./gradlew assembleDebug`)
 - [ ] 정상·에러 케이스 확인
 - [ ] 실기기 확인 (UI 변경이 있으면 스크린샷 첨부)
 

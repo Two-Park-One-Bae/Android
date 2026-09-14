@@ -10,7 +10,9 @@ wear/                 워치 앱 (Wear Compose M3) — 동일 applicationId, ver
 core/
 ├── model/            순수 Kotlin 도메인 모델
 ├── data/             Repository · DataStore (기기 UUID 등)
+├── timer/            처치 타이머 도메인 — TimerRepository · 알람 예약 계약
 ├── network/          Retrofit · BASE_URL(BuildConfig) · RFC 9457 에러 모델
+├── vision/           온디바이스 알약 검출 (ONNX Runtime · RF-DETR-Seg)
 ├── datalayer/        폰↔워치 Wearable Data Layer 래퍼 (경로 계약)
 └── designsystem/     DS 토큰 (Pretendard · 컬러 램프 · spacing · radius)
 build-logic/          Gradle convention 플러그인 (AGP 9 신DSL)
