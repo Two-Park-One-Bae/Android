@@ -131,11 +131,19 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
 2. `release/X.Y.Z` 브랜치를 컷해 **`main` 으로 PR** → 머지.
 3. 그 **`main` 머지 커밋에 `v<versionName>` 태그**를 붙여 푸시.
 
-   ⚠️ **`main → develop` 역머지 PR 을 머지한 뒤 [Delete branch] 를 누르지 않는다.**
-   그 버튼은 **head 브랜치**를 지우는데 역머지 PR 은 head 가 `main` 이다. `v0.2.0` 직후
-   실제로 이렇게 `main` 이 사라졌다(PR #16, 2026-09-04). 태그가 커밋을 붙잡고 있어 피해는
-   없었지만 이 절차가 성립하지 않게 된다. 되살리려면:
+   ⚠️ **`main → develop` 역머지는 `main` 을 지운다 — 저장소 설정이 자동으로 지운다.**
+   역머지 PR 은 **head 가 `main`** 인데, 저장소의 `delete_branch_on_merge` 가 켜져 있으면
+   머지되는 순간 head 브랜치가 사라진다. **사람이 [Delete branch] 를 누르지 않아도,
+   `gh pr merge --delete-branch=false` 를 줘도 지워진다**(2026-09-15 에 실제로 겪었다).
+   `v0.2.0` 때 `main` 이 사라진 것도 같은 원인이다(PR #16).
+
+   그래서 설정을 껐다:
    ```bash
+   gh api -X PATCH repos/Two-Park-One-Bae/Android -f delete_branch_on_merge=false
+   ```
+   머지 후에는 브랜치가 남아 있는지 확인한다. 사라졌으면 태그에서 되살린다:
+   ```bash
+   gh api repos/Two-Park-One-Bae/Android/branches --jq '.[].name'
    git push origin "$(git rev-list -n1 v<마지막 태그>):refs/heads/main"
    ```
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
