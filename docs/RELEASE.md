@@ -77,10 +77,11 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
 >   자동 실행되다가 R8 을 거친 `WorkDatabase` 생성에 실패했다 (PR #21).
 >   Glance 는 쓰지 않는데 의존성만 남아 있었다 — 지금은 빠졌다.
 
-## ⚠️ 워치 앱이 `specialUse` 포그라운드 서비스를 쓴다
+## ⚠️ 폰·워치가 `specialUse` 포그라운드 서비스를 쓴다
 
-`WearAlarmService` 가 그렇다. `applicationId` 가 폰과 같아 **같은 Play 등록에 묶이므로**
-제출할 때 「특별한 용도」 사유를 적어야 한다. 사정은 `docs/KNOWN-ISSUES.md` ③ 에 있다.
+`TimerAlarmService`(폰)와 `WearAlarmService`(워치) **둘 다**다. `applicationId` 가 같아
+**같은 Play 등록에 묶이므로** 제출할 때 「특별한 용도」 사유를 **둘 다** 적어야 한다 —
+하나만 적으면 나머지가 소명 없이 남는다. 문구와 사정은 `docs/KNOWN-ISSUES.md` ③ 에 있다.
 
 ## Play 업로드 절차 (NM-397/400)
 
@@ -96,6 +97,13 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
    같아야** Data Layer 가 붙는다 — 서명은 convention plugin 이 두 모듈에 함께 준다
    (`build-logic/.../ReleaseSigning.kt`). 산출물 이름이 `wear-release-unsigned.apk` 면
    `secrets.properties` 의 `RELEASE_*` 가 안 읽힌 것이다.
+
+   ⚠️ **만료 팝업은 워치를 차고 확인한다.** 벗은 상태면 Wear 가 `off-body` 를 보고 알림
+   자체를 걸러 팝업이 안 뜬다(`KNOWN-ISSUES.md` ⑥). 진동은 우리가 `Vibrator` 를 직접 몰아
+   그대로 오므로 **「진동만 오고 팝업은 없다」**가 되어 정상인 빌드가 결함처럼 보인다 —
+   책상에 올려 두고 재다가 네 번 연속 이것에 걸렸다.
+
+       [AlertingPipeline] Not alerting: Device is off-body
    ```bash
    apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
    apksigner verify --print-certs wear/build/outputs/apk/release/wear-release.apk
