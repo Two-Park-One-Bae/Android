@@ -1,6 +1,8 @@
-# 릴리스 가이드 (:app — 폰 전용)
+# 릴리스 가이드 (폰 + 워치)
 
-> 릴리스 산출물은 서명된 AAB 1개(`:app:bundleRelease`)다. **wear는 릴리스 체인에서 제외** — 타이머 기능 완성 후 별도 티켓으로 합류. (릴리스 체인: NM-398 → NM-397 → NM-399 → NM-400)
+> 릴리스 산출물은 서명된 AAB **2개**다 — `:app:bundleRelease`(폰)와 `:wear:bundleRelease`(워치).
+> 워치는 `0.2.1`(NM-445)에서 합류했다. Play 에서 **Wear OS 는 별도 폼 팩터**라 트랙도 따로 판다
+> (`wear-alpha`). 두 AAB 는 **같은 태그 커밋에서** 뽑고 **같은 업로드 키로** 서명한다.
 
 ## 버전 정책
 
@@ -12,7 +14,11 @@
   - 프로덕션 첫 출시에서 `1.0.0`.
 - **태그** — `v<versionName>` (예: `v0.1.0`). **`main` 머지 커밋에 붙인다** — `develop`이 아니다.
   CONVENTIONS의 `release/* → main + develop` 규칙과 완료 판정(main 머지) 기준을 따른다.
-- wear 합류 시: 동일 versionName, versionCode는 `+1_000_000_000` 오프셋 (README 참고).
+- **워치 versionCode 는 폰 `+1_000_000_000`** 이다 — 폰 `4` 면 워치 `1000000004`
+  (`wear/build.gradle.kts`). versionName 은 폰과 **똑같이** 맞춘다.
+  ⚠️ Play 는 이걸 「버전 코드가 이전 버전 코드보다 훨씬 높습니다」라는 **오류**로 잡는다.
+  예상된 것이니 「무시하고 계속하기」를 누른다 — 다만 **한 번 누르면 되돌릴 수 없다**
+  (나중에 코드를 낮출 수 없다).
 
 ## 서명
 
@@ -150,14 +156,29 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
    ```bash
    git checkout v<versionName>
    ls app/src/main/assets/rfdetr_seg_small.onnx   # 없으면 위 "검출 모델" 절 참고
-   ./gradlew :app:bundleRelease
-   jarsigner -verify app/build/outputs/bundle/release/app-release.aab   # "jar verified."
+   ./gradlew :app:bundleRelease :wear:bundleRelease
+   jarsigner -verify app/build/outputs/bundle/release/app-release.aab    # "jar verified."
+   jarsigner -verify wear/build/outputs/bundle/release/wear-release.aab  # "jar verified."
    ```
-5. Play Console 비공개 트랙에 `app/build/outputs/bundle/release/app-release.aab` 업로드 →
-   출시 노트 작성 → 검토 요청.
+5. Play Console 비공개 트랙에 AAB 를 올리고 → 출시 노트 작성 → 검토 요청.
+   폰은 `app-release.aab` 를 알파 트랙에, 워치는 `wear-release.aab` 를 **`wear-alpha`** 에.
    - **mapping.txt 는 따로 올리지 않는다.** AAB 안에
      `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map` 으로 이미 들어 있다.
    - 관리형 게시가 꺼져 있으면 검토 통과 즉시 자동 게시된다.
+
+   ### Wear OS 는 폼 팩터가 따로다 (0.2.1 에서 처음 겪은 것)
+
+   같은 `applicationId` 라도 Play 는 Wear 를 **별도 폼 팩터**로 다룬다. 폰 트랙에 워치 AAB 를
+   얹을 수 없고, 워치용 트랙을 새로 판다. 0.2.1 에서 실제로 막혔던 자리만:
+
+   | 막히는 것 | 왜 | 어떻게 |
+   |---|---|---|
+   | 새 워치 트랙의 활성 국가가 **0개** | 워치 트랙은 기본으로 **프로덕션과 동기화**되는데 프로덕션이 아직 비활성이라 0개가 내려온다 | 「국가/지역」 탭에서 **동기화를 풀고** 폰 알파와 같은 나라를 직접 고른다 |
+   | `1000000004 버전 코드는 이미 사용되었습니다` | 앞선 시도에서 **라이브러리에 이미 올라간** 번들이다. versionCode 는 재사용할 수 없다 | 다시 올리지 말고 **「라이브러리에서 추가」** 로 그 번들을 고른다 |
+   | 「정확한 알람 권한을 사용하는지 알려 주셔야 합니다」 | **워치만** `USE_EXACT_ALARM` 을 쓴다(폰은 `SCHEDULE_EXACT_ALARM`). 워치 AAB 가 들어오면서 앱 단위 선언이 새로 요구된다 | 앱 콘텐츠 → 「정확한 알람」 에서 **「알람 시계」** 로 선언한다 |
+
+   워치 쪽은 이 밖에도 ① 모든 스토어 등록정보에 **워치 스크린샷**, ② 워치 AAB 가 테스트 트랙에
+   **출시된 상태**, ③ **Wear OS 선택 및 검토 정책 동의** 가 갖춰져야 심사로 넘어간다.
 6. `main` → `develop` **역머지 PR**을 열어 이력을 되돌린다(내용 변경이 없어도 한다 —
    안 하면 다음 릴리스 PR 에서 두 브랜치가 갈라져 충돌하고, 충돌이 있으면 GitHub 이
    PR CI 를 아예 돌리지 않아 원인 찾기가 어려워진다).
