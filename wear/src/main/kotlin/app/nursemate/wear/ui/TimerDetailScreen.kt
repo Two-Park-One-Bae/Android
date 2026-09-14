@@ -21,11 +21,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButton
 import androidx.wear.compose.material3.IconButtonDefaults
-import androidx.wear.compose.material3.ProgressIndicatorDefaults
 import androidx.wear.compose.material3.Text
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerState
@@ -191,15 +189,12 @@ private fun DetailHeader(timer: CareTimer, onBack: () -> Unit) {
 @Composable
 private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean) {
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(RingSize)) {
-        CircularProgressIndicator(
-            progress = { timer.ringFractionAt(now) },
-            colors = ProgressIndicatorDefaults.colors(
-                indicatorColor = if (paused) WearTimerColors.Muted else WearTimerColors.Primary,
-                trackColor = WearTimerColors.Track
-            ),
+        TimerRing(
+            fraction = timer.ringFractionAt(now),
+            color = if (paused) WearTimerColors.Muted else WearTimerColors.Primary,
+            trackColor = WearTimerColors.Track,
             // 정본 `innerRadius: 0.9` — 지름 대비 두께 5%.
             strokeWidth = 4.dp,
-            gapSize = 2.dp,
             modifier = Modifier.size(RingSize)
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

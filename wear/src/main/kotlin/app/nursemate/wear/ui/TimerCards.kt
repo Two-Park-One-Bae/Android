@@ -24,9 +24,7 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.Card
 import androidx.wear.compose.material3.CardDefaults
-import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.Icon
-import androidx.wear.compose.material3.ProgressIndicatorDefaults
 import androidx.wear.compose.material3.Text
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerCategory
@@ -158,17 +156,13 @@ internal fun RunningTimerCard(timer: CareTimer, now: Long, onOpen: () -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(RingSize)) {
-            CircularProgressIndicator(
-                progress = { timer.ringFractionAt(now) },
-                colors = ProgressIndicatorDefaults.colors(
-                    indicatorColor = accent,
-                    trackColor = WearTimerColors.Track
-                ),
-                // ⚠️ **두께를 직접 준다.** 기본값은 화면 가득 채우는 큰 링을 전제해서,
-                // 목록 안 30dp 링에 쓰면 두께가 반지름에 가까워진다 — 트랙이 뭉개지고
-                // 진행 표시가 호가 아니라 **점 하나**로 보인다(실기기에서 확인).
+            // 두께를 직접 준다 — 목록 안 30dp 링이라 기본값(큰 링 전제)을 쓰면 두께가
+            // 반지름에 가까워져 호가 점으로 뭉개진다(실기기 확인).
+            TimerRing(
+                fraction = timer.ringFractionAt(now),
+                color = accent,
+                trackColor = WearTimerColors.Track,
                 strokeWidth = 3.dp,
-                gapSize = 2.dp,
                 modifier = Modifier.size(RingSize)
             )
             if (paused) {

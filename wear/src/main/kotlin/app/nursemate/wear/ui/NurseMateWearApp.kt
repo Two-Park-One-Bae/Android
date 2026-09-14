@@ -95,8 +95,19 @@ fun NurseMateWearApp(openPresets: Boolean = false, viewModel: WearTimerViewModel
                 // 다른 데서 끝났으면 목록으로 돌린다.
                 // ⚠️ **아직 안 읽었을 때는 나가지 않는다.** 그때도 timer 가 null 이라,
                 // 구분하지 않으면 화면이 열리자마자 튕긴다.
-                LaunchedEffect(timers, timer) {
+                //
+                // ⚠️ **울리기 시작해도 목록으로 돌린다.** 이 화면에는 [완료] 가 없고
+                // ([TimerDetailScreen]) 만료 뒤의 [일시정지]·[정지] 는 뜻이 없다. 그대로 두면
+                // `00:00` 에 진행 중 버튼만 남아 **알람을 끌 길이 없다**(실기기 확인).
+                // 만료 조작은 W1 의 만료 카드가 맡는다 — spec §워치.
+                //
+                // `isExpiredAt` 도 함께 본다. 저장된 상태가 RINGING 으로 오르는 건 알람이
+                // 울린 뒤라, 그 사이 잠깐 만료된 채로 남는 창이 있다.
+                val expired = timer != null &&
+                    (timer.state == TimerState.RINGING || timer.isExpiredAt(now))
+                LaunchedEffect(timers, timer, expired) {
                     if (timers != null && timer == null) navController.popBackStack()
+                    if (expired) navController.popBackStack()
                 }
                 timer?.let {
                     TimerDetailScreen(
