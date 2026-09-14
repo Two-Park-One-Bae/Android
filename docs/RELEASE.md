@@ -97,19 +97,47 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
    같아야** Data Layer 가 붙는다 — 서명은 convention plugin 이 두 모듈에 함께 준다
    (`build-logic/.../ReleaseSigning.kt`). 산출물 이름이 `wear-release-unsigned.apk` 면
    `secrets.properties` 의 `RELEASE_*` 가 안 읽힌 것이다.
-
-   ⚠️ **만료 팝업은 워치를 차고 확인한다.** 벗은 상태면 Wear 가 `off-body` 를 보고 알림
-   자체를 걸러 팝업이 안 뜬다(`KNOWN-ISSUES.md` ⑥). 진동은 우리가 `Vibrator` 를 직접 몰아
-   그대로 오므로 **「진동만 오고 팝업은 없다」** 가 되어 정상인 빌드가 결함처럼 보인다 —
-   책상에 올려 두고 재다가 네 번 연속 이것에 걸렸다.
-
-       [AlertingPipeline] Not alerting: Device is off-body
    ```bash
    apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
    apksigner verify --print-certs wear/build/outputs/apk/release/wear-release.apk
    ```
+
+   ### 사이드로드라서 「고장 난 것처럼」 보이는 것들
+
+   여기서 쓰는 APK 는 **업로드 키로 서명해 `adb install` 한 것**이라, Play 로 내려간 앱과
+   다르게 동작하는 자리가 있다. 아래 셋은 **정상인 빌드에서도 그렇게 보인다** — 실제로
+   이것들 때문에 릴리스를 세울 뻔했다.
+
+   | 보이는 것 | 왜 | 어떻게 |
+   |---|---|---|
+   | 알약 식별이 안 되고 홈의 「오늘 남은 횟수」가 비어 있다 | 릴리스는 App Check 공급자가 **Play Integrity** 인데(`app/src/release/.../AppCheckProvider.kt`) 그건 **Play 로 설치된 앱**을 전제한다. 사이드로드는 `App attestation failed`(403) → 서버가 `401 APP_CHECK_FAILED` | **이 절차로는 검증할 수 없다.** 알약 식별은 Play 내부 테스트에서 본다 |
+   | 카카오 로그인이 `Android keyHash validation failed` 로 막힌다 | 카카오 콘솔에 **Play 앱 서명 키**의 해시만 있으면 업로드 키로 서명한 APK 는 거부된다 | 콘솔에 **업로드 키 해시**도 등록해 둔다(SHA-1 을 Base64 로) |
+   | 워치 만료 팝업이 안 뜨고 진동만 온다 | 손목에서 벗으면 Wear 가 `off-body` 를 보고 알림 자체를 거른다(`KNOWN-ISSUES.md` ⑥) | **차고** 확인한다 |
+
+   ```
+   App attestation failed.                                   ← App Check (Play Integrity)
+   AuthError(reason=Misconfigured, Android keyHash validation failed.)   ← 카카오
+   [AlertingPipeline] Not alerting: Device is off-body        ← 워치
+   ```
+
+   키 해시는 이렇게 뽑는다:
+   ```bash
+   apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk \
+     | awk '/SHA-1 digest/{print $NF}' | xxd -r -p | base64
+   ```
+
+   그래서 **이 스모크가 덮는 범위는 R8 크래시 · 타이머 · 워치 · 위젯 · 잠금화면**이다.
+   서버 인증이 걸린 경로(알약 식별)는 Play 내부 테스트로 넘긴다.
 2. `release/X.Y.Z` 브랜치를 컷해 **`main` 으로 PR** → 머지.
 3. 그 **`main` 머지 커밋에 `v<versionName>` 태그**를 붙여 푸시.
+
+   ⚠️ **`main → develop` 역머지 PR 을 머지한 뒤 [Delete branch] 를 누르지 않는다.**
+   그 버튼은 **head 브랜치**를 지우는데 역머지 PR 은 head 가 `main` 이다. `v0.2.0` 직후
+   실제로 이렇게 `main` 이 사라졌다(PR #16, 2026-09-04). 태그가 커밋을 붙잡고 있어 피해는
+   없었지만 이 절차가 성립하지 않게 된다. 되살리려면:
+   ```bash
+   git push origin "$(git rev-list -n1 v<마지막 태그>):refs/heads/main"
+   ```
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
    ```bash
    git checkout v<versionName>
