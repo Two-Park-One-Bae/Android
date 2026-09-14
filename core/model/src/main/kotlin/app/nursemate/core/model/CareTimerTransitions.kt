@@ -134,6 +134,22 @@ object CareTimerTransitions {
             .thenBy { it.remainingAt(now) }
     )
 
+    /**
+     * 화면·알림에 그릴 목록 — **만료를 투영한 뒤 정렬한다.**
+     *
+     * ## 순서를 바꾸면 만료가 맨 위로 안 온다
+     * [ordered] 는 상태로 먼저 줄을 세운다. 그러니 정렬을 먼저 하면, 만료 시각을 지났지만
+     * 저장 상태가 아직 `RUNNING` 인 타이머가 **진행 중 자리에 그대로 남는다.** 화면에서만
+     * 만료로 그려지고 위치는 안 바뀌는, 앞뒤가 안 맞는 모습이 된다.
+     *
+     * 저장 상태를 올리는 건 알람 리시버 몫인데 못 오는 경우가 있다 — 정확 알람 권한이
+     * 꺼졌거나 예약이 실패했거나. 그때 이 투영이 유일한 구제책이다.
+     *
+     * 예전에는 폰 목록만 정렬을 먼저 했고 알림과 워치는 투영을 먼저 해서, **같은 목록이
+     * 표면마다 다른 순서로 보였다.** 세 곳이 한 함수를 부르게 묶어 그 여지를 없앴다.
+     */
+    fun projectedAndOrdered(timers: List<CareTimer>, now: Long): List<CareTimer> = ordered(restore(timers, now), now)
+
     const val EXTEND_SECONDS: Int = 60
     private const val MILLIS_PER_SECOND = 1000L
 }

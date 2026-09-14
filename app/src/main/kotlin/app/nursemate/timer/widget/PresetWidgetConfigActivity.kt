@@ -10,14 +10,11 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
-import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.state.updateAppWidgetState
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import app.nursemate.core.data.timer.TimerPresetRepository
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.timer.TimerPresetRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -38,6 +35,8 @@ import kotlinx.coroutines.launch
 class PresetWidgetConfigActivity : ComponentActivity() {
 
     @Inject lateinit var presetRepository: TimerPresetRepository
+
+    @Inject lateinit var slotStore: PresetWidgetSlotStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,21 +69,26 @@ class PresetWidgetConfigActivity : ComponentActivity() {
 
     private fun assign(appWidgetId: Int, preset: TimerPreset) {
         lifecycleScope.launch {
-            val glanceId = GlanceAppWidgetManager(this@PresetWidgetConfigActivity).getGlanceIdBy(appWidgetId)
-            updateAppWidgetState(this@PresetWidgetConfigActivity, glanceId) {
-                it[PresetWidgetSlot.PRESET_ID] = preset.id
-            }
-            // 방금 지정한 위젯만 다시 그리면 된다. 다만 프리셋 목록이 바뀐 뒤 오래 꺼져 있던
-            // 다른 위젯도 여기서 함께 맞춰 두면 손해가 없다 — 위젯 수가 몇 개 안 된다.
-            PresetWidget().updateAll(this@PresetWidgetConfigActivity)
+            slotStore.assign(appWidgetId, preset.id)
+            // RemoteViews 는 동기라 여기서 그리면 곧바로 붙는다 — Glance 처럼 WorkManager 를
+            // 기다리지 않는다(사정은 [PresetWidgetRenderer]).
+            PresetWidgetRenderer.render(
+                context = this@PresetWidgetConfigActivity,
+                appWidgetId = appWidgetId,
+                preset = preset,
+                ready = ready()
+            )
             setResult(RESULT_OK, result(appWidgetId))
             finish()
         }
     }
 
+    private suspend fun ready(): Boolean = this@PresetWidgetConfigActivity.timerWidgetEntryPoint().canStartWithoutApp()
+
     private fun result(appWidgetId: Int) = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 
     companion object {
+
         fun intent(context: Context, appWidgetId: Int): Intent = Intent(context, PresetWidgetConfigActivity::class.java)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

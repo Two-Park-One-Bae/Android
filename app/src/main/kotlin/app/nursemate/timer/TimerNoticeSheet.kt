@@ -46,8 +46,9 @@ fun TimerNoticeSheet(
     body: String,
     primaryLabel: String,
     onPrimary: () -> Unit,
-    secondaryLabel: String,
-    onSecondary: () -> Unit,
+    // 보조 버튼이 없는 시트도 있다 — 워치 안내처럼 **막지 않고 알리기만** 하는 경우다.
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     content: (@Composable () -> Unit)? = null
 ) {
@@ -105,15 +106,17 @@ fun TimerNoticeSheet(
                     .padding(vertical = 15.dp)
             )
 
-            Text(
-                text = secondaryLabel,
-                style = SecondaryStyle,
-                color = colors.textSecondary,
-                modifier = Modifier
-                    .clip(ButtonShape)
-                    .clickable(onClick = onSecondary)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
+            if (secondaryLabel != null && onSecondary != null) {
+                Text(
+                    text = secondaryLabel,
+                    style = SecondaryStyle,
+                    color = colors.textSecondary,
+                    modifier = Modifier
+                        .clip(ButtonShape)
+                        .clickable(onClick = onSecondary)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
         }
     }
 }

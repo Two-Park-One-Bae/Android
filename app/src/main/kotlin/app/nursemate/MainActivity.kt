@@ -9,13 +9,12 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.navigation.NurseMateApp
 import app.nursemate.timer.alarm.TimerAlarmIntents
-import app.nursemate.timer.widget.PresetWidget
 import app.nursemate.timer.widget.PresetWidgetLaunch
+import app.nursemate.timer.widget.PresetWidgetRefresher
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -94,7 +93,9 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        lifecycleScope.launch { PresetWidget().updateAll(this@MainActivity) }
+        lifecycleScope.launch {
+            PresetWidgetRefresher.refreshAll(this@MainActivity)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

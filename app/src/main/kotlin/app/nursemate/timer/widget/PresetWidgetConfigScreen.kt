@@ -26,7 +26,7 @@ import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.model.TimerPreset
-import app.nursemate.timer.formatDuration
+import app.nursemate.core.model.formatDuration
 import app.nursemate.timer.tagBackground
 import app.nursemate.timer.tagForeground
 

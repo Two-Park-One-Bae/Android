@@ -3,10 +3,59 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <!--
+        「타일 추가」 화면을 열 수 있는지 확인하려면 그 화면이 **보여야** 한다 (NM-445).
+
+        Android 11+ 는 패키지 가시성을 막아, 선언하지 않으면 `resolveActivity` 가 화면이
+        있어도 null 을 준다 — 버튼이 항상 사라진다. 액션은 삼성 Wear 시스템 UI 의 것이라
+        표준이 아니고, 없는 워치에서는 그대로 null 이 나와 안내만 남는다(의도된 동작).
+    -->
+    <queries>
+        <intent>
+            <action android:name="com.samsung.android.wearable.sysui.ACTION_SHOW_TILE_ADDABLE" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        만료를 손목에 알린다 (NM-444).
+
+        ⚠️ **워치가 직접 띄워야 한다.** 같은 패키지의 워치 앱이 깔리면 시스템이 폰 알림
+        브리징을 끊는다 — 워치가 안 띄우면 아무 일도 일어나지 않는다(실기기 확인).
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!--
+        워치가 **자기 만료 알람을 직접 건다** (NM-445).
+
+        ⚠️ 폰은 `SCHEDULE_EXACT_ALARM` 을 쓰고 사용자에게 설정을 유도하지만, 워치에서
+        같은 걸 하면 **워치 설정으로 들어가라고 해야 한다** — 손목에서 할 일이 아니다.
+        `USE_EXACT_ALARM` 은 자동 허용이고, Play 정책이 허용하는 범주가 「타이머·알람」인데
+        이 앱이 정확히 그것이다. 삼성 기본 워치 타이머도 같은 권한을 쓴다(실기기 확인:
+        `com.samsung.android.watch.timer` → `USE_EXACT_ALARM: granted=true`).
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!--
+        만료 알람 화면을 화면이 꺼진 손목 위로 띄운다 (NM-444).
+
+        ⚠️ **이게 없으면 시스템이 `fullScreenIntent` 를 조용히 버린다** — 워치 로그에
+        `fullScreenIntent=null` 로 찍히고 알림만 남는다(실기기에서 확인하고 추가했다).
+    -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!--
+        만료가 울리는 동안만 도는 서비스 (NM-444).
+
+        ⚠️ **specialUse 다.** Android 14+ 는 포그라운드 서비스에 유형을 요구하는데 알람에
+        맞는 유형이 없다. 진동을 [완료] 까지 이어 주는 것이 목적이라 아래에 사유를 적어 둔다.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
+        android:name=".NurseMateWearApplication"
         android:label="널스메이트"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@android:style/Theme.DeviceDefault"
         android:supportsRtl="true">
 
@@ -23,5 +72,92 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            폰이 보낸 스냅샷을 받는다 (NM-445). 앱이 꺼져 있어도 시스템이 깨워 전달한다.
+            보내는 쪽이 Google Play 서비스라 exported 여야 한다.
+        -->
+        <service
+            android:name=".sync.PresetListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/nursemate/timer/presets"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <!-- 폰이 내놓은 타이머 복제본을 받아 합친다 (NM-445). -->
+        <!--
+            워치가 건 만료 알람이 울리는 자리 (NM-445).
+
+            `exported=false` — 우리 스케줄러만 부른다. 밖에서 만료를 흉내 낼 이유가 없다.
+        -->
+        <receiver
+            android:name=".alarm.WearTimerAlarmReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".sync.TimerReplicaListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/nursemate/timer/replica"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <!--
+            손목을 덮는 만료 알람 (NM-444). 정본 「W3 만료」.
+
+            ⚠️ `showWhenLocked` 가 없으면 화면이 꺼져 있을 때 못 올라온다 — 워치는 대부분
+            꺼져 있으므로 그러면 사실상 아무 때도 안 뜬다.
+        -->
+        <activity
+            android:name=".alarm.WearAlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault" />
+
+        <service
+            android:name=".alarm.WearAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="처치 타이머 만료 알림 — [완료] 를 누를 때까지 손목에 진동을 이어 준다" />
+        </service>
+
+        <!--
+            워치 페이스에서 위로 쓸어 올리면 나오는 프리셋 시작 타일 (NM-445).
+
+            런처가 우리 대신 그리므로 exported 여야 하고, 아무나 붙지 못하도록
+            BIND_TILE_PROVIDER 권한을 요구한다(시스템 런처만 가진 권한이다).
+        -->
+        <service
+            android:name=".tile.PresetTileService"
+            android:label="널스메이트 타이머"
+            android:exported="true"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
+        <!-- 워치 알림의 [완료]. 시스템이 보내므로 내보낼 필요는 없다. -->
+        <receiver
+            android:name=".alarm.WearTimerActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -132,13 +132,18 @@ class CareTimerTransitionsTest {
     fun `진행률은 0에서 1 사이로 잘린다`() {
         val timer = CareTimerTransitions.start(preset, "t1", t0)
 
-        assertEquals(0f, timer.progressAt(t0))
-        assertEquals(1f, timer.progressAt(t0 + 900_000L))
-        assertEquals(1f, timer.progressAt(t0 + 999_999_999L), "만료 후에도 1을 넘지 않는다")
+        // 링은 **남은 시간**만큼 찬다 — 시작에 가득, 만료에 빈다(정본 `sweepAngle -302`).
+        assertEquals(1f, timer.ringFractionAt(t0))
+        assertEquals(0f, timer.ringFractionAt(t0 + 900_000L))
+        assertEquals(0f, timer.ringFractionAt(t0 + 999_999_999L), "만료 후에도 0 아래로 안 간다")
     }
 
+    /**
+     * spec 안에서 글과 그림이 갈렸을 때 **글을 따랐다** — 자세한 사정은
+     * `docs/SPEC-FEEDBACK.md` 와 [CareTimer.alarmTitle] 주석에 있다.
+     */
     @Test
-    fun `알람 제목은 정본 형식을 따른다`() {
+    fun `알람 제목은 spec 의 대괄호 분류 표기를 따른다`() {
         val timer = CareTimerTransitions.start(
             preset.copy(label = "수혈 바이탈", category = TimerCategory.TREATMENT),
             "t1",
@@ -231,9 +236,9 @@ class CareTimerTransitionsTest {
 
         assertEquals(900 + 180, timer.durationSeconds)
         assertEquals(t0 + 1_080_000L, timer.endAtEpochMillis)
-        assertEquals(0f, timer.progressAt(t0))
+        assertEquals(1f, timer.ringFractionAt(t0))
         // 절반이 지났으면 절반만 찬다.
-        assertEquals(0.5f, timer.progressAt(t0 + 540_000L))
+        assertEquals(0.5f, timer.ringFractionAt(t0 + 540_000L))
     }
 
     @Test
@@ -320,5 +325,56 @@ class CareTimerTransitionsTest {
             CareTimerTransitions.ordered(listOf(extended, long), t0).map { it.id },
             "state·endAt 이 그대로라도 남은 시간이 바뀌면 순서가 뒤집힌다"
         )
+    }
+
+    @Test
+    fun `링은 정본 프레임과 같은 각도로 찬다`() {
+        // 정본 `DESIGN.pen` 의 `타이머 카드 — AST`: 15분 중 `12:34` 남은 상태를
+        // `sweepAngle: -302` 로 그린다. 폰 C1·워치 W1·W2 세 프레임이 같은 값이다.
+        //
+        // 이 수치를 못박아 두는 이유는, 폰과 워치가 **반대로 돌았던 적이 있어서다** —
+        // 한쪽은 뒤집어 쓰고 한쪽은 그대로 써서 실기기에서야 드러났다.
+        val timer = CareTimer(
+            id = "t1",
+            label = "AST",
+            category = TimerCategory.TEST,
+            durationSeconds = 900,
+            endAtEpochMillis = t0 + 900_000
+        )
+        val remaining754 = t0 + 900_000 - 754_000
+
+        val degrees = timer.ringFractionAt(remaining754) * 360f
+
+        assertEquals(302f, degrees, 1f, "정본 프레임의 링 각도와 다르다")
+    }
+
+    @Test
+    fun `알람이 못 온 만료 타이머가 나중에 만료한 울림보다 위다`() {
+        // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫인데 못 오는 경우가 있다 —
+        // 정확 알람 권한이 꺼졌거나 예약이 실패했거나. 그 타이머는 `RUNNING` 인 채 만료한다.
+        //
+        // ⚠️ **정렬을 먼저 하면 이 타이머가 진행 중 묶음에 남아**, 나중에 만료해 제대로
+        // 울린 타이머보다 아래로 간다. "울리는 것끼리는 먼저 만료한 것이 위"라는 규칙이
+        // 깨진다. 투영을 먼저 해야 둘이 같은 묶음에서 만료 시각으로 겨룬다.
+        fun timer(id: String, endAt: Long, state: TimerState) = CareTimer(
+            id = id,
+            label = id,
+            category = TimerCategory.TEST,
+            durationSeconds = 900,
+            endAtEpochMillis = endAt,
+            state = state
+        )
+        // 오래전에 만료했지만 알람이 못 와서 아직 RUNNING 인 것
+        val missed = timer("놓친것", t0 - 600_000, TimerState.RUNNING)
+        // 방금 만료해 제대로 울리고 있는 것
+        val ringing = timer("울리는것", t0 - 1_000, TimerState.RINGING)
+
+        val result = CareTimerTransitions.projectedAndOrdered(
+            listOf(ringing, missed),
+            t0
+        )
+
+        assertEquals(listOf("놓친것", "울리는것"), result.map { it.id }, "오래 놓친 것이 위로 안 왔다")
+        assertTrue(result.all { it.state == TimerState.RINGING })
     }
 }

@@ -3,10 +3,14 @@ package app.nursemate
 import android.app.Application
 import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.network.di.PlainClient
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerReplicaPublisher
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
+import app.nursemate.timer.sync.TimerPresetPublisher
+import app.nursemate.timer.widget.PresetWidgetRefresher
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -18,6 +22,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -42,6 +48,15 @@ class NurseMateApplication :
 
     @Inject
     lateinit var timerRepository: TimerRepository
+
+    @Inject
+    lateinit var presetPublisher: TimerPresetPublisher
+
+    @Inject
+    lateinit var replicaPublisher: TimerReplicaPublisher
+
+    @Inject
+    lateinit var timerPresets: TimerPresetRepository
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -91,6 +106,22 @@ class NurseMateApplication :
 
             // 복원이 실패해도 진행 중 표시는 켠다 — 저장된 타이머가 있으면 보여 줘야 한다.
             ongoingNotifier.start(applicationScope)
+
+            // 워치에 프리셋을 계속 흘려보낸다(NM-445).
+            presetPublisher.start(applicationScope)
+
+            // 워치와 서로 맞춘다(NM-445). 스냅샷과 나란히 돈다 — 워치 화면이 아직
+            // 스냅샷을 보고 있어, 워치가 자기 타이머를 갖게 되면 위쪽을 걷어낸다.
+            replicaPublisher.start(applicationScope)
+        }
+
+        // 앱 안에서 프리셋을 고치면 위젯도 따라 바뀌어야 한다. 지정 화면은 자기가 직접
+        // 그리지만(그쪽이 더 빠르다), 이름·시간 수정이나 삭제는 여기로만 들어온다.
+        applicationScope.launch {
+            timerPresets.presets
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { PresetWidgetRefresher.refreshAll(this@NurseMateApplication) }
         }
     }
 

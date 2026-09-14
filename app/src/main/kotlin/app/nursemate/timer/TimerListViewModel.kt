@@ -2,11 +2,11 @@ package app.nursemate.timer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject

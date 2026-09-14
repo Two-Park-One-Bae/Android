@@ -12,10 +12,13 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +60,7 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.model.TimerPreset
+import app.nursemate.core.model.formatDuration
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -90,6 +95,13 @@ fun TimerPresetSheet(
     // 순서를 끄는 동안은 시트와 목록 스크롤을 멈춘다 — 안 그러면 손잡이를 아래로 끌 때
     // 행이 아니라 시트가 따라 내려가 닫혀 버린다.
     var reordering by remember { mutableStateOf(false) }
+    val listScroll = rememberScrollState()
+    // 시트가 화면을 다 먹지 않도록 **최대 높이를 못박는다.** 이게 없으면 시트가 자식에게 높이
+    // 제약을 주지 않아 Column 이 프리셋 전부를 담은 제 높이를 가져가고, 스크롤 범위가 0 이 돼
+    // **쓸어도 제자리로 돌아온다**(프리셋 11개·`maxValue=0` 으로 확인).
+    val density = LocalDensity.current
+    val screenHeightPx = LocalWindowInfo.current.containerSize.height
+    val sheetMaxHeight = with(density) { (screenHeightPx * SHEET_MAX_RATIO).toDp() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -100,12 +112,14 @@ fun TimerPresetSheet(
         containerColor = colors.surface,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
+        // 제목과 「프리셋 추가」는 **고정**이고 목록만 스크롤한다. 스크롤을 이 바깥 Column 에
+        // 걸면 안 된다 — 그러면 제목까지 함께 밀려 올라간다.
         Column(
             modifier = Modifier
+                .heightIn(max = sheetMaxHeight)
                 .fillMaxWidth()
                 // 3버튼 내비게이션에서는 하단 인셋이 커서, 흡수하지 않으면 마지막 프리셋이 가린다.
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState(), enabled = !reordering)
                 .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -134,15 +148,23 @@ fun TimerPresetSheet(
                 )
             }
 
-            ReorderablePresets(
-                presets = presets,
-                editing = editing,
-                onReorder = onReorder,
-                onStart = onStart,
-                onEditPreset = onEditPreset,
-                onDeletePreset = onDeletePreset,
-                onReorderingChange = { reordering = it }
-            )
+            // 남는 높이만 받아 그 안에서 스크롤한다. `fill = false` 라 프리셋이 적으면
+            // 예전처럼 내용 높이만큼만 차지해 시트가 작게 열린다.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(listScroll, enabled = !reordering)
+            ) {
+                ReorderablePresets(
+                    presets = presets,
+                    editing = editing,
+                    onReorder = onReorder,
+                    onStart = onStart,
+                    onEditPreset = onEditPreset,
+                    onDeletePreset = onDeletePreset,
+                    onReorderingChange = { reordering = it }
+                )
+            }
 
             // 정본은 「프리셋 추가」를 편집 모드에서만 보여 준다 — 평소에는 시작만 하는 시트다.
             //
@@ -443,3 +465,6 @@ private val PresetLabel = NmTypography.body.copy(fontSize = 15.sp, fontWeight = 
 private val TagStyle = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
 private val DurationStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium)
 private val AddStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+
+/** 시트가 차지할 화면 비율의 상한. 넘치면 목록만 스크롤한다. */
+private const val SHEET_MAX_RATIO = 0.6f

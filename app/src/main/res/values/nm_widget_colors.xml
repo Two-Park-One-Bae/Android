@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯은 RemoteViews 라 Compose 토큰을 못 쓴다. `NmColor` 와 같은 값을 여기에 옮겨 둔다. -->
+<resources>
+    <!-- NmColor.Neutral.C600 -->
+    <color name="nm_widget_label">#FF475569</color>
+    <!-- NmColor.Neutral.C400 -->
+    <color name="nm_widget_label_empty">#FF94A3B8</color>
+    <!-- NmColor.Neutral.C900 -->
+    <color name="nm_widget_value">#FF0F172A</color>
+    <!-- NmColor.Neutral.C500 -->
+    <color name="nm_widget_value_empty">#FF64748B</color>
+    <!-- NmColor.Primary.C600 -->
+    <color name="nm_widget_accent">#FF0284C7</color>
+    <!-- NmColor.Success.C600 — 「시작됨」 -->
+    <color name="nm_widget_started">#FF16A34A</color>
+</resources>

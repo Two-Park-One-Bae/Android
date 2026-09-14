@@ -1,10 +1,9 @@
 package app.nursemate.timer.widget
 
 import android.content.Context
-import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import app.nursemate.core.data.timer.TimerPresetRepository
-import app.nursemate.core.data.timer.TimerRepository
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerRepository
 import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -25,18 +24,6 @@ internal object PresetWidgetSlot {
 
     /** 이 위젯이 담은 프리셋 id. 없으면 아직 지정 전이다. */
     val PRESET_ID = stringPreferencesKey("preset_id")
-
-    /**
-     * 이 위젯으로 마지막에 시작한 시각 — 잠깐 「시작됨」을 보여 주는 데만 쓴다.
-     *
-     * spec §위젯: "탭하면 **시작됐다는 것이 눈에 보여야 한다**(같은 걸 두 번 눌러 타이머가
-     * 둘 생기는 일을 막는다)". 위젯은 눌러도 화면이 안 바뀌어서, 표시가 없으면 안 눌린 줄 알고
-     * 한 번 더 누른다.
-     *
-     * ⚠️ **시각을 저장하고 그릴 때 비교한다.** 「시작됨」을 켜고 끄는 두 번의 갱신 사이에
-     * 프로세스가 죽으면 켠 상태로 굳는데, 시각을 들고 있으면 다음 갱신에서 저절로 풀린다.
-     */
-    val STARTED_AT = longPreferencesKey("started_at")
 }
 
 /**
@@ -51,6 +38,7 @@ internal interface PresetWidgetEntryPoint {
     fun presetRepository(): TimerPresetRepository
     fun timerRepository(): TimerRepository
     fun permissions(): TimerPermissions
+    fun slotStore(): PresetWidgetSlotStore
 }
 
 internal fun Context.timerWidgetEntryPoint(): PresetWidgetEntryPoint =

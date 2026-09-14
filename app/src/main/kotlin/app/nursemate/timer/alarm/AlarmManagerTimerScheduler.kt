@@ -7,8 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.getSystemService
-import app.nursemate.core.data.timer.TimerAlarmScheduler
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.timer.TimerAlarmScheduler
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,14 +50,14 @@ class AlarmManagerTimerScheduler @Inject constructor(
         )
     }
 
+    // 예약만 지운다. 이미 울리고 있었다면 [TimerAlarmService] 가 저장소에서 사라진 것을
+    // 보고 알림을 내린다 — 알림을 여기서도 취소하면 끄는 길이 둘이 된다.
     override fun cancel(timerId: String) {
         alarmManager?.cancel(firePendingIntent(timerId))
-        clearNotification(timerId)
     }
 
     override fun dismiss(timerId: String) {
         alarmManager?.cancel(firePendingIntent(timerId))
-        clearNotification(timerId)
     }
 
     /**
@@ -77,11 +77,6 @@ class AlarmManagerTimerScheduler @Inject constructor(
         // 본다). 호출 여부만 남겨 둔다 — 조용히 지나가면 원인을 못 찾는다.
         Log.i(TAG, "만료 알림 정리 (manager=${manager != null})")
         manager?.cancelAll()
-    }
-
-    /** 울리고 있던 알림을 내린다. 예약만 지우면 이미 뜬 알림은 남는다. */
-    private fun clearNotification(timerId: String) {
-        context.getSystemService<NotificationManager>()?.cancel(notificationId(timerId))
     }
 
     private fun firePendingIntent(timerId: String): PendingIntent {
@@ -107,15 +102,13 @@ class AlarmManagerTimerScheduler @Inject constructor(
 
     companion object {
         /**
-         * 타이머 id(UUID 문자열)를 요청 코드·알림 id 로 쓴다.
+         * 타이머 id(UUID 문자열)를 `PendingIntent` 요청 코드로 쓴다.
          *
          * `hashCode` 라 충돌 가능성이 0은 아니지만, 동시에 도는 타이머가 수십 개를 넘지 않아
          * 실질적으로 부딪히지 않는다. 부딪히면 두 알람이 서로를 덮어쓰므로, 문제가 되면
          * 별도 정수 id 를 도메인에 넣어야 한다.
          */
         fun requestCode(timerId: String): Int = timerId.hashCode()
-
-        fun notificationId(timerId: String): Int = timerId.hashCode()
 
         private const val TAG = "NM441"
     }

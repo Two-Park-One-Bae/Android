@@ -57,7 +57,13 @@ data class CareTimer(
     val remainingSeconds: Int? = null,
     val state: TimerState = TimerState.RUNNING
 ) {
-    /** 알람·표면에 쓰는 만료 제목. spec §만료·알람 — `❗ [분류] 라벨`. */
+    /**
+     * 알람·표면에 쓰는 만료 제목. spec §만료·알람 — `❗ [분류] 라벨`.
+     *
+     * ⚠️ **정본 디자인은 이것과 다르다.** 「시스템 알람 — 잠금화면」·「W3 만료」 프레임은
+     * `수혈 바이탈 종료` 로 그려져 있다. 글을 따르기로 했고, 그림을 글에 맞춰 달라는 요청은
+     * `docs/SPEC-FEEDBACK.md` 에 적어 두었다.
+     */
     val alarmTitle: String get() = "❗ [${category.label}] $label"
 
     /** @return [now] 기준 남은 초. 일시정지 중이면 멈춘 값, 만료했으면 0 */
@@ -66,11 +72,21 @@ data class CareTimer(
         else -> (((endAtEpochMillis - now) / MILLIS_PER_SECOND).toInt()).coerceAtLeast(0)
     }
 
-    /** 진행률 링에 쓰는 0~1 값. */
-    fun progressAt(now: Long): Float = if (durationSeconds <= 0) {
-        1f
+    /**
+     * 진행률 링에 채울 0~1 값 — **남은 시간 비율**이다. 시간이 갈수록 줄어든다.
+     *
+     * ⚠️ **지난 비율이 아니다.** 정본 `DESIGN.pen` 의 `타이머 카드 — AST` 는 15분 중
+     * `12:34` 남은 상태를 `sweepAngle: -302` 로 그린다 — 754/900 = 83.8% = 302°.
+     * 폰 C1·워치 W1·W2 세 프레임이 모두 같은 값이다.
+     *
+     * 예전에는 이 자리에 `progressAt`(지난 비율)이 있었고, 폰은 쓸 때 뒤집고 워치는 그대로
+     * 써서 **두 화면의 링이 반대로 돌았다**(실기기에서 발견). 이름이 "채울 값"처럼 읽히는데
+     * 뜻은 반대라서 생긴 일이라, 목적을 이름에 담아 다시 틀릴 여지를 없앴다.
+     */
+    fun ringFractionAt(now: Long): Float = if (durationSeconds <= 0) {
+        0f
     } else {
-        1f - (remainingAt(now).toFloat() / durationSeconds).coerceIn(0f, 1f)
+        (remainingAt(now).toFloat() / durationSeconds).coerceIn(0f, 1f)
     }
 
     /** 아직 안 울렸는데 만료 시각을 지났는가 — 복원 시 RINGING 으로 올려야 하는지 판단한다. */

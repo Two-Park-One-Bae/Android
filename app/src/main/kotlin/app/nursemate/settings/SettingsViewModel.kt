@@ -5,9 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.UserRepository
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.AlertMode
 import app.nursemate.core.network.error.ApiFailure
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow

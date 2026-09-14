@@ -71,7 +71,17 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
 
 > PR CI(`ci.yml`)는 그대로 돈다. 다만 **debug 만 빌드하므로 R8 이 걸린 release 전용 문제는
 > 잡지 못한다** — 그래서 아래 절차의 스모크 테스트를 건너뛰면 안 된다.
-> (실제로 카카오 SDK 리플렉션이 R8 에 깨져 앱 시작 즉시 크래시하던 것을 이 테스트로만 잡았다.)
+> 이 테스트로만 잡힌 것이 지금까지 둘이다. 둘 다 **앱 시작 즉시 전 사용자 크래시**였다.
+> - 카카오 SDK 가 enum 상수를 리플렉션으로 찾는데 R8 이 필드명을 바꿨다 (PR #14).
+> - `glance-appwidget` 이 딸려 온 `WorkManagerInitializer` 가 `androidx.startup` 으로
+>   자동 실행되다가 R8 을 거친 `WorkDatabase` 생성에 실패했다 (PR #21).
+>   Glance 는 쓰지 않는데 의존성만 남아 있었다 — 지금은 빠졌다.
+
+## ⚠️ 폰·워치가 `specialUse` 포그라운드 서비스를 쓴다
+
+`TimerAlarmService`(폰)와 `WearAlarmService`(워치) **둘 다**다. `applicationId` 가 같아
+**같은 Play 등록에 묶이므로** 제출할 때 「특별한 용도」 사유를 **둘 다** 적어야 한다 —
+하나만 적으면 나머지가 소명 없이 남는다. 문구와 사정은 `docs/KNOWN-ISSUES.md` ③ 에 있다.
 
 ## Play 업로드 절차 (NM-397/400)
 
@@ -79,7 +89,25 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
    ```bash
    ./gradlew :app:assembleRelease && adb install -r app/build/outputs/apk/release/app-release.apk
    ```
-   실행해서 크래시 없는지 logcat 까지 본다. 문제가 나오면 여기서 `develop` 에 고치고 다시.
+   실행해서 크래시 없는지 logcat 까지 본다(`adb logcat -b crash -d` 가 비어 있고
+   `adb shell pidof app.nursemate` 가 살아 있어야 한다). 문제가 나오면 여기서 `develop` 에
+   고치고 다시.
+
+   워치까지 올리는 릴리스면 `:wear:assembleRelease` 도 같이 본다. **두 APK 의 서명 인증서가
+   같아야** Data Layer 가 붙는다 — 서명은 convention plugin 이 두 모듈에 함께 준다
+   (`build-logic/.../ReleaseSigning.kt`). 산출물 이름이 `wear-release-unsigned.apk` 면
+   `secrets.properties` 의 `RELEASE_*` 가 안 읽힌 것이다.
+
+   ⚠️ **만료 팝업은 워치를 차고 확인한다.** 벗은 상태면 Wear 가 `off-body` 를 보고 알림
+   자체를 걸러 팝업이 안 뜬다(`KNOWN-ISSUES.md` ⑥). 진동은 우리가 `Vibrator` 를 직접 몰아
+   그대로 오므로 **「진동만 오고 팝업은 없다」** 가 되어 정상인 빌드가 결함처럼 보인다 —
+   책상에 올려 두고 재다가 네 번 연속 이것에 걸렸다.
+
+       [AlertingPipeline] Not alerting: Device is off-body
+   ```bash
+   apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+   apksigner verify --print-certs wear/build/outputs/apk/release/wear-release.apk
+   ```
 2. `release/X.Y.Z` 브랜치를 컷해 **`main` 으로 PR** → 머지.
 3. 그 **`main` 머지 커밋에 `v<versionName>` 태그**를 붙여 푸시.
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).

@@ -49,8 +49,7 @@ object TimerOngoingNotification {
         // ⚠️ 다만 다시 그리는 계기가 목록의 변화뿐이라, 만료하는 **그 순간**에는 갱신되지
         // 않는다. 다음 신호가 올 때까지 옛 모습이 남는다 — 트리거를 따로 두려면 주기 갱신이
         // 필요해 크로노미터로 얻은 이점을 잃는다.
-        val projected = timers.map { if (it.isExpiredAt(now)) CareTimerTransitions.ring(it) else it }
-        val ordered = CareTimerTransitions.ordered(projected, now)
+        val ordered = CareTimerTransitions.projectedAndOrdered(timers, now)
         val lead = ordered.firstOrNull() ?: return null
 
         val builder = NotificationCompat.Builder(context, TimerAlarmChannels.ONGOING_ID)
@@ -58,6 +57,10 @@ object TimerOngoingNotification {
             .setContentTitle(lead.headline())
             .setContentText(others(ordered.drop(1)))
             .setContentIntent(TimerAlarmIntents.openTimerTabPending(context))
+            // ⚠️ `setOngoing(true)` 는 **스와이프만** 막는다. 알림창의 [지우기] 는 이것도
+            // 걷어 가는데, 우리는 목록이 바뀔 때만 다시 그리므로 그대로 두면 타이머가 도는
+            // 내내 앱 밖 표시가 없다. 사라지면 리시버가 되돌린다.
+            .setDeleteIntent(TimerAlarmReceiver.ongoingDismissPendingIntent(context))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)

@@ -10,8 +10,8 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
-import app.nursemate.core.data.timer.TimerRepository
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.timer.TimerRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +44,8 @@ class TimerOngoingNotifier @Inject constructor(
             repository.timers
                 .map { timers -> timers to timerRenderSignature(timers) }
                 .distinctUntilChanged { old, new -> old.second == new.second }
+                // 만료 알림은 여기서 손대지 않는다 — [TimerAlarmService] 가 같은 저장소를
+                // 보며 맨 앞을 갈아 끼운다. 워치와 같은 구조다.
                 .collect { (timers, _) -> render(timers) }
         }
     }

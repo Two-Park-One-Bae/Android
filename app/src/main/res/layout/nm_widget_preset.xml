@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    지정 프리셋 위젯 — Glance 로 그리던 것을 RemoteViews 로 옮겼다.
+
+    ⚠️ **왜 Glance 가 아닌가.** Glance 는 컴포지션을 `SessionWorker`(WorkManager)로 돌리는데,
+    그 작업이 `Requires: charging=true` 로 잡혀 **충전 중이 아니면 시스템이 실행을 미룬다.**
+    실측: 충전 가장 시 673ms · 비충전 시 61초. `update`·`updateAll` 모두 같은 경로라 API 안에서는
+    피할 길이 없었다. `AppWidgetManager.updateAppWidget` 은 동기라 그 큐를 지나지 않는다.
+
+    ⚠️ **RemoteViews 가 허용하는 뷰만 쓴다.** `<Space>` 는 목록에 없어 미리보기가
+    「위젯을 추가할 수 없습니다」로 뜬다(전례 있음). 빈 자리는 `layout_weight` 로 만든다.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/nm_widget_card"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="11dp">
+
+    <TextView
+        android:id="@+id/widget_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="13sp"
+        android:textStyle="normal"
+        android:fontFamily="sans-serif-medium"
+        android:textColor="@color/nm_widget_label"
+        />
+
+    <!-- 키워드는 위, 값은 아래 — 정본의 `justifyContent: space_between`. -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/widget_icon"
+            android:layout_width="13dp"
+            android:layout_height="13dp"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/widget_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="3dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:textColor="@color/nm_widget_value" />
+    </LinearLayout>
+</LinearLayout>

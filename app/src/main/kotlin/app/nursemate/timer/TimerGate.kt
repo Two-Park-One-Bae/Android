@@ -36,5 +36,11 @@ enum class PermissionStep {
     NOTIFICATION,
 
     /** `SCHEDULE_EXACT_ALARM` — 팝업이 없어 시스템 설정으로 보냈다 돌아와야 한다. */
-    EXACT_ALARM
+    EXACT_ALARM,
+
+    /**
+     * `USE_FULL_SCREEN_INTENT`(Android 14+) — 없으면 **잠금화면에 알람 화면이 안 뜬다.**
+     * 이것도 팝업이 없어 설정으로 보낸다.
+     */
+    FULL_SCREEN
 }
