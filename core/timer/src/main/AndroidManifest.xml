@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        재부팅 후 알람을 되살린다.
+
+        ⚠️ **여기 두면 이 모듈을 쓰는 앱이 전부 갖는다** — 폰과 워치 둘 다다. 그게 의도다.
+        `AlarmManager` 예약은 기기를 끄면 사라지는데, 양쪽이 각자 타이머를 갖게 된 뒤로는
+        어느 쪽이 재부팅돼도 같은 문제가 생긴다. 앱마다 따로 등록하면 한쪽을 빠뜨린다
+        (실제로 워치 쪽이 빠져 있었다).
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <receiver
+            android:name="app.nursemate.core.timer.TimerBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

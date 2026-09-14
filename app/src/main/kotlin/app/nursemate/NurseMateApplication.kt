@@ -1,8 +1,16 @@
 package app.nursemate
 
 import android.app.Application
+import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
 import app.nursemate.core.network.di.PlainClient
+import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.core.timer.TimerReplicaPublisher
+import app.nursemate.core.timer.TimerRepository
+import app.nursemate.timer.alarm.TimerAlarmChannels
+import app.nursemate.timer.alarm.TimerOngoingNotifier
+import app.nursemate.timer.sync.TimerPresetPublisher
+import app.nursemate.timer.widget.PresetWidgetRefresher
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -11,6 +19,12 @@ import com.google.firebase.appcheck.FirebaseAppCheck
 import com.kakao.sdk.common.KakaoSdk
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 @HiltAndroidApp
@@ -28,6 +42,23 @@ class NurseMateApplication :
     @Inject
     @PlainClient
     lateinit var imageClient: dagger.Lazy<OkHttpClient>
+
+    @Inject
+    lateinit var ongoingNotifier: TimerOngoingNotifier
+
+    @Inject
+    lateinit var timerRepository: TimerRepository
+
+    @Inject
+    lateinit var presetPublisher: TimerPresetPublisher
+
+    @Inject
+    lateinit var replicaPublisher: TimerReplicaPublisher
+
+    @Inject
+    lateinit var timerPresets: TimerPresetRepository
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .components { add(OkHttpNetworkFetcherFactory(callFactory = { imageClient.get() })) }
@@ -52,5 +83,49 @@ class NurseMateApplication :
         if (BuildConfig.KAKAO_APP_KEY.isNotEmpty()) {
             KakaoSdk.init(this, BuildConfig.KAKAO_APP_KEY)
         }
+
+        // 타이머 알람 채널은 **울리기 전에** 있어야 한다. 알람 시점에 만들면 늦다.
+        // 이미 있으면 시스템이 무시하므로 매 실행 호출해도 된다.
+        TimerAlarmChannels.ensure(this)
+
+        // 앱이 죽어 있는 동안 만료한 타이머를 현재 시각에 맞추고, 아직 안 끝난 것의 예약을
+        // 되살린다. 재부팅은 TimerBootReceiver 가 따로 받지만, 그 밖의 이유로 예약이
+        // 사라졌을 수도 있어(강제 종료·시스템 정리) 시작할 때마다 한 번 맞춘다.
+        //
+        // ⚠️ **복원이 끝난 뒤에 진행 중 표시를 켠다.** 복원은 남아 있던 알람 알림을 통째로
+        // 걷어내는데(`cancelAll`), 그때 진행 중 표시까지 함께 지워진다. 먼저 켜면 알림을
+        // 그렸다가 곧바로 지워져, 알림을 눌러 앱에 들어온 사용자 눈앞에서 표시가 사라진다.
+        //
+        // ⚠️ 실패를 삼키지 않는다. 예전에는 예외가 나도 조용히 죽어, 알람이 예약되지 않는
+        // 것도 알림이 안 걷히는 것도 로그 한 줄 없이 지나갔다 — 원인 찾기가 훨씬 오래 걸렸다.
+        @Suppress("TooGenericExceptionCaught")
+        applicationScope.launch {
+            runCatching { timerRepository.restore() }
+                .onFailure { Log.e(TIMER_TAG, "타이머 복원 실패", it) }
+                .onSuccess { Log.i(TIMER_TAG, "타이머 복원 완료") }
+
+            // 복원이 실패해도 진행 중 표시는 켠다 — 저장된 타이머가 있으면 보여 줘야 한다.
+            ongoingNotifier.start(applicationScope)
+
+            // 워치에 프리셋을 계속 흘려보낸다(NM-445).
+            presetPublisher.start(applicationScope)
+
+            // 워치와 서로 맞춘다(NM-445). 스냅샷과 나란히 돈다 — 워치 화면이 아직
+            // 스냅샷을 보고 있어, 워치가 자기 타이머를 갖게 되면 위쪽을 걷어낸다.
+            replicaPublisher.start(applicationScope)
+        }
+
+        // 앱 안에서 프리셋을 고치면 위젯도 따라 바뀌어야 한다. 지정 화면은 자기가 직접
+        // 그리지만(그쪽이 더 빠르다), 이름·시간 수정이나 삭제는 여기로만 들어온다.
+        applicationScope.launch {
+            timerPresets.presets
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { PresetWidgetRefresher.refreshAll(this@NurseMateApplication) }
+        }
+    }
+
+    private companion object {
+        const val TIMER_TAG = "NM441"
     }
 }

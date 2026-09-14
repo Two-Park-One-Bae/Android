@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  만료 알람 아이콘 — C1 만료 카드
+  출처: Lucide "bell-ring" (ISC License) https://lucide.dev
+  디자인 정본(spec/design/DESIGN.pen)이 아이콘을 전부 Lucide로 정의한다.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<!--
+  ⚠️ core/designsystem 에서 **복사**한 것이다. 그 모듈은 폰용 Material3 를 끌고 와
+  워치 클래스패스에 올릴 수 없다(MaterialTheme·Text 가 두 벌이 되어 잘못 import 해도
+  컴파일은 되고 화면만 깨진다). 원본이 바뀌면 여기도 같이 고쳐야 한다.
+  출처: Lucide (ISC License) https://lucide.dev
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M10.268,21 a2,2 0 0,0 3.464,0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M22,8 c0,-2.3 -0.8,-4.3 -2,-6"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.262,15.326 a1,1 0 0,0 1.213,1.48 h15.05 a1,1 0 0,0 1.213,-1.48 A20,20 0 0,1 18,9 a6,6 0 0,0 -12,0 a20,20 0 0,1 -2.738,6.326"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M4,2 C2.8,3.7 2,5.7 2,8"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

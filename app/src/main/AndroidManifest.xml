@@ -4,6 +4,35 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+        처치 타이머 (NM-441).
+
+        spec §만료·알람이 "앱을 완전히 종료한 상태에서도 만료 시각에 알린다"를 타이머의
+        최소 요건으로 못박았다. 그걸 지키려면 아래가 모두 필요하다.
+
+        ⚠️ USE_EXACT_ALARM 은 선언하지 않는다 — 자동 허용이라 편하지만 Play 정책상
+        알람·시계·캘린더가 주 기능인 앱만 쓸 수 있다. 널스메이트는 알약 식별이 함께 있어
+        심사에서 다툴 여지가 있다. 대신 SCHEDULE_EXACT_ALARM 을 쓰고 사용자에게 설정을
+        안내한다(권한이 없으면 예약을 건너뛰고 화면이 안내한다).
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 만료 진동. 없으면 알림은 뜨는데 진동만 조용히 빠진다 — 폰에만 없었다. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!--
+      만료가 울리는 동안 도는 포그라운드 서비스 (TimerAlarmService).
+
+      알림 채널의 소리·진동은 링어 모드에 걸려 무음에서 통째로 막히는데, spec §만료·알람은
+      "기기 무음과 무관하게"를 요구한다. 그래서 앱이 알람 스트림으로 직접 내고, 그러려면
+      프로세스가 살아 있어야 한다. 워치와 같은 구조다.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- 잠금화면 알람. Android 14+ 는 기본 거부라 없으면 헤드업으로 낮춰 표시된다. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- 재부팅하면 AlarmManager 예약이 전부 사라진다 — 다시 걸어야 한다. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- 카메라가 없는 기기(태블릿 일부)에서도 갤러리 선택으로 쓸 수 있으므로 required=false. -->
     <uses-feature
         android:name="android.hardware.camera.any"
@@ -16,6 +45,26 @@
         android:label="널스메이트"
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
+
+        <!--
+            잠금화면을 덮는 만료 알람 (NM-442).
+
+            ⚠️ **`showWhenLocked` 가 핵심이다.** 예전에는 풀스크린 인텐트로 `MainActivity` 를
+            넘겼는데 그 액티비티에는 이 속성이 없어, 시스템이 조용히 헤드업으로 낮추고
+            잠금화면에는 아무것도 안 띄웠다(실기기 확인).
+
+            `excludeFromRecents` — 알람은 최근 목록에 남을 일이 아니다.
+            `singleTask` — 여러 개가 동시에 만료해도 화면은 하나다.
+        -->
+        <activity
+            android:name=".timer.alarm.TimerAlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/Theme.NurseMate" />
 
         <activity
             android:name=".MainActivity"
@@ -62,5 +111,78 @@
                 android:resource="@xml/nm_share_paths" />
         </provider>
 
+
+        <!-- 처치 타이머 알람 (NM-441). 앱 밖에서 깨어나므로 exported=false 로 둔다. -->
+        <receiver
+            android:name="app.nursemate.timer.alarm.TimerAlarmReceiver"
+            android:exported="false" />
+
+        <!--
+            만료가 울리는 동안만 도는 서비스 (NM-441).
+
+            `specialUse` — 정해진 유형 중 맞는 것이 없다. `mediaPlayback` 은 사용자가 고른
+            콘텐츠 재생용이고 이건 알람음이며, Android 는 알람용 포그라운드 유형을 두지 않았다.
+        -->
+        <service
+            android:name="app.nursemate.timer.alarm.TimerAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="처치 타이머 만료 알림 — [완료] 를 누를 때까지 알람음·진동을 이어 준다" />
+        </service>
+
+        <!--
+            지정 프리셋 위젯 (NM-443).
+
+            ⚠️ **exported=true 여야 한다.** 위젯 갱신 브로드캐스트를 보내는 쪽은 시스템·런처라,
+            내보내지 않으면 위젯이 목록에 뜨지도 갱신되지도 않는다. 받는 인텐트는 AppWidget
+            프레임워크 것뿐이고 우리 데이터를 꺼내 가는 통로가 아니다.
+        -->
+        <receiver
+            android:name="app.nursemate.timer.widget.PresetWidgetReceiver"
+            android:label="@string/nm_preset_widget_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 위젯 탭 — 앱을 열지 않고 바로 시작한다. -->
+                <action android:name="app.nursemate.timer.widget.START" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nm_preset_widget_info" />
+        </receiver>
+
+        <!--
+            슬롯 지정 화면. 런처가 위젯을 놓는 순간 띄우므로 exported 여야 한다.
+            excludeFromRecents — 설정 한 번 하고 끝나는 화면이라 최근 목록에 남을 이유가 없다.
+
+            ⚠️ **taskAffinity 를 비워 자기 태스크에서 돌린다.** 안 그러면 앱 태스크에 얹히는데,
+            지정을 마치고 이 화면이 닫히면 **밑에 있던 MainActivity 가 드러난다** — 홈 화면에서
+            위젯을 만졌는데 앱 홈이 뜬다(실기기에서 확인). 자기 태스크면 닫히는 즉시 런처로 돌아간다.
+        -->
+        <activity
+            android:name="app.nursemate.timer.widget.PresetWidgetConfigActivity"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+
+        <!-- 워치가 내놓은 타이머 복제본을 받는다 (NM-445). -->
+        <service
+            android:name="app.nursemate.timer.sync.TimerReplicaListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/nursemate/timer/replica"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

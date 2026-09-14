@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    지정 프리셋 위젯 — spec §위젯(NM-301).
+
+    ⚠️ **잠금화면에는 못 올린다. `keyguard` 를 다시 넣지 말 것 — 확인해 봤고 안 된다.**
+      · AOSP: Glance 문서의 속성표가 "widgetCategory … Android 5.0+ only supports home_screen"
+        이라고 못박았다. API 21 에서 잠금화면 호스트를 없앤 뒤로 되살아난 적이 없다
+        (Android 15·16 features 문서에도 없다).
+      · One UI 8(갤럭시 S24)에는 잠금화면 위젯 편집 UI 가 있지만, 거기 오르려면
+        `com.samsung.android.app.clockpack.LOCK_PROVIDER` 권한이 필요하고 그 보호 수준이
+        **signature|privileged** 다(제공자 `com.samsung.android.app.aodservice`).
+        삼성 서명 앱만 가질 수 있어 우리는 구조적으로 불가능하다.
+      · 기기에서 `keyguard` 비트를 가진 provider 가 많이 보이지만 이름이 전부 `*Cover*`·`B5`·`B6`
+        다 — 플립 **커버 화면**용이지 잠금화면이 아니다. 이걸 처음에 잘못 읽었다.
+    그래서 Android 에서 가능한 표면은 홈 화면뿐이다. spec 본문의 "홈 화면 위젯 = MVP 제외"와
+    정반대라 개정 요청 대상이다.
+
+    셀은 **가로 2 × 세로 1**이다. 정본 버튼이 110×64pt(가로가 긴 비율)인데 1×1 로 놓으면
+    One UI 셀이 세로로 길어(≈56×78dp) 가느다란 흰 기둥이 된다 — 실기기에서 확인했다.
+    `maxResize` 로 상한을 둬, 크게 늘려도 키워드와 시간이 양 끝으로 벌어지지 않게 한다.
+
+    `configure` 는 놓는 순간 슬롯 지정 화면을 띄운다. iOS 는 시스템 위젯 편집 UI 가 이 역할을
+    대신하지만 Android 에는 그 자리가 없다.
+    `reconfigurable` 이 없으면 **한 번 지정한 프리셋을 바꿀 길이 없다** — 지우고 다시 놓아야 한다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="58dp"
+    android:minResizeWidth="90dp"
+    android:minResizeHeight="48dp"
+    android:maxResizeWidth="250dp"
+    android:maxResizeHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable"
+    android:configure="app.nursemate.timer.widget.PresetWidgetConfigActivity"
+    android:description="@string/nm_preset_widget_description"
+    android:initialLayout="@layout/nm_widget_loading"
+    android:previewLayout="@layout/nm_preset_widget_preview"
+    android:previewImage="@mipmap/ic_launcher"
+    android:updatePeriodMillis="0" />

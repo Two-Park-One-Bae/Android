@@ -36,6 +36,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     usage: Usage?,
+    activeTimerCount: Int,
     onPillClick: () -> Unit,
     onTimerClick: () -> Unit,
     onActiveTimerClick: () -> Unit,
@@ -63,9 +64,10 @@ fun HomeScreen(
             )
         }
 
-        // 타이머 기능 구현 전이라 0 고정. 기능이 붙으면 실제 개수를 넣는다.
+        // 개수는 목록 크기 그대로다 — 완료·취소가 상태가 아니라 삭제라, 남아 있으면 활성이다
+        // (spec `feature/care-timer/domain-model.md` §상태머신).
         NmChip(
-            text = "활성 타이머 0",
+            text = "활성 타이머 $activeTimerCount",
             icon = painterResource(DsR.drawable.nm_ic_timer),
             contentColor = NmColor.Secondary.C600,
             containerColor = NmColor.Secondary.C50,

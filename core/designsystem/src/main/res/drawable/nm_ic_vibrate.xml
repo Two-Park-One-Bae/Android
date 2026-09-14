@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  진동 — 울림 방식 선택기 (Android 전용 3번째 방식)
+  출처: Lucide "vibrate" (ISC License) https://lucide.dev
+  디자인 정본에는 선택기가 2칸이라 이 아이콘이 없다. 3칸 개정 요청 대상.
+  색은 Compose Icon(tint=)에서 지정한다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:pathData="M2,8 L2,16 M5,5 L5,19 M19,5 L19,19 M22,8 L22,16"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9,3 L15,3 A1,1 0 0,1 16,4 L16,20 A1,1 0 0,1 15,21 L9,21 A1,1 0 0,1 8,20 L8,4 A1,1 0 0,1 9,3 z"
+        android:strokeColor="#FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

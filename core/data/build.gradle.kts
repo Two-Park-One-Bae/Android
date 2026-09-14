@@ -12,6 +12,7 @@ dependencies {
     // 토큰 공급자 인터페이스만 가져다 구현한다. 반대 방향(network → data)이면 순환이 된다.
     implementation(projects.core.network)
 
+    // 기기 식별자를 DataStore 에 둔다(DeviceIdRepository).
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
 
