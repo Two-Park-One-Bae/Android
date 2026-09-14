@@ -118,6 +118,16 @@ NM-445 브랜치에서 건드리지 않았다.
 시스템이 자기 권한으로 띄우므로 **화면이 꺼져 있든 켜져 있든 워치를 쓰는 중이든** 뜬다.
 [완료] 도 그 팝업에서 바로 눌린다.
 
+⚠️ **단, 손목에서 벗으면 안 뜬다.** Wear 는 `off-body` 를 보고 알림 자체를 거른다:
+
+    [AlertingPipeline]           Not alerting: Device is off-body
+    [WearSdkAlertingProcessor]   Not alerting: Device is off-body, item id: …|app.nursemate|444001
+    [WNotiDataConverter]         Should drop popup (Reason : No Alert : Silent Notification)
+
+알림이 「안 울린 것」이 되면 팝업도 함께 버려진다. 진동만 남는데, 그건 우리가 `Vibrator` 를
+직접 몰기 때문이다([WearAlarmService]). 차고 있으면 정상이므로 결함이 아니라 **책상에
+올려 두고 시험할 때 헷갈리는 지점**이다 — 실기기 확인에서 네 번 연속 이걸로 헤맸다.
+
 ⚠️ **`setFullScreenIntent` 를 붙이면 이 경로를 안 탄다.** 붙어 있으면 Wear 가 그것을 띄우는
 것으로 알림 표시를 대신하는데, 그 시작이 막혀 아무것도 안 나온다. 붙였을 때 우리 앱이 이
 경로를 탄 횟수는 **0건**, 뺐더니 정상으로 갈렸다. 채널 진동과 `ongoing` 해제도 같은 전제다 —
