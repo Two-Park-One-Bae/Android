@@ -1,5 +1,6 @@
 package app.nursemate.core.data.pill
 
+import android.util.Log
 import app.nursemate.core.model.Usage
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,9 +31,18 @@ class UsageHolder @Inject constructor(private val pillRepository: PillRepository
     /** 한도에 걸렸다고 **확인된** 경우에만 true. 모르면 막지 않는다. */
     val blocked: Boolean get() = _usage.value?.exhausted == true
 
-    /** 실패해도 값을 지우지 않는다 — 직전 값이 없는 것보다 낫다. */
+    /**
+     * 실패해도 값을 지우지 않는다 — 직전 값이 없는 것보다 낫다.
+     *
+     * ⚠️ **실패를 반드시 남긴다.** 조회가 실패하면 홈의 「오늘 남은 횟수」 캡션이 통째로
+     * 사라지는데(`usage == null` 이면 캡션을 안 그린다), 전에는 `onSuccess` 만 있어서
+     * **아무 흔적이 없었다.** 릴리스 빌드는 `HttpLoggingInterceptor` 도 꺼져 있어
+     * (`BuildConfig.DEBUG` 가드) 401 인지 서버 오류인지 구분할 방법이 없었다.
+     */
     suspend fun refresh() {
-        pillRepository.usage().onSuccess { _usage.value = it }
+        pillRepository.usage()
+            .onSuccess { _usage.value = it }
+            .onFailure { Log.w(TAG, "남은 식별 횟수를 못 받았다 — 홈 캡션이 비어 보인다", it) }
     }
 
     /** 식별 응답(200·429)에 실려 온 값으로 갱신한다. */
@@ -48,5 +58,9 @@ class UsageHolder @Inject constructor(private val pillRepository: PillRepository
      */
     fun clear() {
         _usage.value = null
+    }
+
+    private companion object {
+        const val TAG = "NM393"
     }
 }

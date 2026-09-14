@@ -140,6 +140,7 @@ private fun NmNavHost(
     // 이 이미 UsageHolder 를 감싼 얇은 창이라 새 클래스를 만들지 않고 이 레벨로 끌어올린다.
     val homeViewModel: HomeViewModel = hiltViewModel()
     val homeUsage by homeViewModel.usage.collectAsStateWithLifecycle()
+    val activeTimerCount by homeViewModel.activeTimerCount.collectAsStateWithLifecycle()
     // 어느 탭에 있든 최신값을 본다 — Home 화면을 아직 안 들렀으면 usage 가 null 인 채로
     // 게이트를 통과시켜 버릴 수 있다(§한도 도달 플로우: 모르면 막지 않는다는 원칙과는 별개로,
     // 알 수 있으면 최대한 안다).
@@ -245,6 +246,7 @@ private fun NmNavHost(
             ) {
                 HomeScreen(
                     usage = homeUsage,
+                    activeTimerCount = activeTimerCount,
                     onPillClick = {
                         if (homeViewModel.blocked()) cardLimitReached = true else navController.switchTab(NmTab.Pill)
                     },
