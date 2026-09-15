@@ -1,3 +1,4 @@
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import java.util.Properties
 
 plugins {
@@ -9,6 +10,8 @@ plugins {
     //   release → app/src/release/google-services.json  (Nursemate-prod · app.nursemate)
     // ⚠️ 두 파일은 커밋하지 않는다(.gitignore). 새 환경에서는 Firebase 콘솔에서 받아 넣어야 빌드된다.
     alias(libs.plugins.google.services)
+    // 크래시 리포트 (NM-466). google-services 뒤에 와야 FirebaseApp 설정을 물려받는다.
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // 카카오 앱 키 주입용. 릴리스 서명은 폰·워치가 같아야 해서 convention plugin 이 준다(ReleaseSigning.kt).
@@ -57,6 +60,11 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             kakaoAppKey(secret("KAKAO_APP_KEY_DEBUG"))
+
+            // 내부 사용이 프로덕션 지표를 오염시키지 않게 **수집 자체를 끈다** (NM-466).
+            // 속성으로 걸러내는 것과 전송을 막는 것은 지표 해석이 다르다 — iOS 도 같은 방식이다
+            // (`setAnalyticsCollectionEnabled`). Analytics 는 런타임에서 끈다(NurseMateApplication).
+            configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
         }
 
         release {
@@ -67,6 +75,14 @@ android {
                 "proguard-rules.pro"
             )
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
+
+            // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
+            // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
+            // R8 매핑도 함께 올라가야 Kotlin 스택이 난독화된 이름으로 나오지 않는다.
+            configure<CrashlyticsExtension> {
+                nativeSymbolUploadEnabled = true
+                mappingFileUploadEnabled = true
+            }
         }
     }
 }
@@ -124,6 +140,11 @@ dependencies {
     // 둘을 같이 넣으면 release 에서도 디버그 토큰으로 통과할 수 있어 App Check 가 무의미해진다.
     debugImplementation(libs.firebase.appcheck.debug)
     releaseImplementation(libs.firebase.appcheck.playintegrity)
+
+    // 크래시·지표 (NM-466). 식별자 계약은 spec `feature/auth/README.md` §지표·크래시 식별자.
+    // debug 에도 넣되 수집은 아래 buildTypes 에서 끈다 — 의존성을 빼면 코드가 갈라진다.
+    implementation(libs.firebase.crashlytics.ndk)
+    implementation(libs.firebase.analytics)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)

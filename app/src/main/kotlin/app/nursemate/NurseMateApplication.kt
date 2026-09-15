@@ -7,6 +7,8 @@ import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.telemetry.TelemetryIdentity
+import app.nursemate.telemetry.enableTelemetryCollection
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
 import app.nursemate.timer.sync.TimerPresetPublisher
@@ -15,7 +17,9 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.kakao.sdk.common.KakaoSdk
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -58,6 +62,15 @@ class NurseMateApplication :
     @Inject
     lateinit var timerPresets: TimerPresetRepository
 
+    @Inject
+    lateinit var telemetryIdentity: TelemetryIdentity
+
+    @Inject
+    lateinit var crashlytics: FirebaseCrashlytics
+
+    @Inject
+    lateinit var analytics: FirebaseAnalytics
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -66,6 +79,16 @@ class NurseMateApplication :
 
     override fun onCreate() {
         super.onCreate()
+
+        // 수집 여부를 **가장 먼저** 정한다. 이 뒤로 일어나는 일(App Check 실패, 카카오 초기화,
+        // 타이머 복원)이 전부 크래시 후보라, 늦게 걸면 그 사이의 것이 정책과 다르게 나간다.
+        //
+        // 빌드 타입이 답을 갖는다 — enableTelemetryCollection() 이 src/debug 와 src/release 에
+        // 각각 있다(App Check provider 와 같은 구조).
+        enableTelemetryCollection(crashlytics, analytics)
+
+        // 세션을 따라가며 크래시·지표에 회원 식별자를 붙인다 (NM-461 계약).
+        telemetryIdentity.start(applicationScope)
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.
