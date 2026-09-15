@@ -208,11 +208,24 @@ printf '7974b22c…' | xxd -r -p | base64   # eXSyLHHW67Z5LEUoTnfuqkMQ/bA=
 
 **등록해야 하는 곳 셋.** 하나라도 빠지면 Play 설치본에서 그 공급자가 죽는다.
 
-| 대상 | 값 |
-|---|---|
-| Firebase → Android 앱 → SHA 인증서 지문 | `79:74:B2:2C:71:D6:EB:B6:79:2C:45:28:4E:77:EE:AA:43:10:FD:B0` |
-| 카카오 개발자 콘솔 → 플랫폼 → Android → 키 해시 | `eXSyLHHW67Z5LEUoTnfuqkMQ/bA=` |
-| GCP OAuth 클라이언트 | Firebase 에 SHA-1 을 넣으면 자동 생성된다 |
+| 대상 | 값 | 무엇이 걸려 있나 |
+|---|---|---|
+| Firebase → SHA 인증서 지문 (**SHA-1**) | `79:74:B2:2C:71:D6:EB:B6:79:2C:45:28:4E:77:EE:AA:43:10:FD:B0` | 소셜 로그인 셋 |
+| Firebase → SHA 인증서 지문 (**SHA-256**) | `5C:1A:96:D3:A2:97:F8:D6:24:DC:6C:E2:9B:F3:04:5C:4A:DB:D8:17:94:5F:FF:16:B8:D0:71:6B:B8:22:58:B9` | **App Check(Play Integrity)** |
+| 카카오 콘솔 → 플랫폼 → Android → 키 해시 | `eXSyLHHW67Z5LEUoTnfuqkMQ/bA=` | 카카오 로그인 |
+| GCP OAuth 클라이언트 | Firebase 에 SHA-1 을 넣으면 자동 생성된다 | — |
+
+⚠️ **SHA-1 과 SHA-256 을 둘 다 넣어야 한다.** 로그인은 SHA-1 로 검증하고 **App Check 의
+Play Integrity 는 SHA-256 으로** 검증한다. SHA-1 만 넣으면 로그인은 살아나는데 알약 식별이
+`401 APP_CHECK_FAILED` 로 계속 죽는다 — 0.2.1 에서 실제로 이 순서로 겪었다.
+App Check 화면의 「확인된 요청 54% / 미확인 46%」가 그 증상이었다(사이드로드는 통과,
+Play 설치본만 실패). 두 값 모두 배포 APK 에서 한 번에 읽을 수 있다:
+
+```bash
+apksigner verify --print-certs 4.apk | grep -E "SHA-1 digest|SHA-256 digest"
+```
+
+⚠️ 카카오 키 해시는 **끝의 `=` 까지** 넣는다. 빠뜨리면 조용히 안 맞는다(실제로 겪었다).
 
 ⚠️ **Firebase 에 지문만 넣고 끝내면 안 된다.** 앱 안의 OAuth 클라이언트 목록은
 `google-services.json` 에 박혀 있다. **새로 내려받아 `app/src/release/` 를 교체하고 재빌드**해야
