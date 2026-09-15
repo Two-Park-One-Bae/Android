@@ -60,11 +60,6 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             kakaoAppKey(secret("KAKAO_APP_KEY_DEBUG"))
-
-            // 내부 사용이 프로덕션 지표를 오염시키지 않게 **수집 자체를 끈다** (NM-466).
-            // 속성으로 걸러내는 것과 전송을 막는 것은 지표 해석이 다르다 — iOS 도 같은 방식이다
-            // (`setAnalyticsCollectionEnabled`). Analytics 는 런타임에서 끈다(NurseMateApplication).
-            configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
         }
 
         release {
@@ -78,11 +73,10 @@ android {
 
             // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
             // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
-            // R8 매핑도 함께 올라가야 Kotlin 스택이 난독화된 이름으로 나오지 않는다.
-            configure<CrashlyticsExtension> {
-                nativeSymbolUploadEnabled = true
-                mappingFileUploadEnabled = true
-            }
+            //
+            // release 에만 건다 — debug 는 R8 을 안 써서 올릴 매핑이 없고, 네이티브 심볼도
+            // 스트립되지 않아 스택이 그대로 읽힌다. 수집 자체는 양쪽 다 켜 둔다.
+            configure<CrashlyticsExtension> { nativeSymbolUploadEnabled = true }
         }
     }
 }
@@ -142,7 +136,8 @@ dependencies {
     releaseImplementation(libs.firebase.appcheck.playintegrity)
 
     // 크래시·지표 (NM-466). 식별자 계약은 spec `feature/auth/README.md` §지표·크래시 식별자.
-    // debug 에도 넣되 수집은 아래 buildTypes 에서 끈다 — 의존성을 빼면 코드가 갈라진다.
+    // 빌드 타입으로 가르지 않는다 — debug 는 Firebase 프로젝트가 dev 라 운영 지표와 섞이지 않고,
+    // 크래시는 개발 중에 더 필요하다(iOS `AppEnvironment` 와 같은 판단).
     implementation(libs.firebase.crashlytics.ndk)
     implementation(libs.firebase.analytics)
 

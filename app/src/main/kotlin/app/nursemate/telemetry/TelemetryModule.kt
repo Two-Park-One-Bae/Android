@@ -18,8 +18,8 @@ internal object TelemetryModule {
      * `AuthModule` 과 같은 이유로 `getInstance()` 를 쓴다 — `FirebaseApp` 은 `firebase-common` 의
      * 초기화 Provider 가 앱 시작 시 자동으로 만든다.
      *
-     * 수집 on/off 는 여기서 정하지 않는다. [TelemetryCollection] 이 빌드 타입을 보고 한 번에 건다 —
-     * 두 군데서 켜고 끄면 어느 쪽이 이겼는지 읽어 낼 수 없다.
+     * 수집 on/off 를 따로 걸지 않는다 — SDK 기본값(켜짐)을 그대로 쓴다. debug 는 Firebase
+     * 프로젝트가 dev 라 운영 지표와 섞이지 않고, 크래시는 개발 중에 더 필요하다.
      */
     @Provides
     @Singleton

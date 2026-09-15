@@ -8,7 +8,6 @@ import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.telemetry.TelemetryIdentity
-import app.nursemate.telemetry.enableTelemetryCollection
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
 import app.nursemate.timer.sync.TimerPresetPublisher
@@ -17,9 +16,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.kakao.sdk.common.KakaoSdk
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -65,12 +62,6 @@ class NurseMateApplication :
     @Inject
     lateinit var telemetryIdentity: TelemetryIdentity
 
-    @Inject
-    lateinit var crashlytics: FirebaseCrashlytics
-
-    @Inject
-    lateinit var analytics: FirebaseAnalytics
-
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -80,14 +71,15 @@ class NurseMateApplication :
     override fun onCreate() {
         super.onCreate()
 
-        // 수집 여부를 **가장 먼저** 정한다. 이 뒤로 일어나는 일(App Check 실패, 카카오 초기화,
-        // 타이머 복원)이 전부 크래시 후보라, 늦게 걸면 그 사이의 것이 정책과 다르게 나간다.
+        // 크래시·지표에 회원 식별자를 붙인다 (NM-461 계약).
         //
-        // 빌드 타입이 답을 갖는다 — enableTelemetryCollection() 이 src/debug 와 src/release 에
-        // 각각 있다(App Check provider 와 같은 구조).
-        enableTelemetryCollection(crashlytics, analytics)
-
-        // 세션을 따라가며 크래시·지표에 회원 식별자를 붙인다 (NM-461 계약).
+        // **빌드 타입으로 수집을 가르지 않는다.** debug 는 패키지(`app.nursemate.debug`)도
+        // Firebase 프로젝트(Nursemate-dev)도 갈라져 있어 내부 사용이 운영 지표에 섞이지 않는다.
+        // iOS 도 같은 결론이다 — 내부 빌드를 막던 것은 Amplitude 프로젝트가 하나뿐이던 시절의
+        // 잔재였고, Firebase 일원화(NM-458)로 그 제약이 없어졌다.
+        //
+        // 특히 Crashlytics 를 debug 에서 끄면 **개발 중 크래시를 볼 수 없다** — 이 SDK 를 넣은
+        // 이유 자체가 그것이라 앞뒤가 맞지 않는다(iOS `AppEnvironment` 주석도 같은 판단).
         telemetryIdentity.start(applicationScope)
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
