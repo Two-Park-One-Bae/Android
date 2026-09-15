@@ -235,3 +235,49 @@ apksigner verify --print-certs 4.apk | grep -E "SHA-1 digest|SHA-256 digest"
 정상 등록돼 있어서, 같은 코드가 사이드로드에서는 셋 다 멀쩡히 로그인된다(에뮬레이터에서 확인).
 `docs/RELEASE.md` 의 「사이드로드라서 고장 난 것처럼 보이는 것들」과 **반대 방향**의 함정이다 —
 이쪽은 사이드로드에서 **멀쩡해 보이는데 Play 에서만 깨진다.**
+
+## ⑧ ONNX Runtime 을 올릴 때는 SME 명령어가 들어왔는지 본다
+
+**무엇이.** `1.29.0` 에서 알약 식별이 **SIGILL 로 즉사**했다. 「이 사진 사용」 직후 프로세스가
+통째로 사라진다. 원인은 SME(Scalable Matrix Extension) 명령어를 **가드 없이** 실행하는 것이다.
+
+    a8a7b4: 04bf5820    rdsvl x0, #0x1      ← 여기서 죽는다
+    a8a7b8: d65f03c0    ret
+
+호출부에 `HWCAP2_SME` 확인이 없다 — 함수에 들어가는 순간 실행한다. Exynos 2400
+(Cortex-X4/A720/A520)은 SME 를 지원하지 않아 만나는 즉시 `ILL_ILLOPC` 다.
+
+**올리는 방향은 답이 아니다.** 버전별 바이너리를 직접 받아 확인했다:
+
+| 버전 | `rdsvl` | sme2 커널 | 가드 |
+|---|---|---|---|
+| **1.22.0** | **0** | **0** | — (코드 자체가 없다) |
+| 1.23.2 | 38 | 7 | 없음 |
+| 1.24.3 | 1 | 0 | 없음 |
+| 1.25.1 · 1.26.0 · 1.29.0 | 1 | 4 | 없음 |
+
+1.26.0 의 호출부가 1.29.0 과 글자 그대로 같다. 그래서 `1.22.0` 으로 내렸다.
+
+**올릴 때 이렇게 본다.** aar 을 받아 arm64 `.so` 를 열어 보면 된다:
+
+```bash
+unzip -o -q onnxruntime-android-<버전>.aar "jni/arm64-v8a/libonnxruntime.so" -d /tmp/ort
+llvm-objdump -d /tmp/ort/jni/arm64-v8a/libonnxruntime.so | grep -cE "\brdsvl\b"
+```
+
+0 이 아니면 호출부에 가드가 붙었는지까지 확인한다. `bl <rdsvl 주소>` 앞에 조건 분기가 없으면
+그 버전은 쓸 수 없다.
+
+**에뮬레이터로 검증할 수 있다 — 이것만은.** 에뮬레이터 CPU 도 SME 를 지원하지 않아 실기기와
+같은 조건이다. 성공하면 이렇게 찍힌다:
+
+    NM394: 검출 0개 | 전처리 106ms 추론 646ms 후처리 0ms
+
+⚠️ **반대로, 다른 알약 식별 문제를 에뮬레이터로 판단하면 안 된다.** 1.29.0 에서는 debug·release·
+split·universal 을 가리지 않고 전부 같은 주소에서 죽어서, 어떤 비교를 해도 변별력이 없었다.
+실제로 그걸 모르고 「split APK 문제」·「Play 배포 문제」를 한참 뒤졌다.
+
+**업스트림 버그다.** 1.22.0 은 회피이지 해결이 아니다. 바이너리에
+`Failed to initialize PyTorch cpuinfo library. May cause CPU EP performance degradation due to
+undetected CPU features.` 문자열이 있는 것으로 보아, CPU 기능 감지가 실패하면 SME 미지원
+기기에서도 이 경로를 타는 구조로 보인다.
