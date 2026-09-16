@@ -281,3 +281,42 @@ split·universal 을 가리지 않고 전부 같은 주소에서 죽어서, 어�
 `Failed to initialize PyTorch cpuinfo library. May cause CPU EP performance degradation due to
 undetected CPU features.` 문자열이 있는 것으로 보아, CPU 기능 감지가 실패하면 SME 미지원
 기기에서도 이 경로를 타는 구조로 보인다.
+
+## ⑨ `firebase-analytics` 는 광고 ID 권한을 몰래 끼워 넣는다
+
+**무엇이.** `0.2.2` 를 알파에 올렸더니 게시 개요가 **검토 전송을 막았다.**
+
+> 광고 ID 선언이 불완전함 — Android 13 이상을 타겟팅하는 모든 개발자는 앱에서 광고 ID를
+> 사용하는지 여부를 Google Play에 알려야 합니다.
+
+`firebase-analytics` 가 `com.google.android.gms.permission.AD_ID` 를 자동으로 병합한다.
+**우리 매니페스트에는 없다** — 그래서 코드를 아무리 봐도 안 보인다. 병합 결과를 봐야 나온다:
+
+```bash
+grep -oE 'android:name="[^"]*permission[^"]*"' \
+  app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+  | sort -u
+```
+
+**선언이 아니라 제거를 골랐다.** 개인정보처리방침 3항이 「광고 식별자(IDFA) 및 광고·추적 목적의
+데이터」를 수집하지 않는다고 못박았고, 데이터 보안 신고에서도 「기기 또는 기타 ID」를 선택하지
+않았다. 권한만 남기면 공개한 약속과 실제가 어긋난다.
+
+```xml
+<manifest xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+```
+
+Privacy Sandbox 쪽 둘은 Play 의 선언 요구를 촉발하지 않지만, 남기면 **스토어에 광고 관련
+권한이 보인다** — 광고를 쓰지 않는다고 공개한 앱에서 설명할 수 없다.
+
+**확인.** Analytics 는 광고 ID 없이도 동작한다(앱 인스턴스 ID 로 센다).
+
+```bash
+aapt2 dump badging app-release.apk | grep -cE "uses-permission.*(AD_ID|ADSERVICES)"   # → 0
+```
+
+⚠️ **광고를 붙이게 되면** 이 줄들을 지우고 방침 3항·데이터 보안 신고·Play 광고 ID 선언을
+**함께** 고쳐야 한다. 셋 중 하나만 바꾸면 어긋난 채로 남는다.
