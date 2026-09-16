@@ -238,7 +238,7 @@ apksigner verify --print-certs 4.apk | grep -E "SHA-1 digest|SHA-256 digest"
 
 ## ⑧ ONNX Runtime 을 올릴 때는 SME 명령어가 들어왔는지 본다
 
-**무엇이.** `1.29.0` 에서 알약 식별이 **SIGILL 로 즉사**했다. 「이 사진 사용」 직후 프로세스가
+**무엇이.** `1.29.0` 에서 알약 식별이 **SIGILL 로 즉사**했다(debug·release 모두). 「이 사진 사용」 직후 프로세스가
 통째로 사라진다. 원인은 SME(Scalable Matrix Extension) 명령어를 **가드 없이** 실행하는 것이다.
 
     a8a7b4: 04bf5820    rdsvl x0, #0x1      ← 여기서 죽는다
@@ -257,6 +257,9 @@ apksigner verify --print-certs 4.apk | grep -E "SHA-1 digest|SHA-256 digest"
 | 1.25.1 · 1.26.0 · 1.29.0 | 1 | 4 | 없음 |
 
 1.26.0 의 호출부가 1.29.0 과 글자 그대로 같다. 그래서 `1.22.0` 으로 내렸다.
+
+⚠️ **이 다운그레이드가 사용자가 겪던 크래시를 고친 것은 아니다.** 릴리스 빌드는 버전과
+무관하게 R8 때문에 따로 죽고 있었다 — ⑩ 을 함께 본다. 둘은 증상이 같아 구분되지 않는다.
 
 **올릴 때 이렇게 본다.** aar 을 받아 arm64 `.so` 를 열어 보면 된다:
 
@@ -320,3 +323,56 @@ aapt2 dump badging app-release.apk | grep -cE "uses-permission.*(AD_ID|ADSERVICE
 
 ⚠️ **광고를 붙이게 되면** 이 줄들을 지우고 방침 3항·데이터 보안 신고·Play 광고 ID 선언을
 **함께** 고쳐야 한다. 셋 중 하나만 바꾸면 어긋난 채로 남는다.
+
+## ⑩ R8 이 ONNX Runtime 의 Java 클래스 이름을 바꿔 알약 식별이 SIGABRT 로 죽는다
+
+**무엇이.** 릴리스 빌드에서만, 알약 식별을 누르면 **100%** 프로세스가 사라진다. 0.2.1·0.2.2·
+0.2.3 모두 그랬다. 죽기 직전 로그가 원인을 그대로 말해 준다:
+
+    Pending exception java.lang.ClassNotFoundException: ai.onnxruntime.TensorInfo
+    Abort message: 'JNI DETECTED ERROR IN APPLICATION: java_class == null
+        in call to GetMethodID
+        from ai.onnxruntime.OrtSession.run(...)'
+    Fatal signal 6 (SIGABRT)
+
+ONNX Runtime 의 네이티브 쪽은 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는다
+(`OrtJniUtil.c` → `FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`). Java 코드가
+이 클래스들을 직접 부르지 않아 R8 은 지우거나 이름을 바꿔도 되는 것으로 본다. 매핑 파일에
+그대로 남는다:
+
+    ai.onnxruntime.TensorInfo -> at4:
+
+`usage.txt` 에는 `MapInfo`·`NodeInfo`·`OnnxMap`·`SequenceInfo` 가 **삭제**로 찍힌다.
+
+**카카오 SDK 때와 같은 유형이다**(⑦ 아님 — `proguard-rules.pro` 주석 참고). 라이브러리가
+consumer proguard 규칙을 넣어 주지 않아 리플렉션·JNI 대상이 갈린다. `onnxruntime-android`
+aar 에 규칙이 없는 것을 직접 확인했다(2026-09-17).
+
+```
+-keep class ai.onnxruntime.** { *; }
+```
+
+패키지 통째로 남긴다. JNI 가 이름으로 찾는 대상이 `TensorInfo` 하나가 아니고, 어느 것이
+불릴지는 모델 출력 타입이 정한다. APK 증가는 **32KB** 였다.
+
+**왜 오래 걸렸나 — 두 가지를 하나로 봤다.** ⑧ 의 SIGILL 과 이것은 **다른 버그**다.
+
+| | ⑧ SME | ⑩ R8 |
+|---|---|---|
+| 신호 | SIGILL (`ILL_ILLOPC`) | SIGABRT |
+| 빌드 | debug·release 둘 다 | **release 만** |
+| 버전 | 1.29.0 등 | 전 버전 |
+| 죽는 곳 | 추론 중 | 추론 **성공 후** 결과 읽기 |
+
+ONNX 를 1.22.0 으로 내려 ⑧ 은 사라졌지만 ⑩ 은 그대로 남았다. 그런데 증상(「이 사진 사용」
+직후 즉사)이 똑같아 **다운그레이드가 안 먹혔다**고만 보였고, 그 상태로 두 번을 더 올렸다.
+
+**갈라 보는 방법은 간단했다 — debug 로 한 번 돌려 보는 것.** debug 가 살아남으면 R8 이다.
+지금 확인한 것이 정확히 그것이다:
+
+    debug   → NM394: 검출 4개 | 전처리 107ms 추론 594ms 후처리 21ms   ✅
+    release → Fatal signal 6 (SIGABRT)                              ❌
+    release + keep 규칙 → NM394: 검출 4개 | 추론 661ms                ✅
+
+⚠️ **릴리스 스모크에 알약 식별을 반드시 넣는다.** `ci.yml` 은 debug 만 빌드해 이 부류를
+구조적으로 못 잡는다(카카오 때와 같다). 로그인만 확인하고 넘어가면 이것이 그대로 나간다.

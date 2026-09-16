@@ -17,3 +17,20 @@
 -keepclassmembers class com.kakao.sdk.**.*ErrorCause { *; }
 -keep @interface com.kakao.sdk.common.model.Description
 -keepattributes RuntimeVisibleAnnotations, AnnotationDefault
+
+# ONNX Runtime — onnxruntime-android AAR에 consumer rules가 없다(직접 확인, 2026-09-17).
+# 네이티브 쪽이 추론 결과를 JVM으로 돌려줄 때 클래스를 **이름으로** 찾는다
+# (`OrtJniUtil.c` → `FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`).
+# R8이 그 이름을 바꾸면 FindClass가 null을 주고, 그 null이 GetMethodID로 들어가는 순간
+# ART가 "JNI DETECTED ERROR IN APPLICATION: java_class == null" 로 프로세스를 죽인다.
+# Java 코드는 이 클래스들을 직접 부르지 않아 R8 입장에선 지우거나 바꿔도 되는 것으로 보인다.
+#
+# 알약 식별을 누르면 릴리스에서만 100% SIGABRT 였다(0.2.1~0.2.3 전부, 실기기·에뮬레이터 확인).
+# 검출 자체는 성공하고 **결과를 읽는 단계**에서 죽어, 원인이 추론 엔진처럼 보였다 —
+# ONNX 버전을 1.29.0 → 1.22.0 으로 내렸지만 R8 문제라 아무 효과가 없었다.
+#
+# 패키지 통째로 남긴다. JNI가 이름으로 찾는 대상이 TensorInfo 하나가 아니라
+# OnnxTensor·OnnxMap·OnnxSequence·MapInfo·SequenceInfo·OnnxJavaType·OrtException 등
+# 여럿이고, 어느 것이 언제 불리는지는 모델 출력 타입에 따라 달라진다. Java API 표면은
+# 작아서(수십 KB) 남겨도 크기 영향이 없다.
+-keep class ai.onnxruntime.** { *; }
