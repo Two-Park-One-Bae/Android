@@ -1,3 +1,4 @@
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import java.util.Properties
 
 plugins {
@@ -9,6 +10,8 @@ plugins {
     //   release → app/src/release/google-services.json  (Nursemate-prod · app.nursemate)
     // ⚠️ 두 파일은 커밋하지 않는다(.gitignore). 새 환경에서는 Firebase 콘솔에서 받아 넣어야 빌드된다.
     alias(libs.plugins.google.services)
+    // 크래시 리포트 (NM-466). google-services 뒤에 와야 FirebaseApp 설정을 물려받는다.
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // 카카오 앱 키 주입용. 릴리스 서명은 폰·워치가 같아야 해서 convention plugin 이 준다(ReleaseSigning.kt).
@@ -41,8 +44,8 @@ android {
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
-        versionCode = 4
-        versionName = "0.2.1"
+        versionCode = 5
+        versionName = "0.2.2"
     }
 
     buildFeatures {
@@ -67,6 +70,13 @@ android {
                 "proguard-rules.pro"
             )
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
+
+            // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
+            // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
+            //
+            // release 에만 건다 — debug 는 R8 을 안 써서 올릴 매핑이 없고, 네이티브 심볼도
+            // 스트립되지 않아 스택이 그대로 읽힌다. 수집 자체는 양쪽 다 켜 둔다.
+            configure<CrashlyticsExtension> { nativeSymbolUploadEnabled = true }
         }
     }
 }
@@ -124,6 +134,12 @@ dependencies {
     // 둘을 같이 넣으면 release 에서도 디버그 토큰으로 통과할 수 있어 App Check 가 무의미해진다.
     debugImplementation(libs.firebase.appcheck.debug)
     releaseImplementation(libs.firebase.appcheck.playintegrity)
+
+    // 크래시·지표 (NM-466). 식별자 계약은 spec `feature/auth/README.md` §지표·크래시 식별자.
+    // 빌드 타입으로 가르지 않는다 — debug 는 Firebase 프로젝트가 dev 라 운영 지표와 섞이지 않고,
+    // 크래시는 개발 중에 더 필요하다(iOS `AppEnvironment` 와 같은 판단).
+    implementation(libs.firebase.crashlytics.ndk)
+    implementation(libs.firebase.analytics)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
