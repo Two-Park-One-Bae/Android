@@ -152,7 +152,9 @@ private fun NavGraphBuilder.finalResult(navController: NavController) = composab
         },
         onCopyText = { context.copyPillResult(pills) },
         onSavePdf = { context.sharePillResultPdf(pills) },
-        onDone = { navController.switchTab(NmTab.Home) }
+        // ⚠️ 탭만 바꾸면 안 된다 — 탭 스택이 저장돼, 알약 탭을 다시 눌렀을 때 카메라가 아니라
+        // 이 화면이 복원된다. 끝난 플로우는 촬영까지 되감고 나간다([exitToHome]).
+        onDone = { navController.exitToHome(viewModel) }
     )
 }
 

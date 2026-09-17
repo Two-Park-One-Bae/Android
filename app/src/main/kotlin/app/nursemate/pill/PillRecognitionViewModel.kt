@@ -33,7 +33,16 @@ import kotlinx.coroutines.withContext
  * (커밋 `c4f4b90` — BBOX는 맞는데 크롭만 엉뚱한 영역). 한 번 읽어서 돌려 쓴다.
  *
  * 그래서 이 ViewModel은 화면이 아니라 **`pill` 네비게이션 그래프**에 스코프된다.
- * 알약 탭을 벗어나면 함께 정리된다.
+ *
+ * ⚠️ **탭을 벗어난다고 정리되지 않는다.** 탭 전환은 각 탭의 스택을 저장·복원하므로
+ * (`switchTab` 의 `saveState`/`restoreState`) 그래프 엔트리가 살아남고, 여기 담긴 사진·검출
+ * 결과·수정 내역도 그대로 남는다. 의도한 동작이다 — 사진을 고르다 잠깐 다른 탭에 다녀와도
+ * 하던 일이 남아 있어야 한다.
+ *
+ * 대신 **플로우를 끝내거나 버릴 때 부르는 쪽이 [discardPhoto] 로 직접 비운다**
+ * (`PillNavHelpers.exitToHome`). 예전에는 이 주석대로 「탭을 벗어나면 정리된다」고 보고
+ * 완료 버튼이 탭만 바꿨는데, 그 바람에 알약 탭을 다시 눌러도 카메라가 아니라 지난 결과
+ * 화면이 복원됐다.
  */
 @HiltViewModel
 class PillRecognitionViewModel @Inject constructor(
