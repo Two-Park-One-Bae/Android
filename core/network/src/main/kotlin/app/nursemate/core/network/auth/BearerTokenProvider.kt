@@ -11,7 +11,9 @@ interface BearerTokenProvider {
     /**
      * @param forceRefresh 서버가 401 을 준 뒤 **딱 한 번** 재시도할 때만 true.
      *                     평소엔 Firebase SDK 가 만료 전 알아서 갱신한다.
-     * @return 로그인 상태가 아니면 null
+     * @return 로그인 상태가 아니거나 **발급에 실패하면 null**. 던지지 않는다 —
+     *         OkHttp 인터셉터가 `runBlocking` 으로 받아 가므로 예외가 새면 앱이 죽는다
+     *         (자세한 이유는 `FirebaseAuthRepository.idToken`). [AppCheckTokenProvider] 도 같다.
      */
     suspend fun token(forceRefresh: Boolean = false): String?
 }
