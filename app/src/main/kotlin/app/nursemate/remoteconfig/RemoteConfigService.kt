@@ -25,17 +25,34 @@ import kotlinx.coroutines.tasks.await
  * spec 에도 요구사항이 없다. iOS 가 정본 없이 만든 것을 옮겼다
  * (`iOS/Projects/App/Sources/Application/RemoteConfigGate/`). 정본이 생기면 그쪽이 이긴다.
  *
- * ## 키는 iOS 와 같은 이름을 쓴다
+ * ## 키는 iOS 와 같은 이름을 쓴다 — **버전만 빼고**
  * 한 Firebase 프로젝트를 두 앱이 공유하므로 키가 갈리면 콘솔에서 두 벌을 관리하게 된다.
- * 다만 스토어 주소만은 플랫폼별로 달라 [Key.PLAY_STORE_URL] 을 따로 둔다 — iOS 는 이 키를
- * 읽지 않고, 우리는 iOS 의 `app_store_url` 을 읽지 않는다.
+ * 점검 모드는 백엔드 사정이라 두 플랫폼이 같이 걸리는 게 맞아 그대로 공유한다.
+ *
+ * ⚠️ **버전은 공유하면 안 된다.** iOS 의 1.1.1 과 Android 의 1.0.0 은 아무 관계가 없는
+ * 숫자다. 실제로 공유 키(`min_supported_version`)를 읽었더니 릴리스 앱에 **1.1.1** 이
+ * 내려왔다 — 그대로 1.0.0 을 출시했으면 **전 사용자가 첫 실행에서 잠긴다.**
+ * 릴리스 캐시가 12시간이라 콘솔을 고쳐도 복구가 그만큼 늦다.
+ * 그래서 [Key.MIN_SUPPORTED_VERSION] 은 Android 전용 키를 쓴다.
+ * 스토어 주소도 같은 이유로 [Key.PLAY_STORE_URL] 을 따로 둔다.
+ *
+ * (2026-09-19 기기 확인: 같은 키인데 `app.nursemate.debug` 는 1.0.0, `app.nursemate` 는
+ * 1.1.1 이었다 — 콘솔 조건이 앱별로 갈려 있다.)
  */
 @Singleton
 class RemoteConfigService @Inject constructor() {
 
     object Key {
-        /** 지원하는 최소 앱 버전(semver). 현재 버전이 이보다 낮으면 강제 업데이트. */
-        const val MIN_SUPPORTED_VERSION = "min_supported_version"
+        /**
+         * 지원하는 최소 **Android** 앱 버전(semver). 현재 버전이 이보다 낮으면 강제 업데이트.
+         *
+         * ⚠️ iOS 의 `min_supported_version` 을 읽지 않는다. 클래스 주석 참고 —
+         * 그 키를 읽으면 iOS 의 릴리스 판단이 Android 사용자를 잠근다.
+         *
+         * **콘솔에 이 키가 없으면 게이트는 아무도 막지 않는다**(인앱 기본값 `0.0.0`).
+         * 막을 이유가 확인되지 않은 상태라 그게 맞다.
+         */
+        const val MIN_SUPPORTED_VERSION = "min_supported_version_android"
 
         /** 점검 모드 on/off. */
         const val MAINTENANCE_MODE = "maintenance_mode"
@@ -105,6 +122,10 @@ class RemoteConfigService @Inject constructor() {
             .onFailure { Log.w(TAG, "Remote Config 를 못 받았다 — 기존 값을 쓴다", it) }
             .getOrDefault(false)
         _state.value = read()
+        // ⚠️ **릴리스에서도 남긴다.** 게이트가 걸리면 사용자는 앱을 아예 못 쓰는데, 값을 못 보면
+        //    「왜 막혔나」를 기기 없이는 알 수 없다. 실제로 1.0.0 빌드가 막혀서 원인을 찾는 데
+        //    이 한 줄이 필요했다(2026-09-19). 개인정보가 아니라 콘솔 설정값이다.
+        Log.i(TAG, "원격 값 = ${_state.value} · 현재 ${BuildConfig.VERSION_NAME}")
         return changed
     }
 
