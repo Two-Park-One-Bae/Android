@@ -1,11 +1,13 @@
 package app.nursemate.core.data.auth
 
 import android.app.Activity
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.OAuthProvider
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
@@ -79,9 +81,31 @@ class FirebaseAuthRepository @Inject constructor(private val auth: FirebaseAuth)
         .addCustomParameter("locale", "ko")
         .build()
 
+    /**
+     * ⚠️ **던지지 않는다.** 이 값은 OkHttp 인터셉터가 `runBlocking` 으로 받아 가는데
+     * (`AuthHeaderInterceptor`), 거기서 예외가 새어 나가면 **앱이 죽는다.**
+     *
+     * OkHttp `AsyncCall` 은 `IOException` 이 아닌 예외를 만나면 `onFailure` 로
+     * `IOException("canceled due to …")` 를 알린 뒤 **원본을 다시 던진다.** 그 재던지기가
+     * 디스패처 스레드에서 안 잡혀 프로세스가 내려간다. 즉 호출부가 try/catch 를 해도 못 막는다.
+     *
+     * 실제로 0.2.3 에서 네트워크가 끊긴 순간 그렇게 죽었다(2026-09-19, 에뮬레이터 로그).
+     * 비행기 모드·지하철이면 재현된다.
+     *
+     * 실패를 null 로 낮춘다 — 토큰이 없으면 요청은 헤더 없이 나가고 서버가 401 로 알려 준다.
+     * `FirebaseAppCheckTokenProvider` 가 이미 같은 규칙을 쓰고 있었다. 그쪽과 맞춘다.
+     */
+    @Suppress("TooGenericExceptionCaught")
     override suspend fun idToken(forceRefresh: Boolean): String? {
         val user = auth.currentUser ?: return null
-        return user.getIdToken(forceRefresh).await().token
+        return try {
+            user.getIdToken(forceRefresh).await().token
+        } catch (t: CancellationException) {
+            throw t // 코루틴 취소는 그대로 흘려보낸다 — 삼키면 취소가 안 먹는다
+        } catch (t: Throwable) {
+            Log.w(TAG, "ID 토큰을 못 받았다 — 헤더 없이 보낸다", t)
+            null
+        }
     }
 
     override suspend fun signOut() {
@@ -89,6 +113,8 @@ class FirebaseAuthRepository @Inject constructor(private val auth: FirebaseAuth)
     }
 
     private companion object {
+        const val TAG = "NM392"
+
         const val FIREBASE_PROVIDER = "firebase"
 
         /** 서버가 `firebase.sign_in_provider`로 보는 값과 같다(api/domains/auth.md §클레임 추출). */
