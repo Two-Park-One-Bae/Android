@@ -1,5 +1,6 @@
 package app.nursemate.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,9 +35,11 @@ import app.nursemate.pill.PillNotFoundScreen
 import app.nursemate.pill.PillPreviewScreen
 import app.nursemate.pill.PillRecognitionViewModel
 import app.nursemate.pill.PillResultScreen
+import app.nursemate.pill.changesFrom
 import app.nursemate.pill.copyPillResult
 import app.nursemate.pill.editOf
 import app.nursemate.pill.finalPills
+import app.nursemate.pill.identificationSummary
 import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
 import app.nursemate.pill.sharePillResultPdf
@@ -68,6 +71,7 @@ fun NavGraphBuilder.pillNavGraph(navController: NavController) {
 private fun NavGraphBuilder.capture(navController: NavController) = composable(NmRoute.PILL_CAPTURE) { entry ->
     val viewModel = entry.pillViewModel(navController)
     PillCaptureRoute(
+        session = viewModel.analyticsSession,
         onPhotoSelected = { uri ->
             viewModel.selectPhoto(uri)
             navController.navigate(NmRoute.PILL_PREVIEW)
@@ -89,47 +93,59 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     val pillId = entry.arguments?.getString("pillId").orEmpty()
     val edit = state.editOf(pillId)
 
-    // 취소하면 진입 시점으로 되돌린다 — 스펙이 "선택·확인 시 갱신, 취소 시 폐기"다.
-    // 속성·각인은 후보를 실시간으로 조회해야 해서 고치는 즉시 뷰모델에 들어간다. 그래서
-    // 되돌릴 값을 여기서 붙잡아 둔다.
-    val original = remember(pillId) { state.editOf(pillId) }
+    val tracking = rememberEditTracking(viewModel.analyticsSession, state, pillId)
 
-    // 확인 전까지는 화면 안에만 둔다. 취소하고 나가면 결과 카드는 그대로여야 한다.
+    // 확정 없이 나가는 **동작**에서 이탈을 센다. 화면이 사라지는 것으로 판단하면 안 된다 —
+    // 세부정보(⑩)로 들어가도 사라지고, pop 때는 엔트리가 DESTROYED 가 되기 전에 이미
+    // 컴포저블이 정리된다([EditTracking.reportExit]).
+    val leave = {
+        tracking.reportExit(edit)
+        navController.popBackStack()
+    }
+    BackHandler { leave() }
+    val original = rememberOriginalEdit(state, pillId)
     var pending by remember(pillId) { mutableStateOf(state.selections[pillId]) }
 
     // 속성·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
     LaunchedEffect(edit) { candidateViewModel.search(edit.attribute, edit.faces) }
 
-    val detected = (state.detection as? DetectionPhase.Success)?.result?.pills.orEmpty()
-    val index = state.detection.let { detected.indices.firstOrNull { i -> pillId(i) == pillId } }
+    val index = state.detectedIndexOf(pillId)
 
     PillEditScreen(
         number = (index ?: 0) + 1,
-        crop = index?.let { detected.getOrNull(it)?.crop },
+        crop = state.cropOf(index),
         manual = pillId.isManualPill,
         attribute = edit.attribute,
-        onAttributeChange = { viewModel.corrections.updateEdit(pillId, edit.copy(attribute = it)) },
+        onAttributeChange = { changed ->
+            // 화면은 속성 넷을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
+            changed.changesFrom(edit.attribute).forEach(tracking::attrEdited)
+            viewModel.corrections.updateEdit(pillId, edit.copy(attribute = changed))
+        },
         faces = edit.faces,
-        onFacesChange = { viewModel.corrections.updateEdit(pillId, edit.copy(faces = it)) },
+        onFacesChange = {
+            tracking.attrEdited("imprint")
+            viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))
+        },
         candidates = candidates,
         selected = pending,
         onSelect = { pending = it },
         onConfirm = {
-            pending?.let { viewModel.corrections.selectCandidate(pillId, it) }
-            // 수동 추가는 여기서 비로소 목록에 들어간다 — 취소하고 나가면 빈 카드가 남지 않는다.
-            if (pillId.isManualPill) viewModel.corrections.addManualPill(pillId)
+            confirmEdit(viewModel, tracking, pillId, pending, candidates.candidates)
             navController.popBackStack()
         },
         onCancel = {
             viewModel.corrections.updateEdit(pillId, original)
-            navController.popBackStack()
+            leave()
         },
         onDetail = { candidate ->
+            tracking.buttonTapped("pill_detail")
             navController.navigate(
                 NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
             )
         },
-        onLoadMore = candidateViewModel::loadMore
+        onLoadMore = candidateViewModel::loadMore,
+        onPanelChange = { tracking.openPanel = it },
+        onCompare = { tracking.buttonTapped("compare") }
     )
 }
 
@@ -146,15 +162,25 @@ private fun NavGraphBuilder.finalResult(navController: NavController) = composab
         // 뒤로 가면 인식 결과에서 이어서 고칠 수 있다(spec §최종 결과·공유).
         onBack = { navController.popBackStack() },
         onDetail = { candidate ->
+            viewModel.analyticsSession.buttonTapped(target = "pill_detail", screen = "final_result")
             navController.navigate(
                 NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
             )
         },
-        onCopyText = { context.copyPillResult(pills) },
-        onSavePdf = { context.sharePillResultPdf(pills) },
+        onCopyText = {
+            viewModel.analyticsSession.shared(method = "copy_text", contentType = "pill_result")
+            context.copyPillResult(pills)
+        },
+        onSavePdf = {
+            viewModel.analyticsSession.shared(method = "save_pdf", contentType = "pill_result")
+            context.sharePillResultPdf(pills)
+        },
         // ⚠️ 탭만 바꾸면 안 된다 — 탭 스택이 저장돼, 알약 탭을 다시 눌렀을 때 카메라가 아니라
         // 이 화면이 복원된다. 끝난 플로우는 촬영까지 되감고 나간다([exitToHome]).
-        onDone = { navController.exitToHome(viewModel) }
+        onDone = {
+            viewModel.analyticsSession.completed(state.identificationSummary())
+            navController.exitToHome(viewModel)
+        }
     )
 }
 
@@ -194,6 +220,7 @@ private fun NavGraphBuilder.preview(navController: NavController) = composable(N
         state = state,
         usage = usage,
         onRetake = {
+            viewModel.analyticsSession.buttonTapped(target = "retake", screen = "photo_preview")
             viewModel.discardPhoto()
             navController.popBackStack()
         },
@@ -251,14 +278,24 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
 private fun NavGraphBuilder.result(navController: NavController) = composable(NmRoute.PILL_RESULT) { entry ->
     val viewModel = entry.pillViewModel(navController)
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // 중도이탈 경과시간의 기준점. 여기까지 와야 "식별 세션"이다.
+    LaunchedEffect(Unit) { viewModel.analyticsSession.resultShown() }
+
     PillResultScreen(
         state = state,
-        onBack = { navController.restartCapture(viewModel) },
+        onBack = {
+            viewModel.analyticsSession.sessionExited(state.identificationSummary())
+            navController.restartCapture(viewModel)
+        },
         onRemovePill = viewModel.corrections::removePill,
         onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
         onConfirm = { navController.navigate(NmRoute.PILL_FINAL) },
         // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
-        onAddPill = { navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId())) }
+        onAddPill = {
+            viewModel.analyticsSession.buttonTapped(target = "add_pill", screen = "identify_result")
+            navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId()))
+        }
     )
 }
 
@@ -267,7 +304,11 @@ private fun NavGraphBuilder.notFound(navController: NavController) = composable(
     val state by viewModel.state.collectAsStateWithLifecycle()
     PillNotFoundScreen(
         state = state,
-        onRetake = { navController.restartCapture(viewModel) },
+        onRetake = {
+            viewModel.analyticsSession.buttonTapped(target = "retake", screen = "not_found")
+            navController.restartCapture(viewModel)
+        },
+        onGalleryTap = { viewModel.analyticsSession.buttonTapped(target = "gallery", screen = "not_found") },
         onPickFromGallery = { uri ->
             viewModel.selectPhoto(uri)
             // 촬영 화면을 거치지 않고 바로 미리보기로. 결과 없음 화면은 스택에서 뺀다.
@@ -275,6 +316,8 @@ private fun NavGraphBuilder.notFound(navController: NavController) = composable(
                 popUpTo(NmRoute.PILL_CAPTURE) { inclusive = false }
             }
         },
+        // ⑥ 은 결과 화면을 본 적이 없어 세션 이탈로 세지 않는다 — `pill_identify_result`
+        // 의 outcome=empty 가 이미 그 시도를 설명한다.
         onExit = { navController.exitToHome(viewModel) }
     )
 }

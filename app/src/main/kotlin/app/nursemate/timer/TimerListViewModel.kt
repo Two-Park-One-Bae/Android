@@ -7,6 +7,8 @@ import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.telemetry.AnalyticsEvent
+import app.nursemate.telemetry.AppAnalytics
 import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -33,11 +35,12 @@ import kotlinx.coroutines.launch
 class TimerListViewModel @Inject constructor(
     private val repository: TimerRepository,
     permissions: TimerPermissions,
-    presetRepository: TimerPresetRepository
+    presetRepository: TimerPresetRepository,
+    private val analytics: AppAnalytics
 ) : ViewModel() {
 
     /** 프리셋 추가·수정·삭제. 시트 안에서만 사는 상태라 따로 둔다. */
-    val presetEditor = TimerPresetEditor(presetRepository, viewModelScope)
+    val presetEditor = TimerPresetEditor(presetRepository, viewModelScope, analytics)
 
     val timers: StateFlow<List<CareTimer>> = repository.timers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
@@ -85,6 +88,24 @@ class TimerListViewModel @Inject constructor(
 
     /** 완료·정지 모두 삭제다(spec §생성 → 실행). */
     fun remove(timerId: String) = launchIo { repository.remove(timerId) }
+
+    /**
+     * 알림 권한 팝업의 응답을 남긴다 — 어느 관문에서 얼마나 거부되는지 본다.
+     *
+     * `permission` 을 `alarm` 으로 보내는 건 **iOS 와 같은 축에 쌓기 위해서**다. iOS 는
+     * 시스템 알람 권한 하나를 `alarm` 으로 찍는데, Android 에서 그 자리에 해당하는 것이
+     * 알림 권한이다. 정확 알람·전체화면은 팝업이 아니라 설정 왕복이라 결과를 알 수 없어
+     * 애초에 집계되지 않는다.
+     */
+    fun trackAlarmPermission(granted: Boolean) {
+        analytics.track(
+            AnalyticsEvent.PermissionResult(
+                permission = "alarm",
+                result = if (granted) "granted" else "denied",
+                gate = "timer"
+            )
+        )
+    }
 
     fun toggleMemo(timerId: String) {
         _memoEditing.value = if (_memoEditing.value == timerId) null else timerId

@@ -39,7 +39,14 @@ fun TimerGateHost(
     onAdvance: () -> Unit,
     onAsked: (PermissionStep) -> Unit,
     onConfirmAlertMode: (AlertMode) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /**
+     * 알림 권한 팝업의 응답. 지표만 쓴다.
+     *
+     * 정확 알람·전체화면은 팝업이 아니라 **설정 화면 왕복**이라 결과를 알 수 없다
+     * (Android 제약). 그래서 집계되는 것은 알림 권한 하나뿐이다.
+     */
+    onPermissionResult: (Boolean) -> Unit = {}
 ) {
     // 설정에서 돌아오는 것 자체가 신호다 — 결과 코드는 의미가 없다.
     val settings = rememberLauncherForActivityResult(
@@ -48,7 +55,10 @@ fun TimerGateHost(
 
     val notifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { onAdvance() }
+    ) { granted ->
+        onPermissionResult(granted)
+        onAdvance()
+    }
 
     when (gate) {
         is TimerGate.None -> Unit

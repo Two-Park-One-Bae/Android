@@ -141,6 +141,10 @@ dependencies {
     implementation(libs.firebase.crashlytics.ndk)
     implementation(libs.firebase.analytics)
 
+    // 강제 업데이트·점검 모드를 원격으로 켠다. 값이 없거나 못 받아도 인앱 기본값으로 동작한다
+    // — 네트워크가 막혔다고 멀쩡한 사용자를 가두면 안 된다.
+    implementation(libs.firebase.config)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
 }

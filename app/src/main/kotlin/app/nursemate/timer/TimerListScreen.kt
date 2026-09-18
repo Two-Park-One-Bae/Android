@@ -128,7 +128,8 @@ fun TimerListRoute(
         onAdvance = viewModel.startGate::advance,
         onAsked = viewModel.startGate::markAsked,
         onConfirmAlertMode = viewModel.startGate::confirmAlertMode,
-        onDismiss = viewModel.startGate::dismiss
+        onDismiss = viewModel.startGate::dismiss,
+        onPermissionResult = viewModel::trackAlarmPermission
     )
 }
 

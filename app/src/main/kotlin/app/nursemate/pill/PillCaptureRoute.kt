@@ -32,7 +32,12 @@ import app.nursemate.core.designsystem.NmColor
  * 중간에 "무엇으로 찍을까요" 같은 선택 화면을 두지 않는다.
  */
 @Composable
-fun PillCaptureRoute(onPhotoSelected: (Uri) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun PillCaptureRoute(
+    onPhotoSelected: (Uri) -> Unit,
+    onClose: () -> Unit,
+    session: PillAnalyticsSession,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -45,6 +50,8 @@ fun PillCaptureRoute(onPhotoSelected: (Uri) -> Unit, onClose: () -> Unit, modifi
     ) { result ->
         granted = result
         alreadyAsked = true
+        // 실제로 프롬프트가 떴을 때만 여기로 온다 — 이미 허용된 경우는 launch 자체를 안 한다.
+        session.permissionAnswered(permission = "camera", granted = result, gate = "pill")
     }
 
     LaunchedEffect(Unit) {
@@ -65,6 +72,7 @@ fun PillCaptureRoute(onPhotoSelected: (Uri) -> Unit, onClose: () -> Unit, modifi
         granted -> PillCameraScreen(
             onPhotoCaptured = onPhotoSelected,
             onPickFromGallery = onPhotoSelected,
+            onGalleryTap = { session.buttonTapped(target = "gallery", screen = "camera") },
             onClose = onClose,
             modifier = modifier
         )
@@ -72,6 +80,7 @@ fun PillCaptureRoute(onPhotoSelected: (Uri) -> Unit, onClose: () -> Unit, modifi
         alreadyAsked -> PillPermissionDeniedScreen(
             onBack = onClose,
             onPickFromGallery = onPhotoSelected,
+            onGalleryTap = { session.buttonTapped(target = "gallery", screen = "permission_denied") },
             modifier = modifier
         )
 

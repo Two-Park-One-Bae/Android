@@ -79,7 +79,11 @@ fun PillEditScreen(
     onCancel: () -> Unit,
     onDetail: (PillCandidate) -> Unit,
     onLoadMore: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 지금 펼쳐 둔 선택판. 이탈 지표(`pill_flow_exit.editing_attribute`)가 읽는다. */
+    onPanelChange: (AttributePanel?) -> Unit = {},
+    /** 후보 썸네일을 눌러 이미지 비교를 열었다 — 지표(`button_tap`)만 쓴다. */
+    onCompare: () -> Unit = {}
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
@@ -91,6 +95,9 @@ fun PillEditScreen(
     // 각인 자동은 V1). 접어 두면 이 화면에서 유일하게 해야 할 일이 꺾쇠 뒤에 숨는다.
     // iOS 도 같은 이유로 `openPanel = .imprint` 로 시작한다.
     var open by rememberSaveable { mutableStateOf<AttributePanel?>(AttributePanel.Imprint) }
+
+    // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
+    LaunchedEffect(open) { onPanelChange(open) }
 
     // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
     // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
@@ -176,7 +183,10 @@ fun PillEditScreen(
                     actions = CandidateActions(
                         onSelect = onSelect,
                         onDetail = onDetail,
-                        onThumbnail = { comparing = it },
+                        onThumbnail = {
+                            onCompare()
+                            comparing = it
+                        },
                         onLoadMore = onLoadMore
                     )
                 )
