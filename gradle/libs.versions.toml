@@ -127,6 +127,9 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 firebase-crashlytics-ndk = { group = "com.google.firebase", name = "firebase-crashlytics-ndk" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 
+# 원격 제어 — 강제 업데이트·점검 모드. iOS `RemoteConfigService.swift` 와 같은 키를 쓴다.
+firebase-config = { group = "com.google.firebase", name = "firebase-config" }
+
 # 구글 로그인. GoogleSignIn(play-services-auth)은 2025년 지원 종료라 Credential Manager를 쓴다.
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidxCredentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidxCredentials" }
