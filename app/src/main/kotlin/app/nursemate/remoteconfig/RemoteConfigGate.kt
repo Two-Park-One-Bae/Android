@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -33,6 +34,7 @@ import app.nursemate.BuildConfig
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmButtonPrimary
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmSemanticColors
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 
@@ -48,8 +50,14 @@ import app.nursemate.core.designsystem.NmTypography
  * 둘 다 켜져 있으면 업데이트를 먼저 보여 준다. 구버전을 쓰는 사용자에게 「점검 중」이라고만
  * 알리면 점검이 끝난 뒤에도 그 버전으로 계속 들어오게 된다.
  *
- * ## 뒤로가기를 먹는다
- * 차단이 목적이라 [BackHandler] 로 막는다. 막지 않으면 게이트 뒤의 화면이 그대로 드러난다.
+ * ## 뒤로가기와 **터치**를 둘 다 먹는다
+ * 차단이 목적이라 [BackHandler] 로 뒤로가기를 막고, 화면 전체가 포인터 입력을 받아
+ * 뒤 화면으로 터치가 내려가지 않게 한다.
+ *
+ * ⚠️ **그리는 것만으로는 안 막힌다.** 이 화면은 앱 위에 겹쳐 그리는데, 포인터 입력이 없는
+ * 컴포저블은 히트 테스트에서 아예 후보가 아니라 **터치가 그대로 통과한다.** 실제로 릴리스
+ * 빌드에서 게이트의 빈 자리를 눌렀더니 뒤에 있던 카카오 로그인이 떴다(2026-09-19).
+ * 화면은 막혔는데 조작은 되는 상태였다.
  */
 @Composable
 fun RemoteConfigGate(state: RemoteConfigState) {
@@ -111,12 +119,35 @@ private fun GateScaffold(
     // 차단이 목적이다. 뒤로가기로 빠져나가면 게이트가 무의미해진다.
     BackHandler(enabled = true) {}
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // 이 자리에 포인터 입력을 두는 것만으로 히트 테스트가 여기서 멈춘다 —
+            // 소비는 하지 않아 안쪽 버튼은 그대로 동작한다.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent()
+                    }
+                }
+            }
     ) {
+        GateBody(iconRes, iconTint, iconBackground, title, description, action, colors)
+    }
+}
+
+@Composable
+private fun GateBody(
+    iconRes: Int,
+    iconTint: Color,
+    iconBackground: Color,
+    title: String,
+    description: String,
+    action: Pair<String, () -> Unit>?,
+    colors: NmSemanticColors
+) {
+    Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
