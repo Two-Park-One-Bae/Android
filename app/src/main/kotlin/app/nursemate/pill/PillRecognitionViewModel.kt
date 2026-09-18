@@ -14,6 +14,7 @@ import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
 import app.nursemate.core.vision.PillDetector
+import app.nursemate.telemetry.AppAnalytics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
@@ -50,8 +51,17 @@ class PillRecognitionViewModel @Inject constructor(
     private val modelFile: PillModelFile,
     private val attributeCache: PillAttributeCache,
     private val pillRepository: PillRepository,
-    private val usageHolder: UsageHolder
+    private val usageHolder: UsageHolder,
+    appAnalytics: AppAnalytics
 ) : ViewModel() {
+
+    /**
+     * 이 세션의 지표 상태 — 수정 횟수·체류시간처럼 **화면 여러 곳에 흩어진 값**을 모은다.
+     *
+     * 뷰모델이 그래프에 스코프돼 세션과 수명이 같으므로 여기 두는 게 맞다. 화면에 두면
+     * 재구성·회전마다 날아가고, 싱글턴에 두면 다음 사진에 앞 사진 수치가 섞인다.
+     */
+    val analyticsSession = PillAnalyticsSession(appAnalytics)
 
     private val _state = MutableStateFlow(PillUiState())
     val state = _state.asStateFlow()
@@ -94,6 +104,8 @@ class PillRecognitionViewModel @Inject constructor(
     /** 재촬영 — 고른 사진과 검출 결과를 버린다. */
     fun discardPhoto() {
         sourceUri = null
+        // 새 사진은 새 세션이다. 안 비우면 앞 사진의 수정 횟수·체류시간이 그대로 얹힌다.
+        analyticsSession.reset()
         // 비트맵을 recycle()하지 않는다. 화면 전환 애니메이션이 아직 그리고 있을 수 있어
         // 그 순간 recycle하면 "Canvas: trying to use a recycled bitmap"으로 죽는다. GC에 맡긴다.
         _state.update { PillUiState() }
@@ -123,6 +135,7 @@ class PillRecognitionViewModel @Inject constructor(
     }
 
     private fun startDetectionUnchecked(bitmap: Bitmap) {
+        analyticsSession.analysisStarted()
         _state.update { it.copy(detection = DetectionPhase.Running) }
         viewModelScope.launch {
             runCatching { loadDetector().detect(bitmap) }
@@ -133,6 +146,7 @@ class PillRecognitionViewModel @Inject constructor(
                             "추론 ${result.timings.inferenceMs}ms 후처리 ${result.timings.postprocessMs}ms"
                     )
                     if (result.pills.isEmpty()) {
+                        analyticsSession.analysisFinished(outcome = OUTCOME_EMPTY, pillCount = 0)
                         _state.update { it.copy(detection = DetectionPhase.Empty) }
                         return@onSuccess
                     }
@@ -141,6 +155,7 @@ class PillRecognitionViewModel @Inject constructor(
                 }
                 .onFailure { throwable ->
                     Log.e(TAG, "검출 실패", throwable)
+                    analyticsSession.analysisFinished(outcome = OUTCOME_FAILURE, pillCount = 0)
                     _state.update {
                         it.copy(
                             detection = DetectionPhase.Failed(
@@ -161,6 +176,9 @@ class PillRecognitionViewModel @Inject constructor(
     fun retryDetection() {
         val done = _state.value.detection as? DetectionPhase.Success
         if (done != null) {
+            // 검출을 건너뛰어도 **사용자가 보기엔 새 시도**다. 분모를 빠뜨리면 재시도한 만큼
+            // 성공률이 100%를 넘는다.
+            analyticsSession.analysisStarted()
             _state.update { it.copy(attributes = AttributePhase.Idle) }
             viewModelScope.launch { extractAttributes(done.result) }
             return
@@ -204,6 +222,7 @@ class PillRecognitionViewModel @Inject constructor(
         // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 Gemini 를
         // 부르면 5~8초씩 기다리고 하루 15회 한도가 오후에 바닥난다. 릴리스에서는 늘 null 이다.
         attributeCache.load(pillIds)?.let { cached ->
+            analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = cached.size)
             _state.update { it.copy(attributes = AttributePhase.Done(cached.associateBy(PillAttribute::pillId))) }
             return
         }
@@ -215,6 +234,9 @@ class PillRecognitionViewModel @Inject constructor(
         pillRepository.attributes(crops)
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
+                analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = extracted.items.size)
+                // 한도 **소진**은 마지막 1회를 쓴 이 응답에서만 잡힌다 — 막힌 시도가 아니라.
+                if (extracted.usage.exhausted) analyticsSession.limitReached()
                 attributeCache.save(extracted.items)
                 _state.update {
                     it.copy(attributes = AttributePhase.Done(extracted.items.associateBy(PillAttribute::pillId)))
@@ -225,11 +247,16 @@ class PillRecognitionViewModel @Inject constructor(
                     is DailyLimitReached -> {
                         throwable.usage?.let(usageHolder::update)
                         Log.i(TAG, "일일 식별 한도 도달")
+                        // 429 는 **막힌 시도**다. `pill_limit_reached` 도 `pill_identify_result` 도
+                        // 보내지 않는다 — 소진은 이미 마지막 성공에서 셌고, 여기서 또 세면
+                        // 재시도한 사용자만 중복으로 잡힌다(iOS 가 이 설계를 접은 이유).
+                        analyticsSession.analysisDiscarded()
                         _state.update { it.copy(attributes = AttributePhase.LimitReached) }
                     }
 
                     else -> {
                         Log.w(TAG, "속성 추출 실패", throwable)
+                        analyticsSession.analysisFinished(outcome = OUTCOME_FAILURE, pillCount = 0)
                         _state.update {
                             it.copy(
                                 attributes = AttributePhase.Failed(
@@ -262,6 +289,11 @@ class PillRecognitionViewModel @Inject constructor(
     private companion object {
         const val TAG = "NM394"
         const val JPEG_MIME = "image/jpeg"
+
+        // `pill_identify_result.outcome` — iOS 와 같은 값을 쓴다.
+        const val OUTCOME_SUCCESS = "success"
+        const val OUTCOME_EMPTY = "empty"
+        const val OUTCOME_FAILURE = "failure"
     }
 }
 

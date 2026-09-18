@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import app.nursemate.core.timer.TimerAnalytics
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,7 +108,7 @@ class PresetWidgetReceiver : AppWidgetProvider() {
                 }
         }
         preset?.let {
-            entry.timerRepository().start(it)
+            entry.timerRepository().start(it, TimerAnalytics.SOURCE_WIDGET)
             // 눌렀다는 표시. RemoteViews 는 동기라 여기서 그리면 곧바로 보인다.
             PresetWidgetRenderer.render(context, appWidgetId, it, ready = true, justStarted = true)
             scheduleRevert(context, appWidgetId)

@@ -3,6 +3,7 @@ package app.nursemate.wear.alarm
 import app.nursemate.core.model.ORIGIN_WATCH
 import app.nursemate.core.timer.ReplicaOrigin
 import app.nursemate.core.timer.TimerAlarmScheduler
+import app.nursemate.core.timer.TimerAnalytics
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -24,5 +25,16 @@ internal abstract class WearTimerModule {
         @Provides
         @ReplicaOrigin
         fun provideReplicaOrigin(): String = ORIGIN_WATCH
+
+        /**
+         * 워치는 지표를 보내지 않는다.
+         *
+         * 워치에서 시작·종료한 타이머는 복제본으로 폰에 넘어가고 **폰이 `source=watch` 로
+         * 이미 센다.** 여기서도 보내면 한 번의 행동이 두 번 잡힌다.
+         * (워치 앱에는 Firebase Analytics 자체가 붙어 있지 않기도 하다.)
+         */
+        @Provides
+        @Singleton
+        fun provideTimerAnalytics(): TimerAnalytics = TimerAnalytics.None
     }
 }
