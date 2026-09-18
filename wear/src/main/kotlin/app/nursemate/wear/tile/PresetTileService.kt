@@ -59,7 +59,8 @@ class PresetTileService : TileService() {
             val clicked = requestParams.currentState.lastClickableId
                 .takeIf { it.isNotEmpty() && it != MORE_ID }
             if (store.snapshot.value == null) store.restore()
-            val presets = store.snapshot.value?.presets.orEmpty()
+            // 타일도 화면과 같은 목록을 봐야 한다 — 못 받았으면 기본값으로 떨어진다.
+            val presets = store.presets
 
             // 타일에서도 워치가 직접 시작한다 — 폰에 묻지 않는다.
             if (clicked != null && claimStart(clicked)) {

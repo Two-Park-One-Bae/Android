@@ -1,8 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!--
+        광고 ID 를 쓰지 않는다 (NM-466).
+
+        `firebase-analytics` 가 `AD_ID` 권한을 **자동으로 병합**한다. 우리가 선언한 적은 없지만
+        병합된 매니페스트에는 들어가고, Android 13+ 대상 앱이 이 권한을 가지면 Play 가
+        「광고 ID 선언」을 요구하며 **검토 전송 자체를 막는다**(실제로 0.2.2 에서 막혔다).
+
+        ⚠️ 선언으로 넘기지 않고 권한을 빼는 쪽을 골랐다. 개인정보처리방침 3항이
+        「광고 식별자(IDFA) 및 광고·추적 목적의 데이터를 수집하지 않는다」고 못박았고,
+        데이터 보안 신고에서도 「기기 또는 기타 ID」를 선택하지 않았다 — 권한만 남겨 두면
+        공개한 약속과 실제가 어긋난다.
+
+        Analytics 는 광고 ID 없이도 동작한다(앱 인스턴스 ID 로 센다). 광고를 붙이게 되면
+        이 줄을 지우고 방침·데이터 보안 신고를 함께 고쳐야 한다.
+    -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
+
+    <!--
+        Privacy Sandbox 의 광고 권한도 같이 뺀다. `firebase-analytics` 가 함께 병합하는데,
+        Play 의 광고 ID 선언은 위 `gms.permission.AD_ID` 로 판단하므로 이것만으로는 막히지
+        않는다. 그래도 남겨 두면 **스토어에 광고 관련 권한이 보인다** — 광고를 쓰지 않는다고
+        공개한 앱에서 설명할 수 없는 자리다.
+    -->
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_AD_ID"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+        tools:node="remove" />
 
     <!--
         처치 타이머 (NM-441).

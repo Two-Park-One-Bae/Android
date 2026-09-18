@@ -67,7 +67,8 @@ interface TimerAlarmScheduler {
 class TimerRepository @Inject constructor(
     private val store: TimerStore,
     private val scheduler: TimerAlarmScheduler,
-    private val clock: TimerClock
+    private val clock: TimerClock,
+    private val analytics: TimerAnalytics = TimerAnalytics.None
 ) {
 
     /** 복원이 겹치지 않게 막는다 — 앱 시작과 `BOOT_COMPLETED` 가 함께 올 수 있다. */
@@ -115,11 +116,17 @@ class TimerRepository @Inject constructor(
         if (firstOfProcess && restored.isEmpty()) scheduler.dismissAllAlarms()
     }
 
-    /** 프리셋 원탭 → 즉시 시작 + 알람 예약. */
-    suspend fun start(preset: TimerPreset): CareTimer {
+    /**
+     * 프리셋 원탭 → 즉시 시작 + 알람 예약.
+     *
+     * @param source 어디서 눌렀나 — 지표가 읽는다([TimerAnalytics.SOURCE_PHONE] 등).
+     *   워치에서 시작한 것은 여기로 오지 않고 복제본을 합칠 때 잡힌다([reschedule]).
+     */
+    suspend fun start(preset: TimerPreset, source: String = TimerAnalytics.SOURCE_PHONE): CareTimer {
         val timer = CareTimerTransitions.start(preset, UUID.randomUUID().toString(), clock.now())
         store.mutateTimers { it + timer }
         scheduler.schedule(timer)
+        analytics.started(timer, source)
         return timer
     }
 
@@ -170,6 +177,24 @@ class TimerRepository @Inject constructor(
             if (target == null) current else current.filterNot { it.id == timerId }
         }
         if (target?.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
+        target?.let(::reportEnded)
+    }
+
+    /**
+     * 끝난 타이머 하나를 지표로 넘긴다.
+     *
+     * 완료와 취소를 가르는 기준은 **울렸는가** 하나다 — 알람이 울린 뒤 누른 [완료] 가 완료고,
+     * 그 전에 끈 것이 취소다. 예약을 `dismiss` 로 걷을지 `cancel` 로 걷을지 정하는 기준과 같다.
+     */
+    private fun reportEnded(timer: CareTimer) {
+        val completed = timer.state == TimerState.RINGING
+        val remaining = if (completed) 0 else timer.remainingAt(clock.now())
+        analytics.ended(
+            timer = timer,
+            completed = completed,
+            elapsedSec = timer.durationSeconds - remaining,
+            remainingSec = remaining
+        )
     }
 
     /**
@@ -196,8 +221,13 @@ class TimerRepository @Inject constructor(
     private fun reschedule(before: Map<String, CareTimer>, after: Map<String, CareTimer>) {
         (before.keys - after.keys).forEach { id ->
             if (before[id]?.state == TimerState.RINGING) scheduler.dismiss(id) else scheduler.cancel(id)
+            // 상대가 끝낸 것이다. 이 기기에서 끝낸 건 remove() 가 이미 셌고, 그건 복제본이
+            // 돌아와도 여기 안 걸린다 — 이미 목록에 없어 before 에도 없다.
+            before[id]?.let(::reportEnded)
         }
         after.values.forEach { timer ->
+            // 이 기기에 없던 타이머가 복제본으로 들어왔다 = 상대가 시작했다.
+            if (before[timer.id] == null) analytics.started(timer, TimerAnalytics.SOURCE_WATCH)
             if (before[timer.id] == timer) return@forEach
             when (timer.state) {
                 TimerState.RUNNING -> scheduler.schedule(timer)

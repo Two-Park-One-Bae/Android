@@ -1,6 +1,8 @@
-# 릴리스 가이드 (:app — 폰 전용)
+# 릴리스 가이드 (폰 + 워치)
 
-> 릴리스 산출물은 서명된 AAB 1개(`:app:bundleRelease`)다. **wear는 릴리스 체인에서 제외** — 타이머 기능 완성 후 별도 티켓으로 합류. (릴리스 체인: NM-398 → NM-397 → NM-399 → NM-400)
+> 릴리스 산출물은 서명된 AAB **2개**다 — `:app:bundleRelease`(폰)와 `:wear:bundleRelease`(워치).
+> 워치는 `0.2.1`(NM-445)에서 합류했다. Play 에서 **Wear OS 는 별도 폼 팩터**라 트랙도 따로 판다
+> (`wear-alpha`). 두 AAB 는 **같은 태그 커밋에서** 뽑고 **같은 업로드 키로** 서명한다.
 
 ## 버전 정책
 
@@ -12,7 +14,11 @@
   - 프로덕션 첫 출시에서 `1.0.0`.
 - **태그** — `v<versionName>` (예: `v0.1.0`). **`main` 머지 커밋에 붙인다** — `develop`이 아니다.
   CONVENTIONS의 `release/* → main + develop` 규칙과 완료 판정(main 머지) 기준을 따른다.
-- wear 합류 시: 동일 versionName, versionCode는 `+1_000_000_000` 오프셋 (README 참고).
+- **워치 versionCode 는 폰 `+1_000_000_000`** 이다 — 폰 `4` 면 워치 `1000000004`
+  (`wear/build.gradle.kts`). versionName 은 폰과 **똑같이** 맞춘다.
+  ⚠️ Play 는 이걸 「버전 코드가 이전 버전 코드보다 훨씬 높습니다」라는 **오류**로 잡는다.
+  예상된 것이니 「무시하고 계속하기」를 누른다 — 다만 **한 번 누르면 되돌릴 수 없다**
+  (나중에 코드를 낮출 수 없다).
 
 ## 서명
 
@@ -83,6 +89,24 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
 **같은 Play 등록에 묶이므로** 제출할 때 「특별한 용도」 사유를 **둘 다** 적어야 한다 —
 하나만 적으면 나머지가 소명 없이 남는다. 문구와 사정은 `docs/KNOWN-ISSUES.md` ③ 에 있다.
 
+## 원격 게이트가 켜진 뒤로는 스모크 테스트가 막힐 수 있다 (NM-448)
+
+`RemoteConfigGate` 가 붙은 뒤로 **릴리스 빌드가 콘솔 값 하나로 통째로 막힐 수 있다.**
+스모크 테스트를 하러 앱을 켰는데 「업데이트가 필요해요」만 보이면 코드가 아니라 원격 값이다.
+
+```
+adb logcat | grep NM467
+# I NM467: 원격 값 = RemoteConfigState(minSupportedVersion=…) · 현재 1.0.0
+```
+
+이 로그는 **릴리스에서도 남긴다.** 값을 못 보면 원인을 기기 없이는 알 수 없어서다.
+
+⚠️ **버전 키는 iOS 와 공유하지 않는다.** 2026-09-19 에 공유 키(`min_supported_version`)를
+읽었더니 릴리스 앱에 **1.1.1**(iOS 기준)이 내려왔다. 그대로 냈으면 Android 1.0.0 사용자가
+첫 실행에서 전원 갇히고, 릴리스 캐시가 12시간이라 콘솔을 고쳐도 복구가 그만큼 늦다.
+지금은 `min_supported_version_android` 를 쓴다. 콘솔에 값을 넣을 때 **Android 버전 기준**인지
+반드시 확인한다.
+
 ## Play 업로드 절차 (NM-397/400)
 
 1. `develop` 에서 릴리스 빌드 + **실기기 스모크 테스트**를 먼저 한다.
@@ -110,7 +134,7 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
 
    | 보이는 것 | 왜 | 어떻게 |
    |---|---|---|
-   | 알약 식별이 안 되고 홈의 「오늘 남은 횟수」가 비어 있다 | 릴리스는 App Check 공급자가 **Play Integrity** 인데(`app/src/release/.../AppCheckProvider.kt`) 그건 **Play 로 설치된 앱**을 전제한다. 사이드로드는 `App attestation failed`(403) → 서버가 `401 APP_CHECK_FAILED` | **이 절차로는 검증할 수 없다.** 알약 식별은 Play 내부 테스트에서 본다 |
+   | 알약 식별이 「분석에 실패했어요」로 끝나고 홈의 「오늘 남은 횟수」가 비어 있다 | 릴리스는 App Check 공급자가 **Play Integrity** 인데(`app/src/release/.../AppCheckProvider.kt`) 그건 **Play 로 설치된 앱**을 전제한다. 사이드로드는 `App attestation failed`(403) → 서버가 `401 APP_CHECK_FAILED` | 여기까지 왔으면 **정상이다** — 검출은 이미 통과했다는 뜻이다 |
    | 카카오 로그인이 `Android keyHash validation failed` 로 막힌다 | 카카오 콘솔에 **Play 앱 서명 키**의 해시만 있으면 업로드 키로 서명한 APK 는 거부된다 | 콘솔에 **업로드 키 해시**도 등록해 둔다(SHA-1 을 Base64 로) |
    | 워치 만료 팝업이 안 뜨고 진동만 온다 | 손목에서 벗으면 Wear 가 `off-body` 를 보고 알림 자체를 거른다(`KNOWN-ISSUES.md` ⑥) | **차고** 확인한다 |
 
@@ -127,29 +151,70 @@ AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 �
    ```
 
    그래서 **이 스모크가 덮는 범위는 R8 크래시 · 타이머 · 워치 · 위젯 · 잠금화면**이다.
-   서버 인증이 걸린 경로(알약 식별)는 Play 내부 테스트로 넘긴다.
+   서버 응답이 필요한 부분(속성 추출 결과 화면)만 Play 내부 테스트로 넘긴다.
+
+   ⚠️ **알약 식별을 「어차피 401 이니까」 하고 건너뛰지 않는다.** 온디바이스 검출은 서버를
+   타지 않아 **여기서 그대로 검증된다.** 실제로 R8 이 ONNX 의 JNI 조회 대상을 갈아 버려
+   릴리스에서만 `SIGABRT` 로 즉사한 적이 있고(`KNOWN-ISSUES.md` ⑩), 401 만 보고 넘어가는
+   바람에 세 번의 릴리스가 그대로 나갔다. 봐야 할 것은 **프로세스가 살아 있는지**와 이 줄이다:
+
+   ```
+   NM394: 검출 4개 | 전처리 50ms 추론 661ms 후처리 9ms     ← 이게 찍히면 통과
+   ```
+
+   ```bash
+   adb logcat -c && adb logcat | grep -E "NM394|Fatal signal"
+   ```
+
+   ⚠️ **반대 방향도 있다 — 사이드로드에서 멀쩡한데 Play 에서만 깨지는 것.**
+   이 APK 는 **업로드 키**로 서명되는데, Play 배포본은 **Play 앱 서명 키**로 재서명된다.
+   서명 지문에 걸린 것(소셜 로그인 전부)은 여기서 100% 정상으로 보이고 Play 에서만 죽는다.
+   `0.2.1` 에서 실제로 카카오·구글·애플이 한꺼번에 깨졌다 — `KNOWN-ISSUES.md` ⑦.
 2. `release/X.Y.Z` 브랜치를 컷해 **`main` 으로 PR** → 머지.
 3. 그 **`main` 머지 커밋에 `v<versionName>` 태그**를 붙여 푸시.
 
-   ⚠️ **`main → develop` 역머지 PR 을 머지한 뒤 [Delete branch] 를 누르지 않는다.**
-   그 버튼은 **head 브랜치**를 지우는데 역머지 PR 은 head 가 `main` 이다. `v0.2.0` 직후
-   실제로 이렇게 `main` 이 사라졌다(PR #16, 2026-09-04). 태그가 커밋을 붙잡고 있어 피해는
-   없었지만 이 절차가 성립하지 않게 된다. 되살리려면:
+   ⚠️ **`main → develop` 역머지는 `main` 을 지운다 — 저장소 설정이 자동으로 지운다.**
+   역머지 PR 은 **head 가 `main`** 인데, 저장소의 `delete_branch_on_merge` 가 켜져 있으면
+   머지되는 순간 head 브랜치가 사라진다. **사람이 [Delete branch] 를 누르지 않아도,
+   `gh pr merge --delete-branch=false` 를 줘도 지워진다**(2026-09-15 에 실제로 겪었다).
+   `v0.2.0` 때 `main` 이 사라진 것도 같은 원인이다(PR #16).
+
+   그래서 설정을 껐다:
    ```bash
+   gh api -X PATCH repos/Two-Park-One-Bae/Android -f delete_branch_on_merge=false
+   ```
+   머지 후에는 브랜치가 남아 있는지 확인한다. 사라졌으면 태그에서 되살린다:
+   ```bash
+   gh api repos/Two-Park-One-Bae/Android/branches --jq '.[].name'
    git push origin "$(git rev-list -n1 v<마지막 태그>):refs/heads/main"
    ```
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
    ```bash
    git checkout v<versionName>
    ls app/src/main/assets/rfdetr_seg_small.onnx   # 없으면 위 "검출 모델" 절 참고
-   ./gradlew :app:bundleRelease
-   jarsigner -verify app/build/outputs/bundle/release/app-release.aab   # "jar verified."
+   ./gradlew :app:bundleRelease :wear:bundleRelease
+   jarsigner -verify app/build/outputs/bundle/release/app-release.aab    # "jar verified."
+   jarsigner -verify wear/build/outputs/bundle/release/wear-release.aab  # "jar verified."
    ```
-5. Play Console 비공개 트랙에 `app/build/outputs/bundle/release/app-release.aab` 업로드 →
-   출시 노트 작성 → 검토 요청.
+5. Play Console 비공개 트랙에 AAB 를 올리고 → 출시 노트 작성 → 검토 요청.
+   폰은 `app-release.aab` 를 알파 트랙에, 워치는 `wear-release.aab` 를 **`wear-alpha`** 에.
    - **mapping.txt 는 따로 올리지 않는다.** AAB 안에
      `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map` 으로 이미 들어 있다.
    - 관리형 게시가 꺼져 있으면 검토 통과 즉시 자동 게시된다.
+
+   ### Wear OS 는 폼 팩터가 따로다 (0.2.1 에서 처음 겪은 것)
+
+   같은 `applicationId` 라도 Play 는 Wear 를 **별도 폼 팩터**로 다룬다. 폰 트랙에 워치 AAB 를
+   얹을 수 없고, 워치용 트랙을 새로 판다. 0.2.1 에서 실제로 막혔던 자리만:
+
+   | 막히는 것 | 왜 | 어떻게 |
+   |---|---|---|
+   | 새 워치 트랙의 활성 국가가 **0개** | 워치 트랙은 기본으로 **프로덕션과 동기화**되는데 프로덕션이 아직 비활성이라 0개가 내려온다 | 「국가/지역」 탭에서 **동기화를 풀고** 폰 알파와 같은 나라를 직접 고른다 |
+   | `1000000004 버전 코드는 이미 사용되었습니다` | 앞선 시도에서 **라이브러리에 이미 올라간** 번들이다. versionCode 는 재사용할 수 없다 | 다시 올리지 말고 **「라이브러리에서 추가」** 로 그 번들을 고른다 |
+   | 「정확한 알람 권한을 사용하는지 알려 주셔야 합니다」 | **워치만** `USE_EXACT_ALARM` 을 쓴다(폰은 `SCHEDULE_EXACT_ALARM`). 워치 AAB 가 들어오면서 앱 단위 선언이 새로 요구된다 | 앱 콘텐츠 → 「정확한 알람」 에서 **「알람 시계」** 로 선언한다 |
+
+   워치 쪽은 이 밖에도 ① 모든 스토어 등록정보에 **워치 스크린샷**, ② 워치 AAB 가 테스트 트랙에
+   **출시된 상태**, ③ **Wear OS 선택 및 검토 정책 동의** 가 갖춰져야 심사로 넘어간다.
 6. `main` → `develop` **역머지 PR**을 열어 이력을 되돌린다(내용 변경이 없어도 한다 —
    안 하면 다음 릴리스 PR 에서 두 브랜치가 갈라져 충돌하고, 충돌이 있으면 GitHub 이
    PR CI 를 아예 돌리지 않아 원인 찾기가 어려워진다).

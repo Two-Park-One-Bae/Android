@@ -46,7 +46,18 @@ import app.nursemate.ui.SystemBarIcons
  * 촬영을 막더라도 갤러리 경로는 열어 둬서 기능 자체가 잠기지 않게 한다.
  */
 @Composable
-fun PillPermissionDeniedScreen(onBack: () -> Unit, onPickFromGallery: (Uri) -> Unit, modifier: Modifier = Modifier) {
+fun PillPermissionDeniedScreen(
+    onBack: () -> Unit,
+    onPickFromGallery: (Uri) -> Unit,
+    /**
+     * 갤러리 버튼을 **누른 순간**. 사진을 고르기 전이라 취소해도 찍힌다.
+     *
+     * iOS 가 탭 시점에 찍어서(`trackButton("gallery", …)`) 맞춘 것이다 — 선택 시점으로 옮기면
+     * 취소한 횟수만큼 수치가 갈린다.
+     */
+    onGalleryTap: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
@@ -122,6 +133,7 @@ fun PillPermissionDeniedScreen(onBack: () -> Unit, onPickFromGallery: (Uri) -> U
             NmButtonSecondary(
                 text = "갤러리에서 선택하기",
                 onClick = {
+                    onGalleryTap()
                     pickPhoto.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )

@@ -8,18 +8,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.navigation.NurseMateApp
+import app.nursemate.remoteconfig.RemoteConfigGate
+import app.nursemate.remoteconfig.RemoteConfigService
 import app.nursemate.timer.alarm.TimerAlarmIntents
 import app.nursemate.timer.widget.PresetWidgetLaunch
 import app.nursemate.timer.widget.PresetWidgetRefresher
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /** 강제 업데이트·점검 게이트 (NM-448). */
+    @Inject
+    lateinit var remoteConfig: RemoteConfigService
 
     /**
      * 만료 알람에서 들어왔는가 — spec §만료·알람 "알람 확인·탭 후 랜딩 = C1".
@@ -71,16 +80,38 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
+        // 서버가 값을 게시하면 앱이 떠 있는 동안에도 받는다. 보장 장치는 아니다
+        // (`RemoteConfigService.startListening` 주석) — 책임은 아래 onStart 의 refresh 가 진다.
+        remoteConfig.startListening()
+
         setContent {
             NurseMateTheme {
+                val config by remoteConfig.state.collectAsStateWithLifecycle()
+
                 NurseMateApp(
                     openTimerTab = openTimerTab.value,
                     onTimerTabOpened = { openTimerTab.value = false },
                     startPresetId = startPresetId.value,
                     onStartPresetHandled = { startPresetId.value = null }
                 )
+
+                // ⚠️ **앱 위에 덮는다.** 게이트가 아래 화면을 가리는 것이 목적이라 조건부로
+                // 갈아 끼우지 않고 나란히 그린 뒤 위에 올린다 — 갈아 끼우면 게이트가 풀릴 때
+                // 앱이 통째로 다시 만들어져 사용자가 하던 일이 날아간다.
+                RemoteConfigGate(config)
             }
         }
+    }
+
+    /**
+     * 앱을 켤 때와 **포그라운드로 돌아올 때마다** 원격 값을 다시 받는다 (NM-448 완료조건).
+     *
+     * 백그라운드에 있던 사용자는 실시간 리스너 연결이 끊겨 있어 이 경로가 아니면 점검·강제
+     * 업데이트를 못 받는다. 값이 그대로면 아무 일도 일어나지 않으므로 매번 불러도 된다.
+     */
+    override fun onStart() {
+        super.onStart()
+        lifecycleScope.launch { remoteConfig.refresh() }
     }
 
     /**

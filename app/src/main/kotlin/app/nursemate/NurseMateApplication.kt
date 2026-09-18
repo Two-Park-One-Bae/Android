@@ -7,6 +7,7 @@ import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
 import app.nursemate.timer.sync.TimerPresetPublisher
@@ -58,6 +59,9 @@ class NurseMateApplication :
     @Inject
     lateinit var timerPresets: TimerPresetRepository
 
+    @Inject
+    lateinit var telemetryIdentity: TelemetryIdentity
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -66,6 +70,17 @@ class NurseMateApplication :
 
     override fun onCreate() {
         super.onCreate()
+
+        // 크래시·지표에 회원 식별자를 붙인다 (NM-461 계약).
+        //
+        // **빌드 타입으로 수집을 가르지 않는다.** debug 는 패키지(`app.nursemate.debug`)도
+        // Firebase 프로젝트(Nursemate-dev)도 갈라져 있어 내부 사용이 운영 지표에 섞이지 않는다.
+        // iOS 도 같은 결론이다 — 내부 빌드를 막던 것은 Amplitude 프로젝트가 하나뿐이던 시절의
+        // 잔재였고, Firebase 일원화(NM-458)로 그 제약이 없어졌다.
+        //
+        // 특히 Crashlytics 를 debug 에서 끄면 **개발 중 크래시를 볼 수 없다** — 이 SDK 를 넣은
+        // 이유 자체가 그것이라 앞뒤가 맞지 않는다(iOS `AppEnvironment` 주석도 같은 판단).
+        telemetryIdentity.start(applicationScope)
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.

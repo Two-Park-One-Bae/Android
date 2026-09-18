@@ -72,6 +72,20 @@ NM-445 브랜치에서 건드리지 않았다.
 **어떻게 할까.** 제출 전에 Play Console 의 「특별한 용도」 사유란에 위 표의 두 문구를 **둘 다**
 적는다. 하나만 적으면 나머지가 소명 없는 `specialUse` 로 남아 심사에서 되돌아온다.
 
+### 곁가지 — 워치만 `USE_EXACT_ALARM` 을 쓴다
+
+폰은 `SCHEDULE_EXACT_ALARM`(사용자 승인) 이고, **워치만** `USE_EXACT_ALARM`(자동 허용) 이다.
+손목에서 「설정으로 가서 권한을 켜라」를 시킬 수 없어서 갈랐다(`wear/…/AndroidManifest.xml` 주석).
+
+`applicationId` 가 같아 **앱 단위 선언 하나**로 묶인다. 워치 AAB 를 올리는 순간 Play 가
+「정확한 알람 권한을 사용하는지 알려 주셔야 합니다」로 출시를 막으므로, 앱 콘텐츠 →
+「정확한 알람」 에서 **「알람 시계」** 로 선언해 둔다(0.2.1 에서 처음 걸렸다).
+
+⚠️ 선택지가 「알람 시계」와 「Calendar」 뿐이고, 안내문은 **핵심 기능이 둘 중 하나가 아니면
+모든 트랙에서 권한을 빼라**고 한다. 널스메이트는 앱 전체로 보면 알약 식별이 핵심이라
+심사에서 다툴 여지가 있다 — 되돌아오면 워치를 `SCHEDULE_EXACT_ALARM` 으로 바꾸는 쪽이
+대안이다(그 경우 손목에서 설정 유도 문제가 되돌아온다).
+
 ## ④ 워치가 둘 이상이면 서로 구분되지 않는다
 
 **무엇이.** 복제본의 `origin` 이 `phone`·`watch` 두 값뿐이라, 워치가 두 대면 둘 다 `watch` 다.
@@ -150,3 +164,215 @@ NM-445 브랜치에서 건드리지 않았다.
 
 **정본과의 차이.** 팝업 모양은 시스템이 정하므로 「W3 만료」의 종 아이콘·긴 버튼을 그대로
 낼 수 없다. `docs/SPEC-FEEDBACK.md` 에 올린다.
+
+## ⑦ Play 설치본에서 소셜 로그인 셋이 한꺼번에 깨진다 — 서명 지문을 잘못 읽어서
+
+**무엇이.** `0.2.1` Play 알파 설치본에서 **카카오·구글·애플 로그인이 모두** 실패했다.
+증상이 공급자마다 달라 각각 다른 문제처럼 보였다.
+
+| 공급자 | 보이는 것 | 실제 |
+|---|---|---|
+| 카카오 | 계정 선택까지 가고 「로그인하지 못했어요」 | 카카오 인증은 통과, Firebase 교환에서 실패 |
+| 구글 | 계정 선택 후 **아무 일도 안 일어남** | 실패가 `AuthError.Cancelled` 로 뭉개져 문구 없이 종료 |
+| 애플 | 누르자마자 실패, **웹 리다이렉트조차 없음** | Firebase 가 웹 플로우를 시작조차 못 함 |
+
+**원인.** Play 가 배포하는 APK 의 서명 SHA-1 이 Firebase 에 등록돼 있지 않았다. Firebase Auth 는
+요청에 `X-Android-Cert`(서명 SHA-1)를 실어 보내고 등록값과 대조하므로, 틀리면 **공급자와 무관하게**
+Auth 진입 자체가 막힌다. 그래서 셋이 동시에, 서로 다른 모습으로 깨졌다.
+
+**왜 못 찾았나 — 이게 핵심이다.** Play Console 「앱 서명」 화면에는 지문 칸이 **둘** 있다.
+
+    기존 키                    양자 내성 암호화 키
+    [SHA-256] [SHA-1]         [SHA-256] [SHA-1]     ← 생김새가 같다
+
+오른쪽(양자 내성 암호화 키)의 SHA-1 `15:DF:9D:DC:…:1F:89` 를 앱 서명 키로 착각해 Firebase 에
+등록해 두었다. 그래서 **콘솔만 보면 「Play 앱 서명 키가 정상 등록됨」으로 보인다.** 실제 배포본의
+서명은 `79:74:B2:2C:…:FD:B0` 인데 어디에도 없었다.
+
+이 가짜 일치 때문에 App Check 강제, API 키 제한, OAuth 클라이언트 삭제, keyHash 미등록을 차례로
+의심하다 전부 헛짚었다. 콘솔 화면은 모든 층위에서 정상으로 보였다.
+
+**어떻게 확인하나 — 콘솔 말고 바이너리에서 읽는다.**
+Play Console → App Bundle 탐색기 → 해당 버전 → 다운로드 → **「서명됨, 범용 APK」** 를 받아:
+
+```bash
+apksigner verify --print-certs 4.apk | grep "SHA-1 digest"
+# Signer #1 certificate SHA-1 digest: 7974b22c71d6ebb6792c45284e77eeaa4310fdb0
+```
+
+이 값이 **유일한 정본**이다. 카카오용 Base64 keyHash 는 여기서 만든다:
+
+```bash
+printf '7974b22c…' | xxd -r -p | base64   # eXSyLHHW67Z5LEUoTnfuqkMQ/bA=
+```
+
+**등록해야 하는 곳 셋.** 하나라도 빠지면 Play 설치본에서 그 공급자가 죽는다.
+
+| 대상 | 값 | 무엇이 걸려 있나 |
+|---|---|---|
+| Firebase → SHA 인증서 지문 (**SHA-1**) | `79:74:B2:2C:71:D6:EB:B6:79:2C:45:28:4E:77:EE:AA:43:10:FD:B0` | 소셜 로그인 셋 |
+| Firebase → SHA 인증서 지문 (**SHA-256**) | `5C:1A:96:D3:A2:97:F8:D6:24:DC:6C:E2:9B:F3:04:5C:4A:DB:D8:17:94:5F:FF:16:B8:D0:71:6B:B8:22:58:B9` | **App Check(Play Integrity)** |
+| 카카오 콘솔 → 플랫폼 → Android → 키 해시 | `eXSyLHHW67Z5LEUoTnfuqkMQ/bA=` | 카카오 로그인 |
+| GCP OAuth 클라이언트 | Firebase 에 SHA-1 을 넣으면 자동 생성된다 | — |
+
+⚠️ **SHA-1 과 SHA-256 을 둘 다 넣어야 한다.** 로그인은 SHA-1 로 검증하고 **App Check 의
+Play Integrity 는 SHA-256 으로** 검증한다. SHA-1 만 넣으면 로그인은 살아나는데 알약 식별이
+`401 APP_CHECK_FAILED` 로 계속 죽는다 — 0.2.1 에서 실제로 이 순서로 겪었다.
+App Check 화면의 「확인된 요청 54% / 미확인 46%」가 그 증상이었다(사이드로드는 통과,
+Play 설치본만 실패). 두 값 모두 배포 APK 에서 한 번에 읽을 수 있다:
+
+```bash
+apksigner verify --print-certs 4.apk | grep -E "SHA-1 digest|SHA-256 digest"
+```
+
+⚠️ 카카오 키 해시는 **끝의 `=` 까지** 넣는다. 빠뜨리면 조용히 안 맞는다(실제로 겪었다).
+
+⚠️ **Firebase 에 지문만 넣고 끝내면 안 된다.** 앱 안의 OAuth 클라이언트 목록은
+`google-services.json` 에 박혀 있다. **새로 내려받아 `app/src/release/` 를 교체하고 재빌드**해야
+반영된다. 이미 Play 에 올라간 빌드는 지문을 추가해도 계속 실패한다.
+
+**사이드로드로는 절대 못 잡는다.** 로컬 `assembleRelease` 는 **업로드 키**로 서명되고 그 지문은
+정상 등록돼 있어서, 같은 코드가 사이드로드에서는 셋 다 멀쩡히 로그인된다(에뮬레이터에서 확인).
+`docs/RELEASE.md` 의 「사이드로드라서 고장 난 것처럼 보이는 것들」과 **반대 방향**의 함정이다 —
+이쪽은 사이드로드에서 **멀쩡해 보이는데 Play 에서만 깨진다.**
+
+## ⑧ ONNX Runtime 을 올릴 때는 SME 명령어가 들어왔는지 본다
+
+**무엇이.** `1.29.0` 에서 알약 식별이 **SIGILL 로 즉사**했다(debug·release 모두). 「이 사진 사용」 직후 프로세스가
+통째로 사라진다. 원인은 SME(Scalable Matrix Extension) 명령어를 **가드 없이** 실행하는 것이다.
+
+    a8a7b4: 04bf5820    rdsvl x0, #0x1      ← 여기서 죽는다
+    a8a7b8: d65f03c0    ret
+
+호출부에 `HWCAP2_SME` 확인이 없다 — 함수에 들어가는 순간 실행한다. Exynos 2400
+(Cortex-X4/A720/A520)은 SME 를 지원하지 않아 만나는 즉시 `ILL_ILLOPC` 다.
+
+**올리는 방향은 답이 아니다.** 버전별 바이너리를 직접 받아 확인했다:
+
+| 버전 | `rdsvl` | sme2 커널 | 가드 |
+|---|---|---|---|
+| **1.22.0** | **0** | **0** | — (코드 자체가 없다) |
+| 1.23.2 | 38 | 7 | 없음 |
+| 1.24.3 | 1 | 0 | 없음 |
+| 1.25.1 · 1.26.0 · 1.29.0 | 1 | 4 | 없음 |
+
+1.26.0 의 호출부가 1.29.0 과 글자 그대로 같다. 그래서 `1.22.0` 으로 내렸다.
+
+⚠️ **이 다운그레이드가 사용자가 겪던 크래시를 고친 것은 아니다.** 릴리스 빌드는 버전과
+무관하게 R8 때문에 따로 죽고 있었다 — ⑩ 을 함께 본다. 둘은 증상이 같아 구분되지 않는다.
+
+**올릴 때 이렇게 본다.** aar 을 받아 arm64 `.so` 를 열어 보면 된다:
+
+```bash
+unzip -o -q onnxruntime-android-<버전>.aar "jni/arm64-v8a/libonnxruntime.so" -d /tmp/ort
+llvm-objdump -d /tmp/ort/jni/arm64-v8a/libonnxruntime.so | grep -cE "\brdsvl\b"
+```
+
+0 이 아니면 호출부에 가드가 붙었는지까지 확인한다. `bl <rdsvl 주소>` 앞에 조건 분기가 없으면
+그 버전은 쓸 수 없다.
+
+**에뮬레이터로 검증할 수 있다 — 이것만은.** 에뮬레이터 CPU 도 SME 를 지원하지 않아 실기기와
+같은 조건이다. 성공하면 이렇게 찍힌다:
+
+    NM394: 검출 0개 | 전처리 106ms 추론 646ms 후처리 0ms
+
+⚠️ **반대로, 다른 알약 식별 문제를 에뮬레이터로 판단하면 안 된다.** 1.29.0 에서는 debug·release·
+split·universal 을 가리지 않고 전부 같은 주소에서 죽어서, 어떤 비교를 해도 변별력이 없었다.
+실제로 그걸 모르고 「split APK 문제」·「Play 배포 문제」를 한참 뒤졌다.
+
+**업스트림 버그다.** 1.22.0 은 회피이지 해결이 아니다. 바이너리에
+`Failed to initialize PyTorch cpuinfo library. May cause CPU EP performance degradation due to
+undetected CPU features.` 문자열이 있는 것으로 보아, CPU 기능 감지가 실패하면 SME 미지원
+기기에서도 이 경로를 타는 구조로 보인다.
+
+## ⑨ `firebase-analytics` 는 광고 ID 권한을 몰래 끼워 넣는다
+
+**무엇이.** `0.2.2` 를 알파에 올렸더니 게시 개요가 **검토 전송을 막았다.**
+
+> 광고 ID 선언이 불완전함 — Android 13 이상을 타겟팅하는 모든 개발자는 앱에서 광고 ID를
+> 사용하는지 여부를 Google Play에 알려야 합니다.
+
+`firebase-analytics` 가 `com.google.android.gms.permission.AD_ID` 를 자동으로 병합한다.
+**우리 매니페스트에는 없다** — 그래서 코드를 아무리 봐도 안 보인다. 병합 결과를 봐야 나온다:
+
+```bash
+grep -oE 'android:name="[^"]*permission[^"]*"' \
+  app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+  | sort -u
+```
+
+**선언이 아니라 제거를 골랐다.** 개인정보처리방침 3항이 「광고 식별자(IDFA) 및 광고·추적 목적의
+데이터」를 수집하지 않는다고 못박았고, 데이터 보안 신고에서도 「기기 또는 기타 ID」를 선택하지
+않았다. 권한만 남기면 공개한 약속과 실제가 어긋난다.
+
+```xml
+<manifest xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
+```
+
+Privacy Sandbox 쪽 둘은 Play 의 선언 요구를 촉발하지 않지만, 남기면 **스토어에 광고 관련
+권한이 보인다** — 광고를 쓰지 않는다고 공개한 앱에서 설명할 수 없다.
+
+**확인.** Analytics 는 광고 ID 없이도 동작한다(앱 인스턴스 ID 로 센다).
+
+```bash
+aapt2 dump badging app-release.apk | grep -cE "uses-permission.*(AD_ID|ADSERVICES)"   # → 0
+```
+
+⚠️ **광고를 붙이게 되면** 이 줄들을 지우고 방침 3항·데이터 보안 신고·Play 광고 ID 선언을
+**함께** 고쳐야 한다. 셋 중 하나만 바꾸면 어긋난 채로 남는다.
+
+## ⑩ R8 이 ONNX Runtime 의 Java 클래스 이름을 바꿔 알약 식별이 SIGABRT 로 죽는다
+
+**무엇이.** 릴리스 빌드에서만, 알약 식별을 누르면 **100%** 프로세스가 사라진다. 0.2.1·0.2.2·
+0.2.3 모두 그랬다. 죽기 직전 로그가 원인을 그대로 말해 준다:
+
+    Pending exception java.lang.ClassNotFoundException: ai.onnxruntime.TensorInfo
+    Abort message: 'JNI DETECTED ERROR IN APPLICATION: java_class == null
+        in call to GetMethodID
+        from ai.onnxruntime.OrtSession.run(...)'
+    Fatal signal 6 (SIGABRT)
+
+ONNX Runtime 의 네이티브 쪽은 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는다
+(`OrtJniUtil.c` → `FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`). Java 코드가
+이 클래스들을 직접 부르지 않아 R8 은 지우거나 이름을 바꿔도 되는 것으로 본다. 매핑 파일에
+그대로 남는다:
+
+    ai.onnxruntime.TensorInfo -> at4:
+
+`usage.txt` 에는 `MapInfo`·`NodeInfo`·`OnnxMap`·`SequenceInfo` 가 **삭제**로 찍힌다.
+
+**카카오 SDK 때와 같은 유형이다**(⑦ 아님 — `proguard-rules.pro` 주석 참고). 라이브러리가
+consumer proguard 규칙을 넣어 주지 않아 리플렉션·JNI 대상이 갈린다. `onnxruntime-android`
+aar 에 규칙이 없는 것을 직접 확인했다(2026-09-17).
+
+```
+-keep class ai.onnxruntime.** { *; }
+```
+
+패키지 통째로 남긴다. JNI 가 이름으로 찾는 대상이 `TensorInfo` 하나가 아니고, 어느 것이
+불릴지는 모델 출력 타입이 정한다. APK 증가는 **32KB** 였다.
+
+**왜 오래 걸렸나 — 두 가지를 하나로 봤다.** ⑧ 의 SIGILL 과 이것은 **다른 버그**다.
+
+| | ⑧ SME | ⑩ R8 |
+|---|---|---|
+| 신호 | SIGILL (`ILL_ILLOPC`) | SIGABRT |
+| 빌드 | debug·release 둘 다 | **release 만** |
+| 버전 | 1.29.0 등 | 전 버전 |
+| 죽는 곳 | 추론 중 | 추론 **성공 후** 결과 읽기 |
+
+ONNX 를 1.22.0 으로 내려 ⑧ 은 사라졌지만 ⑩ 은 그대로 남았다. 그런데 증상(「이 사진 사용」
+직후 즉사)이 똑같아 **다운그레이드가 안 먹혔다**고만 보였고, 그 상태로 두 번을 더 올렸다.
+
+**갈라 보는 방법은 간단했다 — debug 로 한 번 돌려 보는 것.** debug 가 살아남으면 R8 이다.
+지금 확인한 것이 정확히 그것이다:
+
+    debug   → NM394: 검출 4개 | 전처리 107ms 추론 594ms 후처리 21ms   ✅
+    release → Fatal signal 6 (SIGABRT)                              ❌
+    release + keep 규칙 → NM394: 검출 4개 | 추론 661ms                ✅
+
+⚠️ **릴리스 스모크에 알약 식별을 반드시 넣는다.** `ci.yml` 은 debug 만 빌드해 이 부류를
+구조적으로 못 잡는다(카카오 때와 같다). 로그인만 확인하고 넘어가면 이것이 그대로 나간다.

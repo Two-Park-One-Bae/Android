@@ -3,6 +3,8 @@ package app.nursemate.timer
 import app.nursemate.core.model.TimerCategory
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.timer.TimerPresetRepository
+import app.nursemate.telemetry.AnalyticsEvent
+import app.nursemate.telemetry.AppAnalytics
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +20,11 @@ import kotlinx.coroutines.launch
  * 편집은 **시트 안에서만 사는 상태**다(모드 · 열린 폼 · 삭제 확인). 리스트 ViewModel 에
  * 같이 두면 화면 상태와 시트 상태가 뒤섞여 어느 쪽이 화면을 흔드는지 흐려진다.
  */
-class TimerPresetEditor(private val repository: TimerPresetRepository, private val scope: CoroutineScope) {
+class TimerPresetEditor(
+    private val repository: TimerPresetRepository,
+    private val scope: CoroutineScope,
+    private val analytics: AppAnalytics
+) {
 
     private val _editing = MutableStateFlow(false)
     val editing: StateFlow<Boolean> = _editing.asStateFlow()
@@ -82,6 +88,15 @@ class TimerPresetEditor(private val repository: TimerPresetRepository, private v
             )
         scope.launch {
             repository.upsert(next)
+            // 폼이 프리셋을 들고 열렸으면 수정, 빈 채로 열렸으면 생성이다.
+            // 저장 뒤에 판단하면 안 된다 — 그때는 둘 다 "있는 프리셋"이다.
+            analytics.track(
+                if (existing == null) {
+                    AnalyticsEvent.PresetCreate(label, category.label, seconds)
+                } else {
+                    AnalyticsEvent.PresetEdit(label, category.label, seconds)
+                }
+            )
             _form.value = null
         }
     }
@@ -91,6 +106,9 @@ class TimerPresetEditor(private val repository: TimerPresetRepository, private v
         val target = _deleting.value ?: return
         scope.launch {
             repository.delete(target.id)
+            analytics.track(
+                AnalyticsEvent.PresetDelete(target.label, target.category.label, target.durationSeconds)
+            )
             _deleting.value = null
             if (_form.value?.preset?.id == target.id) _form.value = null
         }
