@@ -37,6 +37,9 @@ import kotlinx.coroutines.launch
  *
  * ## 프리셋은 여전히 폰 것이다
  * 프리셋 편집은 폰 전용이라(spec §워치) 워치는 스냅샷으로 받아 읽기만 한다.
+ *
+ * 다만 **아직 한 번도 못 받았을 때는 공용 기본값을 보여 준다** — 빈 목록이면 타이머를
+ * 시작할 길이 없다(`WearPresetStore.presetsOf`). 받은 뒤에는 폰을 그대로 따른다.
  */
 @HiltViewModel
 class WearTimerViewModel @Inject constructor(
@@ -46,7 +49,8 @@ class WearTimerViewModel @Inject constructor(
 ) : ViewModel() {
 
     val presets: StateFlow<List<TimerPreset>> = store.snapshot
-        .map { it?.presets.orEmpty() }
+        // 폰이 한 번도 안 보냈으면 공용 기본값으로 떨어진다 — 규칙은 [WearPresetStore.presetsOf].
+        .map(store::presetsOf)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
     /**
