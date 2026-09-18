@@ -56,8 +56,7 @@ class WearPresetStore @Inject constructor(private val transport: TimerSyncTransp
      *
      * 흐름으로 보는 쪽(뷰모델)과 값으로 보는 쪽(타일)이 **같은 규칙**을 타도록 한 자리에 둔다.
      */
-    fun presetsOf(snapshot: PresetSnapshot?): List<TimerPreset> =
-        snapshot?.presets ?: DEFAULT_TIMER_PRESETS
+    fun presetsOf(snapshot: PresetSnapshot?): List<TimerPreset> = snapshot?.presets ?: DEFAULT_TIMER_PRESETS
 
     /**
      * 새로 받은 것을 반영한다.
