@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,9 +22,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -44,6 +47,7 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import app.nursemate.core.model.TimerState
 import app.nursemate.wear.R
+import kotlin.math.ceil
 import kotlinx.coroutines.launch
 
 /**
@@ -172,7 +176,7 @@ private fun ActivePage(
         } else {
             ScalingLazyColumn(
                 state = listState,
-                contentPadding = contentPadding,
+                contentPadding = roundSafe(contentPadding),
                 // ⚠️ **자동 가운데 맞춤을 끈다.** 켜 두면 항목이 몇 개 없을 때 목록을 화면
                 // 한가운데로 끌어올려 **헤더가 시스템 시계와 겹친다**(실기기에서 확인).
                 // 정본도 헤더는 위에 고정이다.
@@ -206,7 +210,7 @@ private fun PresetPage(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         ScalingLazyColumn(
             state = listState,
-            contentPadding = contentPadding,
+            contentPadding = roundSafe(contentPadding),
             autoCentering = null,
             // 정본 `Preset List gap: 12`(애플워치 2x).
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -231,6 +235,58 @@ private fun PresetPage(
         }
     }
 }
+
+/**
+ * [ScreenScaffold] 가 준 세로 여백에 **가로 곡면 여백을 더한다.**
+ *
+ * ## 왜 필요한가
+ * [ScreenScaffold] 의 `contentPadding` 은 **위아래 몫만** 준다 — 곡선 `TimeText` 와 스크롤
+ * 인디케이터가 쓰는 자리다. 좌우는 0 이다. 그래서 카드가 `fillMaxWidth` 로 화면 폭을 다
+ * 쓰면, 화면 한가운데라도 **카드의 네 귀퉁이가 원 밖으로 나간다** — 화면은 원인데 카드는
+ * 사각형이다. 목록 행의 오른쪽 끝(소요시간)이 그렇게 잘렸고, Play 가
+ * 「Wear 앱 품질 가이드라인: 시계 모양」으로 거부했다(2026-09-21).
+ *
+ * 세로만 보고 [ScalingLazyColumn] 을 고른 것이 놓친 자리다 — 그것은 위아래 끝의 잘림만
+ * 막아 준다.
+ *
+ * ## 왜 고정 dp 가 아닌가
+ * 워치 지름이 기기마다 다르다(이 기기는 203dp). 고정값을 두면 큰 화면에서 과하게 좁아진다.
+ * **화면 폭의 5.2%** 는 Wear Material3 가 쓰는 값 그대로다
+ * (`PaddingDefaults.horizontalContentPaddingPercentage` = 5.2f — 세로는 10f).
+ * 그 객체가 `internal` 이라 부를 수 없어 같은 계산을 여기 둔다.
+ * 203dp 에서 11dp 가 나오는데, [TimerDetailScreen] 이 실기기 측정으로 따로 고른 값과 같다.
+ */
+@Composable
+private fun roundSafe(vertical: PaddingValues): PaddingValues {
+    val horizontal = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION)
+    return PaddingValues(
+        start = horizontal,
+        end = horizontal,
+        top = vertical.calculateTopPadding(),
+        bottom = vertical.calculateBottomPadding()
+    )
+}
+
+/**
+ * 화면 폭의 [fraction] 만큼을 dp 로 준다. 곡면에 먹히지 않을 가로 여백을 정하는 자리다.
+ *
+ * ⚠️ **고정 dp 로 두면 안 된다.** 워치 지름이 기기마다 다르다 — 이 코드를 처음 쓸 때 기준으로
+ * 삼은 기기는 203dp 였고 에뮬레이터는 227dp 다. 203dp 에 맞춰 고정한 값은 더 작은 워치에서
+ * 그대로 모자라고, 실제로 Play 가 그렇게 거부했다(2026-09-21 「시계 모양」).
+ */
+@Composable
+internal fun roundSafeHorizontal(fraction: Float): Dp = ceil(LocalConfiguration.current.screenWidthDp * fraction).dp
+
+/** Wear Material3 의 가로 콘텐츠 패딩 비율(5.2%). [roundSafe] 주석 참고. */
+internal const val HORIZONTAL_PADDING_FRACTION = 0.052f
+
+/**
+ * 화면 중심에서 한참 아래에 놓이는 줄(버튼 행)이 쓰는 비율.
+ *
+ * 원이라 중심에서 멀어질수록 쓸 수 있는 폭이 줄어든다. 203dp 기기에서 실측한 값이
+ * 좌우 31dp(= 15.3%)였고([TimerDetailScreen] 주석), 그 비율을 그대로 옮긴다.
+ */
+internal const val LOW_ROW_PADDING_FRACTION = 0.153f
 
 /**
  * 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다.

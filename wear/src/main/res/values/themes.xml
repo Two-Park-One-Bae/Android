@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose 전용 앱 — 시스템 테마는 최소만. 실제 테마는 Wear Material3 가 담당한다.
+      런치 테마만 Splash 이고, API 31+ 스플래시 속성은 values-v31 에서 얹는다.
+
+      폰(`app/src/main/res/values/themes.xml`)과 같은 구조다. 다른 것은 배경색뿐 —
+      워치는 검정이다(`nm_splash_background` 주석 참고).
+
+      ⚠️ `onCreate` 에서 테마를 되돌리지 **않는다.** `setContent` 가 첫 프레임을 그리는
+      순간 시스템 테마는 화면에 더 이상 관여하지 않는다. 폰과 같은 판단이다.
+    -->
+    <style name="Theme.NurseMate.Wear.Splash" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowBackground">@drawable/nm_splash_window</item>
+    </style>
+</resources>

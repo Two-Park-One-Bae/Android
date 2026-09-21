@@ -60,11 +60,17 @@ fun TimerDetailScreen(
 ) {
     val paused = timer.state == TimerState.PAUSED
 
+    // 곡면 여백은 **화면 폭에 비례**해야 한다. 203dp 기기에 맞춰 11dp·20dp 로 고정해 두었더니
+    // 더 작은 워치에서 좌우가 곡면에 먹혔고 Play 가 거부했다(2026-09-21 「시계 모양」).
+    // 203dp 에서는 같은 값(11dp·31dp)이 나오므로 이 기기의 그림은 그대로다.
+    val edge = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION)
+    val lowRow = roundSafeHorizontal(LOW_ROW_PADDING_FRACTION)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             // 위쪽은 시스템 시계(TimeText)가 쓰는 자리라 비워 둔다 — 앱이 못 옮긴다.
-            .padding(start = 11.dp, end = 11.dp, top = 24.dp, bottom = 8.dp),
+            .padding(start = edge, end = edge, top = 24.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically)
     ) {
@@ -73,9 +79,11 @@ fun TimerDetailScreen(
         // ⚠️ **버튼 행은 화면 폭을 다 쓰면 안 된다.** 원형이라 이 높이(화면 중심 아래
         // 약 73dp)에서 쓸 수 있는 폭은 142dp 뿐인데 `fillMaxWidth` 는 181dp 를 쓴다 —
         // 좌우 끝이 곡면에 먹힌다(실기기 확인). 곡면에 맞춰 좁힌다.
+        //
+        // 바깥 Column 이 이미 `edge` 를 먹었으므로 그 차이만 더한다.
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = lowRow - edge)
         ) {
             ActionButton(
                 icon = if (paused) R.drawable.nm_ic_play else R.drawable.nm_ic_pause,

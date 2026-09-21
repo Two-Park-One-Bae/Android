@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31 미만 스플래시 — 검은 배경 + 가운데 48dp 앱 아이콘.
+
+  31+ 는 시스템이 그려 주지만(values-v31), Wear OS 3(API 30)에는 스플래시 API 가 없어
+  `windowBackground` 가 전부다. 아이콘 없이 검은 화면만 두면 앱이 멈춘 것처럼 보이고,
+  Play 가 「스플래시 화면에서 앱 아이콘 누락」으로 거부한다(2026-09-21).
+
+  ⚠️ `@mipmap/ic_launcher` 를 그대로 쓴다 — adaptive icon 이라 시스템이 원형 마스크와
+  배경·전경 합성을 알아서 한다. 전경 벡터만 얹으면 흰 원판이 빠져 마크만 떠 보인다.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/nm_splash_background" />
+    <item
+        android:width="48dp"
+        android:height="48dp"
+        android:drawable="@mipmap/ic_launcher"
+        android:gravity="center" />
+</layer-list>
