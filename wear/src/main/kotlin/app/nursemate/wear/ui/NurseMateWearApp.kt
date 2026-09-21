@@ -281,14 +281,6 @@ internal fun roundSafeHorizontal(fraction: Float): Dp = ceil(LocalConfiguration.
 internal const val HORIZONTAL_PADDING_FRACTION = 0.052f
 
 /**
- * 화면 중심에서 한참 아래에 놓이는 줄(버튼 행)이 쓰는 비율.
- *
- * 원이라 중심에서 멀어질수록 쓸 수 있는 폭이 줄어든다. 203dp 기기에서 실측한 값이
- * 좌우 31dp(= 15.3%)였고([TimerDetailScreen] 주석), 그 비율을 그대로 옮긴다.
- */
-internal const val LOW_ROW_PADDING_FRACTION = 0.153f
-
-/**
  * 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다.
  *
  * 아이콘을 **원형 판 위에** 얹는 것까지 정본이다 — 검은 배경에 회색 아이콘만 두면 떠 보인다.

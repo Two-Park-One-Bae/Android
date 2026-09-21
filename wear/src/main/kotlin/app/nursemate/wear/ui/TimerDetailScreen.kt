@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,9 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButton
@@ -30,6 +33,7 @@ import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.formatDuration
 import app.nursemate.core.model.formatRemaining
 import app.nursemate.wear.R
+import kotlin.math.sqrt
 
 /**
  * W2 조작 — 정본 `타이머 워치 / W2 조작`.
@@ -64,18 +68,33 @@ fun TimerDetailScreen(
     // 더 작은 워치에서 좌우가 곡면에 먹혔고 Play 가 거부했다(2026-09-21 「시계 모양」).
     // 203dp 에서는 같은 값(11dp·31dp)이 나오므로 이 기기의 그림은 그대로다.
     val edge = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION)
-    val lowRow = roundSafeHorizontal(LOW_ROW_PADDING_FRACTION)
+    val clock = roundSafeHorizontal(CLOCK_BAND_FRACTION)
+    val lowRow = actionRowInset(edge)
+
+    // 링은 화면 폭에도 갇힌다 — 좌우 여백을 뺀 폭보다 크면 곡면에 닿는다.
+    // 최종 지름은 `weight` 가 주는 높이와 이 상한 중 작은 쪽이 된다.
+    val ringSize = minOf(RingMaxSize, LocalConfiguration.current.screenWidthDp.dp - edge * 2)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             // 위쪽은 시스템 시계(TimeText)가 쓰는 자리라 비워 둔다 — 앱이 못 옮긴다.
-            .padding(start = edge, end = edge, top = 24.dp, bottom = 8.dp),
+            // 시계 높이도 화면에 비례한다(작은 워치에서 24dp 는 과하다).
+            .padding(start = edge, end = edge, top = clock, bottom = edge),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically)
     ) {
         DetailHeader(timer, onBack)
-        ProgressRing(timer, now, paused)
+        // ⚠️ **링은 남은 높이를 받아간다.** 고정 지름을 주면 작은 워치에서 버튼을 화면 밖으로
+        // 밀어낸다 — [RingMaxSize] 주석 참고. `weight` 가 헤더·버튼을 먼저 놓고 남은 것을 준다.
+        // `size()` 만으로는 안 된다 — 남은 높이가 모자라면 높이만 깎여 **타원**이 된다.
+        // 남은 높이를 읽어 정사각 지름을 직접 정한다.
+        BoxWithConstraints(
+            modifier = Modifier.weight(1f, fill = false),
+            contentAlignment = Alignment.Center
+        ) {
+            ProgressRing(timer, now, paused, minOf(ringSize, maxHeight))
+        }
         // ⚠️ **버튼 행은 화면 폭을 다 쓰면 안 된다.** 원형이라 이 높이(화면 중심 아래
         // 약 73dp)에서 쓸 수 있는 폭은 142dp 뿐인데 `fillMaxWidth` 는 181dp 를 쓴다 —
         // 좌우 끝이 곡면에 먹힌다(실기기 확인). 곡면에 맞춰 좁힌다.
@@ -129,12 +148,14 @@ private fun ActionButton(icon: Int, label: String, tint: Color, onClick: () -> U
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            // 아이콘·글자 사이와 좌우 여백은 최소로 둔다. 192dp 워치에서 「일시정지」가
+            // 들어갈 폭이 68dp 뿐이라 여기서 4dp 를 아끼지 않으면 말줄임이 난다.
+            horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ActionShape)
                 .background(WearTimerColors.Card)
-                .padding(horizontal = 4.dp, vertical = 7.dp)
+                .padding(horizontal = 2.dp, vertical = 7.dp)
         ) {
             Icon(
                 painter = painterResource(icon),
@@ -195,15 +216,15 @@ private fun DetailHeader(timer: CareTimer, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean) {
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(RingSize)) {
+private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean, size: Dp) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
         TimerRing(
             fraction = timer.ringFractionAt(now),
             color = if (paused) WearTimerColors.Muted else WearTimerColors.Primary,
             trackColor = WearTimerColors.Track,
             // 정본 `innerRadius: 0.9` — 지름 대비 두께 5%.
-            strokeWidth = 4.dp,
-            modifier = Modifier.size(RingSize)
+            strokeWidth = size * RING_STROKE_FRACTION,
+            modifier = Modifier.size(size)
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
@@ -223,12 +244,52 @@ private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean) {
 }
 
 /**
- * 진행 링 지름 — **정본 `Progress Ring 200`(=100dp) 그대로.**
+ * 진행 링 지름의 **상한** — 정본 `Progress Ring 200`(=100dp).
  *
- * 버튼을 한 줄로 줄인 덕에 정본 값이 그대로 들어간다:
- * 24(시계) + 20(헤더) + 5 + 100 + 5 + 30(버튼) + 8 = 192dp ≤ 203dp.
+ * ⚠️ **고정값이 아니다.** 예전엔 `100.dp` 로 못박고 세로 예산을 이렇게 맞춰 두었다:
+ * `24(시계) + 20(헤더) + 5 + 100 + 5 + 30(버튼) + 8 = 192dp ≤ 203dp`.
+ * 그 계산은 **203dp 워치 하나에만** 성립한다. 192dp(Pixel Watch)에서는 예산을 넘겨
+ * 버튼이 아래로 밀리고 「일시정지」가 `일시정…` 으로 잘렸다 — Play 가 이걸
+ * 「Wear 앱 품질 가이드라인: 시계 모양」으로 거부했다(2026-09-21).
+ *
+ * 지금은 링이 **남은 높이를 받아간다**([Modifier.weight]). 이 값은 그 위의 뚜껑일 뿐이라,
+ * 큰 워치에서 링만 커지는 일이 없고 작은 워치에서는 알아서 줄어든다. 어떤 지름에서도
+ * 넘칠 수가 없다 — 남은 것을 쓰기 때문이다.
  */
-private val RingSize = 100.dp
+private val RingMaxSize = 100.dp
+
+/** 링 두께 — 정본 `innerRadius: 0.9`, 즉 지름의 5%. 지름을 따라가야 비율이 유지된다. */
+private const val RING_STROKE_FRACTION = 0.05f
+
+/**
+ * 버튼 행이 곡면에 닿지 않도록 좌우에서 물러설 거리 — **원의 기하로 직접 구한다.**
+ *
+ * 예전엔 「화면 폭의 15.3%」 같은 **고정 비율**이었다. 그 값은 링이 100dp 로 고정이던 시절
+ * 버튼이 화면 중심 아래 73dp 에 놓인다는 전제에서 나왔다. 링이 남은 높이를 받아가게 되면서
+ * 작은 워치에서는 버튼이 더 **위로** 올라가는데, 인셋만 그대로라 쓸 수 있는 폭을 과하게
+ * 깎아 「일시정지」가 `일시정…` 으로 잘렸다(192dp 에서 확인).
+ *
+ * 반지름 `r` 인 원에서 중심으로부터 `d` 만큼 아래에 있는 가로줄의 반현(半弦)은
+ * `√(r² − d²)` 다. 버튼 행의 중심은 아래 여백과 자기 높이의 절반만큼 올라온 자리이므로
+ * `d = r − edge − 높이/2` 다. 물러설 거리는 `r − 반현`.
+ *
+ * 이렇게 두면 어떤 지름에서도 **실제로 쓸 수 있는 폭**이 나온다. 비율표를 손으로 맞출 일이 없다.
+ */
+@Composable
+private fun actionRowInset(edge: Dp): Dp {
+    val radius = LocalConfiguration.current.screenWidthDp / 2f
+    val belowCenter = radius - edge.value - MinTouchTarget.value / 2f
+    val halfChord = sqrt((radius * radius - belowCenter * belowCenter).coerceAtLeast(0f))
+    return (radius - halfChord).dp
+}
+
+/**
+ * 위쪽에 비워 두는 시계(`TimeText`) 자리의 비율.
+ *
+ * 203dp 에서 쓰던 24dp 를 비율로 옮긴 값(24/203)이다. 작은 워치에서 24dp 를 그대로 두면
+ * 남는 높이가 그만큼 더 줄어 버튼이 밀린다.
+ */
+private const val CLOCK_BAND_FRACTION = 0.118f
 
 /** 정본 버튼 `cornerRadius: 30`. */
 private val MinTouchTarget = 48.dp
