@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Android 12+ SplashScreen API — 시스템이 스플래시를 그린다.
+
+      ⚠️ **셋을 다 준다.** 배경을 안 주면 DeviceDefault 의 값이 쓰여 아이콘이 묻히고,
+      아이콘을 안 주면 시스템이 런처 아이콘을 쓰긴 하지만 그 판단을 기기에 맡기게 된다.
+      거부 사유가 정확히 「검은색 배경에 48x48dp 앱 아이콘이 표시되지 않습니다」라
+      추측할 자리를 남기지 않는다.
+    -->
+    <style name="Theme.NurseMate.Wear.Splash" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowBackground">@color/nm_splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/nm_splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+    </style>
+</resources>

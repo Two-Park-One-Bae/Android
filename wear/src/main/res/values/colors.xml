@@ -2,4 +2,11 @@
 <resources>
     <!-- 런처 아이콘 배경. 폰과 같은 값이다. -->
     <color name="ic_launcher_background">#FFFFFF</color>
+
+    <!--
+        스플래시 배경 — Wear 앱 품질 가이드라인이 **검은색**을 요구한다.
+        폰(흰색)과 다른 유일한 값이다. 워치는 OLED 라 검정이 기본이고, 가이드라인도
+        「검은색 배경에 48x48dp 앱 아이콘」으로 못박았다.
+    -->
+    <color name="nm_splash_background">#000000</color>
 </resources>
