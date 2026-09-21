@@ -64,8 +64,15 @@
             android:name="com.google.android.wearable.standalone"
             android:value="true" />
 
+        <!--
+            런치 테마가 스플래시다 (Play 거부 2026-09-21 — 「스플래시 화면에서 앱 아이콘 누락」).
+
+            ⚠️ **application 이 아니라 이 액티비티에 건다.** 앱 전체에 걸면 만료 알람
+            화면([alarm.WearAlarmActivity])까지 스플래시 배경을 물려받는다.
+        -->
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.NurseMate.Wear.Splash"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

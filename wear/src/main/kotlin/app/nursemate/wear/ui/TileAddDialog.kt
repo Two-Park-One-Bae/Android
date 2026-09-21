@@ -1,7 +1,10 @@
 package app.nursemate.wear.ui
 
 import android.content.Context
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.wear.compose.material3.AlertDialog
 import androidx.wear.compose.material3.AlertDialogDefaults
@@ -77,8 +80,31 @@ private fun ManualGuide(onDismiss: () -> Unit) {
                 )
             ) { Text("확인") }
         },
-        title = { Text("타일에 추가해보세요") },
+        title = { RoundSafeText("타일에 추가해보세요") },
         text = { Text("타일 화면을 길게 누르고 [+] 에서 널스메이트를 고르면, 앱을 열지 않고 바로 시작할 수 있어요.") }
+    )
+}
+
+/**
+ * 다이얼로그 안의 글을 곡면에서 물러나게 한다.
+ *
+ * ⚠️ [AlertDialog] 가 원형 여백을 이미 갖고 있지만 **긴 한국어 문장에는 모자란다.**
+ * 180dp 워치에서 제목 「타일에 추가해보세요」의 첫 글자가 왼쪽 곡면에 잘렸다.
+ * 영문 기준으로 잡힌 여백이라 어절이 긴 한글에서는 줄이 폭을 꽉 채우기 때문이다.
+ *
+ * 화면 폭에 비례한 값을 한 겹 더 준다 — 큰 워치에서는 차이가 거의 없고, 작은 워치에서만 는다.
+ *
+ * ⚠️ **제목에만 준다.** 본문까지 주면 줄이 더 접혀 내용이 길어지고, 그만큼 아래 [확인]
+ * ([AlertDialogDefaults.EdgeButton])이 화면 밖으로 밀려난다. 180dp 에서 실제로 그랬다 —
+ * 잘린 제목을 살리려다 버튼을 잘라먹는 맞바꿈이 된다. 잘리던 쪽은 제목이었다.
+ */
+@Composable
+private fun RoundSafeText(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION))
     )
 }
 
