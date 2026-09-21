@@ -6,8 +6,15 @@
   보이는 원의 92%까지 차서 손 좌우 끝과 아래가 마스크에 닿았다 — 정본 아이콘
   (spec/design/assets/app-icon-1024.png)은 캔버스의 78%다.
 
-  세로 보정도 뺐다. 로고를 아래로 18 내려 두었는데, 원형 마스크에서는 아래쪽이
-  좁아져 손이 먼저 잘린다.
+  ⚠️ **세로 보정 31 은 빼면 안 된다.** 경로 자체가 뷰포트 가운데에 있지 않다 — 1.875 배
+  확대 후 y 45~915 라 중심이 480 이고, 뷰포트 중심 540 보다 **60 위**다. 보정을 0 으로 두면
+  마크가 원판 위쪽으로 뜬다(실측: 위 여백 8px / 아래 14px, 72px 원판 기준).
+  ⚠️ 보정값이 60 이 아니라 **31** 인 것은 `translate` 가 `scale` **뒤에** 걸리기 때문이다 —
+  60 을 주면 정확히 반대로 6px 넘어간다(실측).
+  정본(`spec/design/assets/app-icon-1024.png`)은 상하 여백이 158/157 로 완전한 중앙이다.
+
+  예전에 「아래로 18」 을 넣었다 뺀 적이 있는데, 그건 중심을 맞추는 값이 아니라 그 위에
+  덧댄 눈속임이었다. 여기서 맞추는 건 **경로의 실제 중심**이다.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -20,7 +27,7 @@
         android:scaleX="0.52"
         android:scaleY="0.52"
         android:translateX="-2"
-        android:translateY="0">
+        android:translateY="31">
         <group
             android:scaleX="1.875"
             android:scaleY="1.875">

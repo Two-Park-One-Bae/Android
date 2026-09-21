@@ -23,7 +23,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButton
 import androidx.wear.compose.material3.IconButtonDefaults
@@ -226,16 +228,27 @@ private fun ProgressRing(timer: CareTimer, now: Long, paused: Boolean, size: Dp)
             strokeWidth = size * RING_STROKE_FRACTION,
             modifier = Modifier.size(size)
         )
+        // ⚠️ **링 안 글자도 링을 따라 줄어야 한다.** 지름만 줄이고 글자를 고정으로 두면
+        // 작은 워치에서 숫자가 링을 꽉 채우거나 넘는다. 기준은 지름 100dp 일 때의 정본 값이고,
+        // 그보다 작아진 비율만큼 함께 줄인다.
+        //
+        // ⚠️ 다만 **비율을 그대로 따르면 안 된다.** 남은 시간은 핵심 텍스트라 WO-V14 가
+        // 12sp 를 하한으로 두고, 전체 시간은 보조라 10sp 다. 거기서 멈춘다.
+        val scale = (size / RingMaxSize).coerceIn(0f, 1f)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = formatRemaining(timer.remainingAt(now)),
-                style = WearTimerType.DetailRemaining,
+                style = WearTimerType.DetailRemaining.copy(
+                    fontSize = scaledSp(WearTimerType.DetailRemaining.fontSize, scale, CORE_TEXT_MIN_SP)
+                ),
                 color = WearTimerColors.OnBackground,
                 textAlign = TextAlign.Center
             )
             Text(
                 text = if (paused) "일시정지" else formatDuration(timer.durationSeconds),
-                style = WearTimerType.DetailTotal,
+                style = WearTimerType.DetailTotal.copy(
+                    fontSize = scaledSp(WearTimerType.DetailTotal.fontSize, scale, SUB_TEXT_MIN_SP)
+                ),
                 color = WearTimerColors.Muted,
                 textAlign = TextAlign.Center
             )
@@ -260,6 +273,15 @@ private val RingMaxSize = 100.dp
 
 /** 링 두께 — 정본 `innerRadius: 0.9`, 즉 지름의 5%. 지름을 따라가야 비율이 유지된다. */
 private const val RING_STROKE_FRACTION = 0.05f
+
+/** 핵심 텍스트 하한(sp) — Wear 품질요건 WO-V14. 링이 아무리 작아져도 여기서 멈춘다. */
+private const val CORE_TEXT_MIN_SP = 12f
+
+/** 보조 텍스트 하한(sp) — [WearTimerType] 이 쓰는 10sp 기준과 같다. */
+private const val SUB_TEXT_MIN_SP = 10f
+
+/** [base] 를 [scale] 만큼 줄이되 [floorSp] 아래로는 안 내려간다. */
+private fun scaledSp(base: TextUnit, scale: Float, floorSp: Float): TextUnit = maxOf(floorSp, base.value * scale).sp
 
 /**
  * 버튼 행이 곡면에 닿지 않도록 좌우에서 물러설 거리 — **원의 기하로 직접 구한다.**
