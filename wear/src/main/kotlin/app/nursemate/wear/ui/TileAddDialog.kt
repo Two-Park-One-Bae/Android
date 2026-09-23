@@ -10,7 +10,9 @@ import androidx.wear.compose.material3.AlertDialog
 import androidx.wear.compose.material3.AlertDialogDefaults
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.IconButtonDefaults
+import androidx.wear.compose.material3.LocalTextStyle
 import androidx.wear.compose.material3.Text
+import app.nursemate.wear.ui.WearTimerType.wrapKorean
 
 /**
  * 「타일에 추가할까요?」 — 워치에서 처음 타이머를 시작한 직후 한 번 묻는다.
@@ -54,17 +56,27 @@ fun TileAddDialog(prompt: TilePrompt, onDismiss: () -> Unit) {
                     )
                 )
             },
-            title = { Text("타일에 추가할까요?") },
-            text = { Text("앱을 열지 않고 손목에서 바로 시작할 수 있어요.") }
+            title = { Text("타일에 추가할까요?", style = LocalTextStyle.current.wrapKorean()) },
+            text = { Text("앱을 열지 않고 손목에서 바로 시작할 수 있어요.", style = LocalTextStyle.current.wrapKorean()) }
         )
     }
 }
 
 /**
- * 「타일 추가」 화면이 없는 워치 — 직접 추가하는 방법만 알린다.
+ * 「타일 추가」 화면이 없는 워치 — **이득만 알리고 방법은 적지 않는다.**
  *
- * 목록을 여는 액션이 표준이 아니라 제조사에 따라 없다. 그때 버튼만 없애고 말면 무엇을 하라는
- * 건지 알 수 없어, 손으로 찾아가는 길을 대신 적는다.
+ * 목록을 여는 액션이 표준이 아니라 제조사에 따라 없다. 예전엔 그때를 대비해 손으로 찾아가는
+ * 길(「길게 눌러 [+] 에서…」)을 적어 두었는데, **큰 글꼴 + 작은 워치에서 그 설명이 화면을
+ * 넘겨 [확인] 을 밖으로 밀어냈다.** 안내를 읽히려다 닫지도 못하게 만든 셈이다
+ * (192dp · 글꼴 1.24 에서 세 번 스크롤해도 버튼에 닿지 못했다).
+ *
+ * 타일 편집은 Wear 의 표준 제스처라 문구 없이도 찾을 수 있다고 보고, 위쪽 [TileAddDialog] 와
+ * 같은 한 줄만 남긴다.
+ *
+ * ⚠️ **제목은 「타일에 추가」다 — 더 길게 쓰지 않는다.** 「타일에 추가해보세요」로 두었더니
+ * 192dp · 글꼴 1.24 에서 「추가해보세요」 한 어절이 한 줄보다 넓어, 어절 단위 줄바꿈
+ * ([WearTimerType.wrapKorean])으로도 못 살리고 `타일에 추 / 가해보세요` 로 끊겼다.
+ * 어절이 줄보다 길면 규칙이 손쓸 수 없다 — 그때는 말을 줄이는 수밖에 없다.
  */
 @Composable
 private fun ManualGuide(onDismiss: () -> Unit) {
@@ -80,8 +92,8 @@ private fun ManualGuide(onDismiss: () -> Unit) {
                 )
             ) { Text("확인") }
         },
-        title = { RoundSafeText("타일에 추가해보세요") },
-        text = { Text("타일 화면을 길게 누르고 [+] 에서 널스메이트를 고르면, 앱을 열지 않고 바로 시작할 수 있어요.") }
+        title = { RoundSafeText("타일에 추가") },
+        text = { Text("앱을 열지 않고 손목에서 바로 시작할 수 있어요.", style = LocalTextStyle.current.wrapKorean()) }
     )
 }
 
@@ -102,6 +114,7 @@ private fun ManualGuide(onDismiss: () -> Unit) {
 private fun RoundSafeText(text: String) {
     Text(
         text = text,
+        style = LocalTextStyle.current.wrapKorean(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION))

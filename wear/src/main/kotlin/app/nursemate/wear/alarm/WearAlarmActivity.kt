@@ -45,6 +45,7 @@ import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.R
 import app.nursemate.wear.ui.WearTimerColors
 import app.nursemate.wear.ui.WearTimerType
+import app.nursemate.wear.ui.WearTimerType.wrapKorean
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -163,7 +164,7 @@ private fun WearAlarmScreen(title: String, onComplete: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = title,
-            style = WearTimerType.AlarmTitle,
+            style = WearTimerType.AlarmTitle.wrapKorean(),
             color = WearTimerColors.OnBackground,
             textAlign = TextAlign.Center,
             maxLines = 2,

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -31,22 +32,28 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumnDefaults
 import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
+import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.HorizontalPagerScaffold
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
+import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.lazy.rememberTransformationSpec
+import androidx.wear.compose.material3.lazy.transformedHeight
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import app.nursemate.core.model.TimerState
 import app.nursemate.wear.R
+import app.nursemate.wear.ui.WearTimerType.wrapKorean
 import kotlin.math.ceil
 import kotlinx.coroutines.launch
 
@@ -169,31 +176,46 @@ private fun ActivePage(
     onOpen: (app.nursemate.core.model.CareTimer) -> Unit,
     onGoToPresets: () -> Unit
 ) {
-    val listState = rememberScalingLazyListState()
+    val listState = rememberTransformingLazyColumnState()
+    val spec = rememberTransformationSpec()
     ScreenScaffold(scrollState = listState) { contentPadding ->
         if (timers.isEmpty()) {
             EmptyActive(onGoToPresets = onGoToPresets)
         } else {
-            ScalingLazyColumn(
+            TransformingLazyColumn(
                 state = listState,
                 contentPadding = roundSafe(contentPadding),
-                // ⚠️ **자동 가운데 맞춤을 끈다.** 켜 두면 항목이 몇 개 없을 때 목록을 화면
-                // 한가운데로 끌어올려 **헤더가 시스템 시계와 겹친다**(실기기에서 확인).
-                // 정본도 헤더는 위에 고정이다.
-                autoCentering = null,
+                // 멈추는 자리를 항목 경계에 맞춘다. 안 맞추면 스크롤이 끝난 뒤에도 항목이
+                // 곡면에 걸친 채로 서서 글자가 물린다(실측).
+                flingBehavior = TransformingLazyColumnDefaults.snapFlingBehavior(listState),
+                rotaryScrollableBehavior = RotaryScrollableDefaults.snapBehavior(listState),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                item { ListHeader { Text("타이머", style = WearTimerType.Header) } }
+                item {
+                    ListHeader(modifier = Modifier.transformedHeight(this, spec)) {
+                        Text("타이머", style = WearTimerType.Header)
+                    }
+                }
                 items(timers, key = { it.id }) { timer ->
+                    val shrink = Modifier.transformedHeight(this, spec)
+                    val morph = SurfaceTransformation(spec)
                     if (timer.state == TimerState.RINGING) {
                         ExpiredTimerCard(
                             timer = timer,
                             now = now,
-                            onComplete = { onComplete(timer) }
+                            onComplete = { onComplete(timer) },
+                            modifier = shrink,
+                            transformation = morph
                         )
                     } else {
-                        RunningTimerCard(timer = timer, now = now, onOpen = { onOpen(timer) })
+                        RunningTimerCard(
+                            timer = timer,
+                            now = now,
+                            onOpen = { onOpen(timer) },
+                            modifier = shrink,
+                            transformation = morph
+                        )
                     }
                 }
             }
@@ -206,17 +228,21 @@ private fun PresetPage(
     presets: List<app.nursemate.core.model.TimerPreset>,
     onStart: (app.nursemate.core.model.TimerPreset) -> Unit
 ) {
-    val listState = rememberScalingLazyListState()
+    val listState = rememberTransformingLazyColumnState()
+    val spec = rememberTransformationSpec()
     ScreenScaffold(scrollState = listState) { contentPadding ->
-        ScalingLazyColumn(
+        TransformingLazyColumn(
             state = listState,
             contentPadding = roundSafe(contentPadding),
-            autoCentering = null,
             // 정본 `Preset List gap: 12`(애플워치 2x).
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item { ListHeader { Text("프리셋", style = WearTimerType.Header) } }
+            item {
+                ListHeader(modifier = Modifier.transformedHeight(this, spec)) {
+                    Text("프리셋", style = WearTimerType.Header)
+                }
+            }
             item {
                 // ⚠️ **`fillMaxSize` 를 쓰면 안 된다.** 세로로 스크롤되는 목록 안에서는 높이
                 // 제약이 무한이라, 이 한 줄이 화면 전체를 요구해 측정할 때마다 목록 길이가
@@ -226,11 +252,16 @@ private fun PresetPage(
                     style = WearTimerType.Hint,
                     color = WearTimerColors.Muted,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().transformedHeight(this, spec)
                 )
             }
             items(presets, key = { it.id }) { preset ->
-                PresetCard(preset = preset, onStart = { onStart(preset) })
+                PresetCard(
+                    preset = preset,
+                    onStart = { onStart(preset) },
+                    modifier = Modifier.transformedHeight(this, spec),
+                    transformation = SurfaceTransformation(spec)
+                )
             }
         }
     }
@@ -259,13 +290,25 @@ private fun PresetPage(
 @Composable
 private fun roundSafe(vertical: PaddingValues): PaddingValues {
     val horizontal = roundSafeHorizontal(HORIZONTAL_PADDING_FRACTION)
+
+    // ⚠️ **위아래를 화면의 15% 아래로 두지 않는다.**
+    // [ScreenScaffold] 가 주는 값은 곡선 `TimeText` 와 스크롤 인디케이터를 피하는 몫이라,
+    // 스크롤 끝에서 막 들어오는 항목이 **변형이 덜 먹은 채로** 화면 위아래 끝에 나타난다.
+    // 그 높이에서는 현(弦)이 짧아 글자가 곡면에 물린다(180·203dp 실측).
+    //
+    // 가로를 넓혀서 풀려고 하면 글자가 먼저 잘린다 — 8% 로 올렸더니
+    // 「투약 반응 관찰」이 `투약 반응 …` 이 됐다. 그래서 **세로**로 민다.
+    val floor = roundSafeHorizontal(LIST_VERTICAL_FLOOR_FRACTION)
     return PaddingValues(
         start = horizontal,
         end = horizontal,
-        top = vertical.calculateTopPadding(),
-        bottom = vertical.calculateBottomPadding()
+        top = maxOf(vertical.calculateTopPadding(), floor),
+        bottom = maxOf(vertical.calculateBottomPadding(), floor)
     )
 }
+
+/** 목록 위아래 여백의 하한 비율. [roundSafe] 주석 참고. */
+private const val LIST_VERTICAL_FLOOR_FRACTION = 0.15f
 
 /**
  * 화면 폭의 [fraction] 만큼을 dp 로 준다. 곡면에 먹히지 않을 가로 여백을 정하는 자리다.
@@ -277,8 +320,48 @@ private fun roundSafe(vertical: PaddingValues): PaddingValues {
 @Composable
 internal fun roundSafeHorizontal(fraction: Float): Dp = ceil(LocalConfiguration.current.screenWidthDp * fraction).dp
 
-/** Wear Material3 의 가로 콘텐츠 패딩 비율(5.2%). [roundSafe] 주석 참고. */
-internal const val HORIZONTAL_PADDING_FRACTION = 0.052f
+/**
+ * 목록의 가로 콘텐츠 패딩 비율.
+ *
+ * Wear Material3 기본값은 5.2% 다(`PaddingDefaults.horizontalContentPaddingPercentage`).
+ * 기본값(5.2%)으로는 **스크롤 끝에서 막 들어오는 항목**의 글자가 곡면에 물렸다 —
+ * 변형이 아직 덜 먹은 채로 화면 위아래 끝에 나타나기 때문이다(180·192·203dp 실측).
+ *
+ * ⚠️ **대가는 긴 라벨의 말줄임이다.** 8% 에서 180dp 의 「투약 반응 관찰」이
+ * `투약 반응 …` 이 된다. 곡면에 글자가 물리는 것보다 말줄임이 낫다고 판단했다(2026-09-23).
+ * 이 값을 되돌리려면 그 판단부터 다시 봐야 한다.
+ */
+internal const val HORIZONTAL_PADDING_FRACTION = 0.080f
+
+/**
+ * 배율의 기준이 되는 화면 지름.
+ *
+ * Wear 가 지원하는 **가장 작은** 화면이다(공식 적응형 문서의 지원 하한 204dp 아래, 큰 글꼴까지
+ * 겹치는 스트레스 조건이 192dp). 여기를 1.0 으로 잡아야 어떤 기기에서도 값이 이 아래로
+ * 내려가지 않는다 — 글자 하한(WO-V14 의 12sp)을 지키는 방법이 이것뿐이다.
+ * 기준을 204dp 로 올리면 192dp 기기에서 12sp 가 11.3sp 가 된다.
+ */
+internal const val BASE_SCREEN_DP = 192f
+
+/**
+ * 화면 지름이 [BASE_SCREEN_DP] 보다 얼마나 큰지의 비율.
+ *
+ * ⚠️ **1.0 아래로 내려가지 않는다.** 기준이 이미 지원 하한이라 더 작은 화면은 없고,
+ * 설령 들어와도 값을 더 줄이면 품질 하한을 깬다.
+ *
+ * 가운데에 링이 있던 동안은 글자를 링 안에 맞추느라 고정 sp 를 썼다. 진행 표시를 화면
+ * 가장자리로 내보내면서 가운데가 통째로 비었으므로, 큰 화면에서는 그만큼 키운다.
+ */
+@Composable
+internal fun screenScale(): Float = (LocalConfiguration.current.screenWidthDp / BASE_SCREEN_DP).coerceAtLeast(1f)
+
+/** 화면 크기에 비례해 키운 글자 크기. [screenScale] 참고. */
+@Composable
+internal fun TextStyle.scaled(): TextStyle = copy(fontSize = fontSize * screenScale())
+
+/** 화면 크기에 비례해 키운 길이. [screenScale] 참고. */
+@Composable
+internal fun Dp.scaled(): Dp = this * screenScale()
 
 /**
  * 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다.
@@ -307,7 +390,7 @@ private fun EmptyActive(onGoToPresets: () -> Unit) {
         }
         Text(
             text = "진행 중인 타이머가 없어요",
-            style = WearTimerType.EmptyTitle,
+            style = WearTimerType.EmptyTitle.scaled().wrapKorean(),
             color = WearTimerColors.OnBackground,
             textAlign = TextAlign.Center
         )
@@ -323,7 +406,7 @@ private fun EmptyActive(onGoToPresets: () -> Unit) {
         ) {
             Text(
                 text = "프리셋에서 시작하세요",
-                style = WearTimerType.EmptyHint,
+                style = WearTimerType.EmptyHint.scaled().wrapKorean(),
                 color = WearTimerColors.PrimarySoft
             )
             Icon(
