@@ -2,6 +2,8 @@ package app.nursemate.wear.ui
 
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.sp
 
 /**
@@ -17,6 +19,28 @@ import androidx.compose.ui.unit.sp
  */
 internal object WearTimerType {
 
+    /**
+     * 여러 줄로 감길 수 있는 한글에 쓴다.
+     *
+     * ⚠️ **기본 줄바꿈은 한글을 단어 중간에서 끊는다.** 「타일에 추 / 가해보세요」,
+     * 「진행 중인 타이머가 없어 / 요」처럼 나왔다(실기기 확인).
+     *
+     * 어절 단위로 끊으려면 [LineBreak.WordBreak.Phrase] 가 필요한데, 그것만으로는 안 된다 —
+     * **글자의 로케일이 한국어여야** 플랫폼이 한국어 어절 규칙을 쓴다. 기기 로케일이 영어면
+     * 조용히 무시된다(에뮬레이터에서 그랬다). 우리 문구는 전부 한국어 고정이라
+     * 기기 설정과 무관하게 여기서 못박는다.
+     */
+    fun TextStyle.wrapKorean(): TextStyle = copy(
+        lineBreak = LineBreak(
+            strategy = LineBreak.Strategy.Balanced,
+            strictness = LineBreak.Strictness.Normal,
+            wordBreak = LineBreak.WordBreak.Phrase
+        ),
+        localeList = KoreanLocale
+    )
+
+    private val KoreanLocale = LocaleList("ko-KR")
+
     /** 페이지 제목 「타이머」·「프리셋」 — 정본 30px/700. */
     val Header = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold)
 
@@ -28,26 +52,25 @@ internal object WearTimerType {
     // 다시 건다). 행만 커지고 글자는 그대로면 안이 비어 보여, 행에 맞춰 함께 키웠다.
     // 정본 비율(행 대비 47%)을 그대로 적용하면 20sp 가 돼 과하므로 절충한 값이다.
 
-    /** 프리셋 행 — 정본 24px/500(=12), 행 높이에 맞춰 14sp. */
-    val PresetLabel = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    /**
+     * 목록 행 제목 — 정본 프리셋 24px/500 · 진행 중 25px/600. 행 높이에 맞춰 14sp.
+     *
+     * 프리셋과 활성이 같은 값을 쓴다. 정본은 둘의 굵기를 반 단계 다르게 두었는데, 같은
+     * 목록의 두 페이지라 넘길 때 글자 굵기가 바뀌는 것이 오히려 눈에 걸렸다.
+     */
+    val RowTitle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 
-    /** 진행 중 행 — 정본 25px/600(=12.5), 행 높이에 맞춰 14sp. */
-    val TimerLabel = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    /** 목록 행 둘째 줄 — 「남은시간 · 분류」. **WO-V14 하한 12sp.** */
+    val RowSubtitle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
 
     /** 만료 카드 — 정본 24px/700(=12), 행 높이에 맞춰 14sp. */
     val ExpiredLabel = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold)
-
-    /** 남은 시간 — 정본 23px/700(=11.5). **WO-V14 때문에 12sp 로 올림.** */
-    val Remaining = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
     /** 만료 경과 시간 — 정본 22px/700. */
     val Overdue = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 
     /** 분류 태그 — 정본 19px/normal. 보조 정보라 10sp 하한을 따른다. */
     val Category = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
-
-    /** 프리셋 시간 — 정본 21px/normal. */
-    val Duration = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal)
 
     /** 「누르면 바로 시작됩니다」 — 정본 19px/normal. */
     val Hint = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Normal)
@@ -64,16 +87,16 @@ internal object WearTimerType {
     /** W2 가운데 큰 남은 시간 — 정본 48px/700. */
     val DetailRemaining = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)
 
+    /**
+     * W2 제목 아래 분류 캡션 — 정본 19px/normal(=9.5). **WO-V14 하한인 10sp 로 올림.**
+     *
+     * 헤더 칸의 4/10(192dp 에서 12.4dp)에 들어가야 해서 [Category](11sp)보다 작다.
+     * 보조 텍스트라 10sp 까지는 허용되지만 **더 줄일 수는 없다** — 이 값이 바닥이다.
+     */
+    val DetailCaption = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium)
+
     /** W2 링 아래 전체 시간 — 정본 21px/normal. */
     val DetailTotal = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal)
-
-    /**
-     * W2 의 가로 배치 버튼.
-     *
-     * 원형 곡면 때문에 버튼 행이 141dp 로 좁아, 한 버튼이 67dp 다. 「일시정지」 4자 +
-     * 아이콘 13 + 간격 4 가 들어가려면 11sp 여야 한다.
-     */
-    val ActionCompact = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
 
     /** 「완료」 — 정본 22px/600. */
     val Action = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

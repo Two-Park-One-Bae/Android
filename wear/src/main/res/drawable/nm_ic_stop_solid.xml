@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  정지 — W2 조작의 라벨 없는 둥근 버튼 전용. [nm_ic_pause_solid] 와 짝이다.
+  Lucide `square` 의 둥근 사각형을 채운다. 테두리만 있을 때보다 잉크가 일시정지와 맞는다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M9,6 L15,6 A3,3 0 0,1 18,9 L18,15 A3,3 0 0,1 15,18 L9,18 A3,3 0 0,1 6,15 L6,9 A3,3 0 0,1 9,6 z"
+        android:fillColor="#FFFFFF" />
+</vector>

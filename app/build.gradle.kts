@@ -44,7 +44,7 @@ android {
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
-        versionCode = 10
+        versionCode = 11
         versionName = "1.0.0"
     }
 
