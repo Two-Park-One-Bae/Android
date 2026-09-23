@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +46,9 @@ import app.nursemate.core.timer.TimerRepository
 import app.nursemate.wear.R
 import app.nursemate.wear.ui.WearTimerColors
 import app.nursemate.wear.ui.WearTimerType
+import app.nursemate.wear.ui.WearTimerType.wrapKorean
+import app.nursemate.wear.ui.roundSafeHorizontal
+import app.nursemate.wear.ui.scaled
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -131,54 +135,66 @@ class WearAlarmActivity : ComponentActivity() {
 }
 
 /**
- * 정본 프레임(396×484px ÷2) 그대로.
+ * 정본 「W3 만료」.
  *
- * 다만 **정본의 Spacer 55dp 는 그만큼 못 쓴다.** 정본 프레임은 242dp 인데 우리 화면은
- * 203dp 라 39dp 가 모자란다. 제목·종·버튼은 정본 크기를 지키고 그 사이 간격에서 줄인다.
+ * ⚠️ **정본 치수를 그대로 쓰면 원형에서 잘린다.** 정본 프레임은 사각 242dp 라 폭이
+ * 어디서나 같지만 이 화면은 원이다. 고정 폭 160dp 완료 버튼을 화면 아래쪽에 두었더니
+ * 192dp 워치에서 **원 밖으로 나갔다**(실측 1.0 에서 17화소, 글꼴 1.24 에서 75화소).
+ * 상세 화면이 두 번 거부당한 것과 같은 항목이다(WO-V16).
+ *
+ * 그래서 [TimerDetailScreen] 과 같은 규칙을 쓴다:
+ * - 내용을 **원에 내접하는 정사각형** 안에 둔다([ALARM_INSET_FRACTION]).
+ * - 완료 버튼은 고정 폭이 아니라 그 정사각형의 폭을 쓴다.
+ * - 종 아이콘이 남는 높이를 받아간다 — 글꼴이 커져 제목이 두 줄이 되면 종이 먼저 양보한다.
+ *   제목과 버튼은 못 줄인다(읽어야 하고 눌러야 한다).
  */
 @Composable
 private fun WearAlarmScreen(title: String, onComplete: () -> Unit) {
+    val inset = roundSafeHorizontal(ALARM_INSET_FRACTION)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(WearTimerColors.Background)
-            .padding(horizontal = 11.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(inset),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(BellSize)
-                .clip(CircleShape)
-                .background(WearTimerColors.ExpiredSurface),
+        BoxWithConstraints(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_bell_ring),
-                contentDescription = null,
-                tint = WearTimerColors.Warning,
-                modifier = Modifier.size(BellIcon)
-            )
+            val bell = minOf(BellSize.scaled(), maxHeight)
+            Box(
+                modifier = Modifier.size(bell).clip(CircleShape).background(WearTimerColors.ExpiredSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.nm_ic_bell_ring),
+                    contentDescription = null,
+                    tint = WearTimerColors.Warning,
+                    modifier = Modifier.size(bell * BELL_ICON_RATIO)
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
         Text(
             text = title,
-            style = WearTimerType.AlarmTitle,
+            style = WearTimerType.AlarmTitle.scaled().wrapKorean(),
             color = WearTimerColors.OnBackground,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(TitleButtonGap.scaled()))
         Row(
             modifier = Modifier
-                // 정본 320px ÷2. `fillMaxWidth` 로 두면 181dp 가 되어 정본보다 넓다.
-                .width(CompleteWidth)
-                .clip(RoundedCornerShape(CompleteRadius))
+                .fillMaxWidth()
+                // 정사각형 모서리는 원에 닿아 있다 — 버튼이 그 폭을 꽉 채우면 둥근 모서리
+                // 덕에 간신히 들어간다. 눈이 아니라 실측으로 확인한다.
+                .padding(horizontal = ButtonSideInset.scaled())
+                .clip(RoundedCornerShape(CompleteRadius.scaled()))
                 .background(WearTimerColors.WarningStrong)
                 .clickable(onClick = onComplete)
-                .padding(vertical = 10.dp),
+                .padding(vertical = 10.dp.scaled()),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -186,22 +202,34 @@ private fun WearAlarmScreen(title: String, onComplete: () -> Unit) {
                 painter = painterResource(R.drawable.nm_ic_check),
                 contentDescription = null,
                 tint = WearTimerColors.OnWarning,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(12.dp.scaled())
             )
-            Spacer(Modifier.size(4.dp))
-            Text("완료", style = WearTimerType.Action, color = WearTimerColors.OnWarning)
+            Spacer(Modifier.size(4.dp.scaled()))
+            Text("완료", style = WearTimerType.Action.scaled(), color = WearTimerColors.OnWarning)
         }
     }
 }
 
-/** 정본 92px ÷2. */
-private val BellSize = 46.dp
+/**
+ * 원에 내접하는 정사각형까지 들이는 비율 — `androidx.wear.widget.BoxInsetLayout` 의
+ * `FACTOR = 0.146447f  // (1 - sqrt(2)/2)/2` 와 같은 값이다.
+ *
+ * 스크롤하지 않는 화면의 안전 영역이다. 상세 화면은 가장자리 진행 링이 있어 그 안쪽에
+ * 내접시키지만, 이 화면에는 링이 없어 화면 원 기준이면 된다.
+ */
+private const val ALARM_INSET_FRACTION = 0.146447f
 
-/** 정본 44px ÷2. */
-private val BellIcon = 22.dp
+/** 종 아이콘이 그 원 안에서 차지하는 비율 — 정본 44 / 92. */
+private const val BELL_ICON_RATIO = 0.478f
+
+/** 제목과 완료 버튼 사이. */
+private val TitleButtonGap = 12.dp
+
+/** 완료 버튼이 정사각형 좌우에서 한 번 더 들어가는 거리. */
+private val ButtonSideInset = 2.dp
+
+/** 정본 92px ÷2. 작은 워치에서는 남는 높이에 맞춰 이보다 줄어든다. */
+private val BellSize = 46.dp
 
 /** 정본 `cornerRadius 34` ÷2. */
 private val CompleteRadius = 17.dp
-
-/** 정본 완료 버튼 폭 320px ÷2. */
-private val CompleteWidth = 160.dp
