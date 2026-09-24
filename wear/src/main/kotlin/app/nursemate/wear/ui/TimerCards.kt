@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -48,8 +49,7 @@ import app.nursemate.wear.R
 /** 목록 행 안쪽 여백 — 정본 `padding: [14, 16]`. 프리셋·활성이 같은 값을 쓴다. */
 private val RowPadding = PaddingValues(horizontal = 8.dp, vertical = 7.dp)
 
-/** 모서리 — 정본 만료 32 · 목록 행 34(애플워치 2x). */
-private val ExpiredShape = RoundedCornerShape(16.dp)
+/** 모서리 — 정본 목록 행 34(애플워치 2x). 만료 행도 같은 값을 쓴다. */
 private val RowShape = RoundedCornerShape(17.dp)
 
 /** 목록 행 왼쪽 원형 자리의 지름 — 정본 `Ring 60`(애플워치 2x). */
@@ -65,6 +65,17 @@ private val RingStroke = 3.dp
 private const val LEADING_GLYPH_RATIO = 0.42f
 
 /**
+ * 만료 행의 [완료] 표시가 왼쪽 원보다 작은 비율.
+ *
+ * 왼쪽 원은 상태(울림·진행·프리셋)를 말하는 주 요소고, 이쪽은 「누르면 끝난다」는 딸린
+ * 표시다. 같은 크기로 두면 둘째 줄 글자 자리를 그만큼 뺏겨 경과 시간이 말줄임된다.
+ */
+private const val COMPLETE_MARK_RATIO = 0.78f
+
+/** 그 작은 원 안의 체크 글리프 비율. 원이 작아진 만큼 글리프는 상대적으로 키운다. */
+private const val COMPLETE_GLYPH_RATIO = 0.52f
+
+/**
  * 글자 덩어리가 행의 오른쪽 안쪽 끝에서 **더** 들어가는 거리.
  *
  * ⚠️ 곡면이 끝 항목의 귀퉁이를 잘라서, 행 안쪽 끝까지 글자를 채우면 거기서 잘린다.
@@ -72,9 +83,6 @@ private const val LEADING_GLYPH_RATIO = 0.42f
  * 글자가 ±77dp 까지 간다. [TimerRow] 주석 참고 — 값을 바꾸면 다시 측정한다.
  */
 private val TextTrailingInset = 14.dp
-
-/** [완료] 표시 모서리 — 정본 `cornerRadius: 26`. */
-private val CompleteShape = RoundedCornerShape(13.dp)
 
 /** 분류 태그 색 — 정본 W1 의 분류 텍스트. 워치는 배경 없이 색으로만 구분한다. */
 internal fun categoryColor(category: TimerCategory): Color = when (category) {
@@ -96,80 +104,50 @@ internal fun ExpiredTimerCard(
     modifier: Modifier = Modifier,
     transformation: SurfaceTransformation? = null
 ) {
-    Card(
+    TimerRow(
+        title = timer.label,
+        // 정본 자리는 `00:00` 고정이지만 폰과 같은 값(경과 시간)을 쓴다 — 같은 타이머가
+        // 표면마다 다르게 보이면 안 된다(NM-441).
+        value = formatOverdue(timer.overdueAt(now)),
+        valueColor = WearTimerColors.Warning,
+        tail = timer.category.label,
+        tailColor = categoryColor(timer.category),
         onClick = onComplete,
-        colors = CardDefaults.cardColors(containerColor = WearTimerColors.ExpiredSurface),
-        // 정본 `stroke: $warning-600, 1.5`. 만료 카드는 다른 카드와 확실히 갈라져 보여야 한다.
-        border = BorderStroke(1.dp, WearTimerColors.WarningStrong),
-        shape = ExpiredShape,
-        contentPadding = RowPadding,
+        modifier = modifier,
         transformation = transformation,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        // ⚠️ **윗줄은 [TimerRow] 와 같은 구조다** — 왼쪽 원형, 제목, 그 아래 「값 · 꼬리말」.
-        // 경과 시간을 행의 오른쪽 끝에 두었더니 끝 항목에서 곡면에 잘렸다(`-00:17` → `-00:`).
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            val leadingSize = LeadingSize.scaled()
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(leadingSize)) {
-                Icon(
-                    painter = painterResource(R.drawable.nm_ic_bell_ring),
-                    contentDescription = null,
-                    tint = WearTimerColors.Warning,
-                    modifier = Modifier.size(leadingSize * LEADING_GLYPH_RATIO)
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = LeadingGap.scaled(), end = TextTrailingInset.scaled())
+        container = WearTimerColors.ExpiredSurface,
+        // 정본 `stroke: $warning-600, 1.5`. 만료 행은 다른 행과 확실히 갈라져 보여야 한다.
+        border = BorderStroke(1.dp, WearTimerColors.WarningStrong),
+        trailing = {
+            // ⚠️ **[완료] 는 아이콘 하나다 — 전체폭 막대가 아니다.**
+            // 막대를 아래에 두면 행이 일반 행의 2.2 배 키가 된다. 원형 화면에서 변형은
+            // 항목의 **중심**을 기준으로 걸려서, 키 큰 항목은 중심이 아직 가운데일 때
+            // 이미 위끝이 곡면에 닿아 잘린다 — 가로 여백으로는 못 막는다(192dp 실측).
+            // 그걸 페이드로 가리려다 상수 네 개를 눈대중으로 맞추게 됐고, 근거 없는
+            // 값이라 조건이 바뀌면 또 깨진다. 원인(키)을 없애는 쪽으로 되돌렸다.
+            //
+            // 행 전체가 이미 [완료] 동작이라 이 아이콘은 **무엇이 일어나는지 알리는 표시**다
+            // (다른 행은 눌러서 들어가고, 이 행은 눌러서 끝낸다).
+            val mark = LeadingSize.scaled() * COMPLETE_MARK_RATIO
+            Box(
+                modifier = Modifier.size(mark).clip(CircleShape).background(WearTimerColors.WarningStrong),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = timer.label,
-                    style = WearTimerType.RowTitle.scaled(),
-                    color = WearTimerColors.OnBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = buildAnnotatedString {
-                        // 정본 자리는 `00:00` 고정이지만 폰과 같은 값(경과 시간)을 쓴다 —
-                        // 같은 타이머가 표면마다 다르게 보이면 안 된다(NM-441).
-                        withStyle(SpanStyle(color = WearTimerColors.Warning)) {
-                            append(formatOverdue(timer.overdueAt(now)))
-                        }
-                        withStyle(SpanStyle(color = WearTimerColors.Muted)) { append(" · ") }
-                        withStyle(SpanStyle(color = categoryColor(timer.category))) {
-                            append(timer.category.label)
-                        }
-                    },
-                    style = WearTimerType.RowSubtitle.scaled(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Icon(
+                    painter = painterResource(R.drawable.nm_ic_check),
+                    contentDescription = "완료",
+                    tint = WearTimerColors.OnWarning,
+                    modifier = Modifier.size(mark * COMPLETE_GLYPH_RATIO)
                 )
             }
         }
-        // ⚠️ **[완료] 를 버튼으로 만들지 않는다.** Wear 버튼은 터치 타깃 48dp 를 보장하려고
-        // 투명 여백을 얹어서, 정본(22dp)의 세 배가 되고 카드까지 부푼다 — 실측 78dp,
-        // 정본 환산 49dp 였다. 카드 전체가 이미 [완료] 동작이라 안쪽은 눌릴 필요가 없다.
-        // 눌리는 것을 하나로 두면 접근성 트리도 깔끔해진다.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp.scaled(), Alignment.CenterHorizontally),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 5.dp.scaled())
-                .clip(CompleteShape)
-                .background(WearTimerColors.WarningStrong)
-                .padding(vertical = 5.dp.scaled())
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_check),
-                contentDescription = null,
-                tint = WearTimerColors.OnWarning,
-                modifier = Modifier.size(10.dp.scaled())
-            )
-            Text(text = "완료", style = WearTimerType.Action.scaled(), color = WearTimerColors.OnWarning)
-        }
+    ) { size ->
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_bell_ring),
+            contentDescription = null,
+            tint = WearTimerColors.Warning,
+            modifier = Modifier.size(size * LEADING_GLYPH_RATIO)
+        )
     }
 }
 
@@ -277,12 +255,16 @@ private fun TimerRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     transformation: SurfaceTransformation? = null,
+    container: Color = WearTimerColors.Card,
+    border: BorderStroke? = null,
+    trailing: (@Composable () -> Unit)? = null,
     leading: @Composable BoxScope.(Dp) -> Unit
 ) {
     val leadingSize = LeadingSize.scaled()
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = WearTimerColors.Card),
+        colors = ButtonDefaults.buttonColors(containerColor = container),
+        border = border,
         shape = RowShape,
         contentPadding = RowPadding,
         transformation = transformation,
@@ -294,7 +276,12 @@ private fun TimerRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = LeadingGap.scaled(), end = TextTrailingInset.scaled())
+                // ⚠️ 트레일링 요소가 있으면 그것이 이미 글자를 가장자리에서 떼어 놓는다.
+                // 여백을 또 주면 글자 자리만 뺏겨 「-29:41 · 검사」가 `-29:…` 가 된다.
+                .padding(
+                    start = LeadingGap.scaled(),
+                    end = if (trailing == null) TextTrailingInset.scaled() else LeadingGap.scaled()
+                )
         ) {
             Text(
                 text = title,
@@ -314,5 +301,6 @@ private fun TimerRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        trailing?.invoke()
     }
 }
