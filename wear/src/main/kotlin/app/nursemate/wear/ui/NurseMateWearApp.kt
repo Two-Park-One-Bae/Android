@@ -22,6 +22,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -46,6 +52,9 @@ import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.lazy.ResponsiveTransformationSpec
+import androidx.wear.compose.material3.lazy.TransformationSpec
+import androidx.wear.compose.material3.lazy.TransformationVariableSpec
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
@@ -190,10 +199,16 @@ private fun ActivePage(
                 flingBehavior = TransformingLazyColumnDefaults.snapFlingBehavior(listState),
                 rotaryScrollableBehavior = RotaryScrollableDefaults.snapBehavior(listState),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().safeBandFade()
             ) {
                 item {
-                    ListHeader(modifier = Modifier.transformedHeight(this, spec)) {
+                    // ⚠️ **헤더에도 `transformation` 을 건다.** `transformedHeight` 만 걸면
+                    // 높이는 줄어도 **글자는 그대로 보여서** 화면 맨 위에서 잘린다 —
+                    // 실제로 그 조각이 Play 거부 증거에 잡혔다(2026-09-24).
+                    ListHeader(
+                        modifier = Modifier.transformedHeight(this, spec),
+                        transformation = SurfaceTransformation(spec)
+                    ) {
                         Text("타이머", style = WearTimerType.Header)
                     }
                 }
@@ -236,10 +251,14 @@ private fun PresetPage(
             contentPadding = roundSafe(contentPadding),
             // 정본 `Preset List gap: 12`(애플워치 2x).
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize().safeBandFade()
         ) {
             item {
-                ListHeader(modifier = Modifier.transformedHeight(this, spec)) {
+                // ⚠️ 헤더에도 시각 변형을 건다 — 위 [ActivePage] 주석 참고.
+                ListHeader(
+                    modifier = Modifier.transformedHeight(this, spec),
+                    transformation = SurfaceTransformation(spec)
+                ) {
                     Text("프리셋", style = WearTimerType.Header)
                 }
             }
@@ -247,12 +266,18 @@ private fun PresetPage(
                 // ⚠️ **`fillMaxSize` 를 쓰면 안 된다.** 세로로 스크롤되는 목록 안에서는 높이
                 // 제약이 무한이라, 이 한 줄이 화면 전체를 요구해 측정할 때마다 목록 길이가
                 // 흔들린다 — 스크롤이 위아래로 튕겼다(실기기 확인).
+                // ⚠️ **맨 `Text` 에는 `transformation` 파라미터가 없다.** 그래서 변형을
+                // `graphicsLayer` 로 직접 건다 — 안 걸면 가장자리에서 글자만 남아 잘린다.
+                val morph = SurfaceTransformation(spec)
                 Text(
                     text = "누르면 바로 시작됩니다",
                     style = WearTimerType.Hint,
                     color = WearTimerColors.Muted,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().transformedHeight(this, spec)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .transformedHeight(this, spec)
+                        .graphicsLayer { with(morph) { applyContentTransformation() } }
                 )
             }
             items(presets, key = { it.id }) { preset ->
@@ -309,59 +334,6 @@ private fun roundSafe(vertical: PaddingValues): PaddingValues {
 
 /** 목록 위아래 여백의 하한 비율. [roundSafe] 주석 참고. */
 private const val LIST_VERTICAL_FLOOR_FRACTION = 0.15f
-
-/**
- * 화면 폭의 [fraction] 만큼을 dp 로 준다. 곡면에 먹히지 않을 가로 여백을 정하는 자리다.
- *
- * ⚠️ **고정 dp 로 두면 안 된다.** 워치 지름이 기기마다 다르다 — 이 코드를 처음 쓸 때 기준으로
- * 삼은 기기는 203dp 였고 에뮬레이터는 227dp 다. 203dp 에 맞춰 고정한 값은 더 작은 워치에서
- * 그대로 모자라고, 실제로 Play 가 그렇게 거부했다(2026-09-21 「시계 모양」).
- */
-@Composable
-internal fun roundSafeHorizontal(fraction: Float): Dp = ceil(LocalConfiguration.current.screenWidthDp * fraction).dp
-
-/**
- * 목록의 가로 콘텐츠 패딩 비율.
- *
- * Wear Material3 기본값은 5.2% 다(`PaddingDefaults.horizontalContentPaddingPercentage`).
- * 기본값(5.2%)으로는 **스크롤 끝에서 막 들어오는 항목**의 글자가 곡면에 물렸다 —
- * 변형이 아직 덜 먹은 채로 화면 위아래 끝에 나타나기 때문이다(180·192·203dp 실측).
- *
- * ⚠️ **대가는 긴 라벨의 말줄임이다.** 8% 에서 180dp 의 「투약 반응 관찰」이
- * `투약 반응 …` 이 된다. 곡면에 글자가 물리는 것보다 말줄임이 낫다고 판단했다(2026-09-23).
- * 이 값을 되돌리려면 그 판단부터 다시 봐야 한다.
- */
-internal const val HORIZONTAL_PADDING_FRACTION = 0.080f
-
-/**
- * 배율의 기준이 되는 화면 지름.
- *
- * Wear 가 지원하는 **가장 작은** 화면이다(공식 적응형 문서의 지원 하한 204dp 아래, 큰 글꼴까지
- * 겹치는 스트레스 조건이 192dp). 여기를 1.0 으로 잡아야 어떤 기기에서도 값이 이 아래로
- * 내려가지 않는다 — 글자 하한(WO-V14 의 12sp)을 지키는 방법이 이것뿐이다.
- * 기준을 204dp 로 올리면 192dp 기기에서 12sp 가 11.3sp 가 된다.
- */
-internal const val BASE_SCREEN_DP = 192f
-
-/**
- * 화면 지름이 [BASE_SCREEN_DP] 보다 얼마나 큰지의 비율.
- *
- * ⚠️ **1.0 아래로 내려가지 않는다.** 기준이 이미 지원 하한이라 더 작은 화면은 없고,
- * 설령 들어와도 값을 더 줄이면 품질 하한을 깬다.
- *
- * 가운데에 링이 있던 동안은 글자를 링 안에 맞추느라 고정 sp 를 썼다. 진행 표시를 화면
- * 가장자리로 내보내면서 가운데가 통째로 비었으므로, 큰 화면에서는 그만큼 키운다.
- */
-@Composable
-internal fun screenScale(): Float = (LocalConfiguration.current.screenWidthDp / BASE_SCREEN_DP).coerceAtLeast(1f)
-
-/** 화면 크기에 비례해 키운 글자 크기. [screenScale] 참고. */
-@Composable
-internal fun TextStyle.scaled(): TextStyle = copy(fontSize = fontSize * screenScale())
-
-/** 화면 크기에 비례해 키운 길이. [screenScale] 참고. */
-@Composable
-internal fun Dp.scaled(): Dp = this * screenScale()
 
 /**
  * 정본 `W1 활성 — 빈 상태`. 프리셋 페이지로 유도한다.
