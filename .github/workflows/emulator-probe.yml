@@ -1,0 +1,59 @@
+name: 에뮬레이터 탐침 (임시)
+
+# TODO(NM-483): 릴리스 스모크의 에뮬레이터가 왜 안 뜨는지만 가르는 일회용 잡이다.
+# 빌드도 모델도 없이 AVD 만 띄운다 — 릴리스 스모크는 여기까지 오는 데 35분이 걸려
+# 설정 하나 바꿀 때마다 그만큼 태울 수 없다. 원인이 잡히면 이 파일은 지운다.
+on:
+  push:
+    branches: ['feature/NM-483-dvc-model-release-path']
+  workflow_dispatch:
+
+concurrency:
+  group: emulator-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 러너 상태
+        run: |
+          echo "── 러너 ──"
+          echo "이미지: ${ImageOS:-?} / CPU: $(nproc) 코어 / RAM: $(free -g | awk '/^Mem:/{print $2}')GB"
+          echo "── 디스크 ──"; df -h /home/runner | tail -1
+          echo "── 가상화 ──"
+          echo "vmx/svm 플래그: $(grep -c -E '(vmx|svm)' /proc/cpuinfo) 개"
+          ls -l /dev/kvm 2>&1 || echo "/dev/kvm 없음"
+
+      - name: 러너 디스크 비우기
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/powershell \
+                      /usr/local/share/chromium /usr/local/lib/node_modules || true
+          echo "비운 뒤:"; df -h /home/runner | tail -1
+
+      - name: KVM 켜기
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          echo "권한 적용 후:"; ls -l /dev/kvm 2>&1 || echo "/dev/kvm 없음"
+
+      # 릴리스 스모크와 **같은 설정**이어야 의미가 있다. 여기서 바꾼 것이 거기서도 답이다.
+      - name: AVD 부팅만 해본다
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          cores: 4
+          emulator-boot-timeout: 1200
+          disable-animations: true
+          script: |
+            echo "부팅 성공"
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.product.cpu.abi
+            adb shell df -h /data | tail -2
