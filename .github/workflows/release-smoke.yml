@@ -9,9 +9,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  # TODO(NM-483): 이 잡이 초록불인 것을 확인하려고 둔 임시 트리거다. 머지 전에 지운다.
-  push:
-    branches: ['feature/NM-483-dvc-model-release-path']
 
 concurrency:
   group: release-smoke-${{ github.ref }}
@@ -35,7 +32,7 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
