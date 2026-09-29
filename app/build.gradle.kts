@@ -151,7 +151,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
-// R8 이 ONNX Runtime 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+// R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
 //
 // `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
 // ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
@@ -183,7 +183,12 @@ androidComponents {
         "ai.onnxruntime.OnnxTensor",
         "ai.onnxruntime.MapInfo",
         "ai.onnxruntime.SequenceInfo",
-        "ai.onnxruntime.OnnxJavaType"
+        "ai.onnxruntime.OnnxJavaType",
+        // OpenCV 도 같은 부류다(NM-485). 네이티브가 이름으로 찾는 값 타입들이다.
+        "org.opencv.core.Mat",
+        "org.opencv.core.Size",
+        "org.opencv.core.Scalar",
+        "org.opencv.core.Point"
     )
 
     onVariants(selector().withBuildType("release")) { variant ->
@@ -199,7 +204,10 @@ androidComponents {
                 file.useLines { lines ->
                     for (line in lines) {
                         // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
-                        if (!line.startsWith("ai.onnxruntime.")) continue
+                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가
+                        // OpenCV 를 목록에 더했을 때 그 줄을 통째로 건너뛰어, 멀쩡히 있는
+                        // 클래스를 「매핑에서 찾지 못했다」로 잘못 읽었다(NM-485).
+                        if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') continue
                         val arrow = line.indexOf(" -> ")
                         if (arrow < 0) continue
                         val from = line.substring(0, arrow)
@@ -212,23 +220,23 @@ androidComponents {
 
                 check(renamed.isEmpty()) {
                     """
-                    R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
+                    R8 이 네이티브가 이름으로 찾는 클래스를 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
                     ${renamed.joinToString("\n")}
 
-                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
+                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.**` · `org.opencv.**` 를 확인하십시오.
                     사정은 docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
                 val missing = jniLookedUp - seen
                 check(missing.isEmpty()) {
                     """
-                    매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
+                    매핑에서 다음 클래스를 찾지 못했습니다: ${missing.joinToString()}
 
                     지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
                     알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
-                logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
+                logger.lifecycle("JNI 가 이름으로 찾는 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
             }
         }
         // 산출물을 만드는 태스크가 이 검사를 반드시 거치게 한다 — CI 뿐 아니라 로컬도.

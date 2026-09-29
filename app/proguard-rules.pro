@@ -35,3 +35,8 @@
 # 작아서(수십 KB) 남겨도 크기 영향이 없다.
 -keep class ai.onnxruntime.** { *; }
 
+# OpenCV — 각인 OCR 전처리(NM-485). ONNX Runtime 과 **같은 부류의 위험**이다(⑩).
+# 네이티브 쪽이 JVM 으로 값을 돌려줄 때 클래스를 이름으로 찾으므로, R8 이 이름을 바꾸면
+# 빌드는 멀쩡히 성공하고 릴리스에서만 죽는다. Java API 표면이 작아 남겨도 크기 영향이 없다.
+-keep class org.opencv.** { *; }
+

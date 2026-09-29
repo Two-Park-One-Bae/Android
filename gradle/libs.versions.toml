@@ -45,6 +45,7 @@ coil = "3.3.0"
 
 # 온디바이스 검출 (core:vision)
 onnxruntime = "1.22.0"
+opencv = "4.11.0"
 androidxExifInterface = "1.4.1"
 
 # 테스트
@@ -146,6 +147,9 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 # 온디바이스 추론 런타임. 프리빌트 배포본이며 EP는 CPU만 쓴다.
 # (WebGPU EP는 소스 빌드에만 들어 있다 — NM-396 스파이크 참조)
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+# 각인 OCR 전처리(NM-485). 기준 구현(ML `infer.py`)이 OpenCV 라 같은 라이브러리를 쓴다 —
+# CLAHE·형태학·연결요소를 손으로 옮기면 수치가 갈려도 조용히 틀린다.
+opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "androidxExifInterface" }
 
 [plugins]
