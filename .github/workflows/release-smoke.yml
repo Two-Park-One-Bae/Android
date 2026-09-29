@@ -20,7 +20,16 @@ concurrency:
 permissions:
   contents: read
   # DVC 원격(S3)에서 검출 모델을 받으려면 OIDC 토큰이 필요하다.
-  # 역할은 `nursemate-ml-models-read-role`, 신뢰 정책이 이 저장소를 이미 허용한다(NM-480).
+  # 역할은 `nursemate-ml-models-read-role`.
+  #
+  # ⚠️ **신뢰 정책의 sub 패턴은 불변 표기여야 한다.** 이 저장소는 2026-07-15 이후에 만들어져
+  # GitHub 이 기본으로 불변 subject 를 쓴다 — 토큰의 sub 가
+  # `repo:Two-Park-One-Bae@291990939/Android@1344708705:ref:…` 다. NM-480 이 넣어 둔 패턴은
+  # 이름 기반(`repo:Two-Park-One-Bae/Android:*`)이라 맞을 수 없었고, 그래서 이 역할은
+  # Android CI 에서 한 번도 통한 적이 없다(iOS 는 그 전에 만들어져 이름 기반이라 통한다).
+  #
+  # 저장소 쪽에서 끄는 길은 없다. `use_immutable_subject=false` 로 PUT 하면 성공을 돌려주지만
+  # 값은 그대로 true 다(2026-09-29 확인). GitHub 문서도 옵트인만 설명하고 되돌리기는 없다.
   id-token: write
 
 jobs:
