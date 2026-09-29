@@ -31,4 +31,10 @@ dependencies {
     implementation(libs.androidx.exifinterface)
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // 각인 전처리 대조(NM-485). OpenCV 네이티브가 필요해 JVM 테스트로는 못 돌린다.
+    // ⚠️ **debug 를 상대로 돈다** — R8 을 거치지 않으므로 하네스 클래스가 사라지는 문제가 없다.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
