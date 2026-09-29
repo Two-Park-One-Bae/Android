@@ -62,15 +62,19 @@ jobs:
           KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: printf '%s' "$KEYSTORE" | base64 -d > upload-keystore.jks
 
-      # TODO(NM-483): 진단용 임시 단계 — 시크릿 값을 노출하지 않고 기대값과 대조한다. 확인 후 지운다.
-      - name: 역할 ARN 시크릿 대조
-        env:
-          ROLE: ${{ secrets.AWS_ML_MODELS_ROLE_ARN }}
+      # TODO(NM-483): 진단용 임시 단계 — 신뢰 정책이 무엇과 대조되는지 본다. 확인 후 지운다.
+      # ⚠️ 토큰 자체는 절대 찍지 않는다 — 그 자체가 자격증명이다. sub·aud 만 꺼낸다.
+      - name: OIDC 토큰의 sub·aud 확인
         run: |
-          printf '길이: %s (기대 60)\n' "${#ROLE}"
-          printf 'sha256 앞 16: %s (기대 21f02517e8812f66)\n' \
-            "$(printf '%s' "$ROLE" | sha256sum | cut -c1-16)"
-          printf 'ARN 접두: %s\n' "$(printf '%s' "$ROLE" | cut -c1-13)"
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          PAYLOAD=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#PAYLOAD} % 4 )) in
+            2) PAYLOAD="$PAYLOAD==" ;;
+            3) PAYLOAD="$PAYLOAD=" ;;
+          esac
+          printf '%s' "$PAYLOAD" | tr '_-' '/+' | base64 -d \
+            | jq '{iss, aud, sub, repository, repository_owner, ref, workflow_ref}'
 
       - name: AWS 자격 증명 (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
