@@ -32,7 +32,10 @@ sleep "$SETTLE_SECONDS"
 FAILED=0
 
 echo "::group::프로세스 생존 확인"
-if PID=$(adb shell pidof "$PKG"); then
+# ⚠️ **종료코드로 판정하지 않는다.** `adb shell pidof` 는 구현에 따라 대상이 없어도 0 을
+# 돌려준다 — 그러면 죽은 앱을 살아 있다고 읽어 **거짓 통과**한다. 출력이 있는지로 본다.
+PID=$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r' || true)
+if [ -n "$PID" ]; then
     echo "살아 있다 — pid $PID"
 else
     echo "::error::프로세스가 없다 — ${SETTLE_SECONDS}초 안에 죽었다"
