@@ -1,4 +1,6 @@
+import com.android.build.api.artifact.SingleArtifact
 import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -149,17 +151,113 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
-// 릴리스 산출물에 검출 모델이 빠지지 않게 막는다.
+// R8 이 ONNX Runtime 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+//
+// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
+// ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
+// (`FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`), Java 코드가 그 클래스들을 직접
+// 부르지 않아 R8 이 지워도 되는 것으로 본다. 지금은 `proguard-rules.pro` 의
+// `-keep class ai.onnxruntime.** { *; }` 가 막고 있다.
+//
+// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 컴파일도 단위 테스트도
+// 아무 말을 하지 않는다. 그런데 증거는 매핑 파일에 그대로 남는다 — ⑩ 문서가 적어 둔 형태가
+// 바로 이것이다:
+//
+//     살아 있을 때:  ai.onnxruntime.TensorInfo -> ai.onnxruntime.TensorInfo:
+//     깨졌을 때:     ai.onnxruntime.TensorInfo -> at4:
+//
+// 그래서 매핑을 읽어 대조한다. 에뮬레이터로 실제 추론을 돌려 보는 길도 있었지만, 그러자면
+// 계측 테스트를 minify 된 앱에 붙여야 하고 그러면 테스트 하네스가 요구하는 것들을
+// (`androidx.tracing.Trace` · `kotlin.LazyKt` …) 운영 R8 규칙에 계속 남겨야 한다 —
+// 검사 하나 때문에 출시 산출물을 건드리는 맞바꿈이라 접었다. 이 대조는 같은 결함을
+// 에뮬레이터 없이 초 단위로, 결정적으로 잡는다.
+//
+// ⚠️ **매핑 경로를 손으로 적지 않는다.** `build/outputs/mapping/release/mapping.txt` 를 박고
+// `minifyReleaseWithR8` 의 doLast 에서 읽었더니 로컬에서는 통과하고 CI 에서만
+// 「매핑 파일이 없습니다」로 깨졌다 — 그 시점에는 아직 그 자리에 없고, 로컬에서는 앞선
+// 빌드가 남긴 파일을 읽어 **가짜로 통과**한 것이었다. AGP 아티팩트 API 로 받는다.
+androidComponents {
+    // JNI 가 이름으로 찾는 것들. 하나라도 리네임되면 그 타입이 나오는 순간 프로세스가 죽는다.
+    val jniLookedUp = listOf(
+        "ai.onnxruntime.TensorInfo",
+        "ai.onnxruntime.OnnxTensor",
+        "ai.onnxruntime.MapInfo",
+        "ai.onnxruntime.SequenceInfo",
+        "ai.onnxruntime.OnnxJavaType"
+    )
+
+    onVariants(selector().withBuildType("release")) { variant ->
+        val mapping = variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE)
+        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}OnnxKeep") {
+            inputs.file(mapping).withPropertyName("mapping")
+            doLast {
+                val file = mapping.get().asFile
+                check(file.isFile) { "매핑 파일이 없습니다: $file" }
+
+                val renamed = mutableListOf<String>()
+                val seen = mutableSetOf<String>()
+                file.useLines { lines ->
+                    for (line in lines) {
+                        // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
+                        if (!line.startsWith("ai.onnxruntime.")) continue
+                        val arrow = line.indexOf(" -> ")
+                        if (arrow < 0) continue
+                        val from = line.substring(0, arrow)
+                        if (from !in jniLookedUp) continue
+                        seen += from
+                        val to = line.substring(arrow + 4).removeSuffix(":")
+                        if (to != from) renamed += "  $from -> $to"
+                    }
+                }
+
+                check(renamed.isEmpty()) {
+                    """
+                    R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
+                    ${renamed.joinToString("\n")}
+
+                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
+                    사정은 docs/KNOWN-ISSUES.md ⑩.
+                    """.trimIndent()
+                }
+                val missing = jniLookedUp - seen
+                check(missing.isEmpty()) {
+                    """
+                    매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
+
+                    지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
+                    알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
+                    """.trimIndent()
+                }
+                logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
+            }
+        }
+        // 산출물을 만드는 태스크가 이 검사를 반드시 거치게 한다 — CI 뿐 아니라 로컬도.
+        tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
+            .configureEach { dependsOn(verify) }
+    }
+}
+
+// 릴리스 산출물에 검출 모델이 빠지지 않게, 그리고 **정본이 아닌 모델이 들어가지 않게** 막는다.
 //
 // 모델(119MB)은 저장소에 넣지 않으므로(.gitignore) 파일이 없어도 빌드는 그냥 성공한다 —
 // 그 AAB 를 올리면 사용자는 알약 식별을 시도할 때마다 '분석 실패'만 본다.
 // 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
+//
+// ⚠️ **해시까지 본다 — 있는 것만 확인하면 부족했다.** 2026-09-29 까지 assets 에 있던 사본은
+// DVC 정본과 md5 가 달랐다(`10ff2d39…` vs `cb20efc7…`). 뜯어보니 그래프 1005 노드와 가중치
+// 450 개가 전부 같고 INT64 상수 16 개의 protobuf 필드(`raw_data` ↔ `int64_data`)와 producer
+// 문자열만 달라 **내용은 같은 모델**이었지만, 그걸 알아내는 데 파일을 통째로 비교해야 했다.
+// 해시를 박아 두면 다음부터는 빌드가 즉시 답한다. 해시는 그대로 DVC 원격의 객체 키이기도 하다
+// (`s3://nursemate-ml-models/files/md5/cb/20efc7d4…`) — 받는 경로와 검사가 같은 값을 쓴다.
 //
 // 디버그는 막지 않는다 — adb 로 밀어 넣은 파일로 돌릴 수 있다.
 // `run { }` 으로 감싸 **진짜 지역 변수**로 만든다. 스크립트 최상위 val 로 두면 그것도
 // 스크립트 프로퍼티라, doFirst 가 스크립트 객체를 붙들어 설정 캐시가 직렬화하지 못한다.
 run {
     val detectionModel = layout.projectDirectory.file("src/main/assets/rfdetr_seg_small.onnx").asFile
+    // 해시는 `app/detection-model.md5` 한 곳에만 둔다. CI 도 **같은 파일**을 읽어 S3 객체 키를
+    // 만든다(`.github/workflows/release-smoke.yml`) — 받는 경로와 검사가 갈라질 수 없다.
+    val expectedMd5File = layout.projectDirectory.file("detection-model.md5").asFile
 
     tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
         doFirst {
@@ -169,6 +267,26 @@ run {
 
                 저장소에 넣지 않는 파일이라 릴리스 빌드 전에 직접 두어야 합니다.
                 자세한 절차는 docs/RELEASE.md 참고.
+                """.trimIndent()
+            }
+            val expectedMd5 = expectedMd5File.readText().trim()
+            val digest = MessageDigest.getInstance("MD5")
+            detectionModel.inputStream().use { stream ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val actualMd5 = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actualMd5 == expectedMd5) {
+                """
+                검출 모델이 정본이 아닙니다: $detectionModel
+                  기대 md5: $expectedMd5
+                  실제 md5: $actualMd5
+
+                DVC 원격의 것으로 다시 받으십시오 — 절차는 docs/RELEASE.md 「검출 모델」.
                 """.trimIndent()
             }
         }
