@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import java.security.MessageDigest
 import java.util.Properties
@@ -170,7 +171,12 @@ dependencies {
 // (`androidx.tracing.Trace` · `kotlin.LazyKt` …) 운영 R8 규칙에 계속 남겨야 한다 —
 // 검사 하나 때문에 출시 산출물을 건드리는 맞바꿈이라 접었다. 이 대조는 같은 결함을
 // 에뮬레이터 없이 초 단위로, 결정적으로 잡는다.
-run {
+//
+// ⚠️ **매핑 경로를 손으로 적지 않는다.** `build/outputs/mapping/release/mapping.txt` 를 박고
+// `minifyReleaseWithR8` 의 doLast 에서 읽었더니 로컬에서는 통과하고 CI 에서만
+// 「매핑 파일이 없습니다」로 깨졌다 — 그 시점에는 아직 그 자리에 없고, 로컬에서는 앞선
+// 빌드가 남긴 파일을 읽어 **가짜로 통과**한 것이었다. AGP 아티팩트 API 로 받는다.
+androidComponents {
     // JNI 가 이름으로 찾는 것들. 하나라도 리네임되면 그 타입이 나오는 순간 프로세스가 죽는다.
     val jniLookedUp = listOf(
         "ai.onnxruntime.TensorInfo",
@@ -179,49 +185,55 @@ run {
         "ai.onnxruntime.SequenceInfo",
         "ai.onnxruntime.OnnxJavaType"
     )
-    val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
 
-    tasks.matching { it.name == "minifyReleaseWithR8" }.configureEach {
-        doLast {
-            val file = mapping.get().asFile
-            check(file.isFile) { "매핑 파일이 없습니다: $file" }
+    onVariants(selector().withBuildType("release")) { variant ->
+        val mapping = variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE)
+        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}OnnxKeep") {
+            inputs.file(mapping).withPropertyName("mapping")
+            doLast {
+                val file = mapping.get().asFile
+                check(file.isFile) { "매핑 파일이 없습니다: $file" }
 
-            val renamed = mutableListOf<String>()
-            val seen = mutableSetOf<String>()
-            file.useLines { lines ->
-                for (line in lines) {
-                    // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
-                    if (!line.startsWith("ai.onnxruntime.")) continue
-                    val arrow = line.indexOf(" -> ")
-                    if (arrow < 0) continue
-                    val from = line.substring(0, arrow)
-                    if (from !in jniLookedUp) continue
-                    seen += from
-                    val to = line.substring(arrow + 4).removeSuffix(":")
-                    if (to != from) renamed += "  $from -> $to"
+                val renamed = mutableListOf<String>()
+                val seen = mutableSetOf<String>()
+                file.useLines { lines ->
+                    for (line in lines) {
+                        // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
+                        if (!line.startsWith("ai.onnxruntime.")) continue
+                        val arrow = line.indexOf(" -> ")
+                        if (arrow < 0) continue
+                        val from = line.substring(0, arrow)
+                        if (from !in jniLookedUp) continue
+                        seen += from
+                        val to = line.substring(arrow + 4).removeSuffix(":")
+                        if (to != from) renamed += "  $from -> $to"
+                    }
                 }
-            }
 
-            check(renamed.isEmpty()) {
-                """
-                R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
-                ${renamed.joinToString("\n")}
+                check(renamed.isEmpty()) {
+                    """
+                    R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
+                    ${renamed.joinToString("\n")}
 
-                `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
-                사정은 docs/KNOWN-ISSUES.md ⑩.
-                """.trimIndent()
-            }
-            val missing = jniLookedUp - seen
-            check(missing.isEmpty()) {
-                """
-                매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
+                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
+                    사정은 docs/KNOWN-ISSUES.md ⑩.
+                    """.trimIndent()
+                }
+                val missing = jniLookedUp - seen
+                check(missing.isEmpty()) {
+                    """
+                    매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
 
-                지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
-                알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
-                """.trimIndent()
+                    지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
+                    알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
+                    """.trimIndent()
+                }
+                logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
             }
-            logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
         }
+        // 산출물을 만드는 태스크가 이 검사를 반드시 거치게 한다 — CI 뿐 아니라 로컬도.
+        tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }
+            .configureEach { dependsOn(verify) }
     }
 }
 
