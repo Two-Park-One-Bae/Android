@@ -133,6 +133,14 @@ jobs:
                       /usr/local/share/chromium /usr/local/lib/node_modules || true
           echo "비운 뒤:"; df -h /home/runner | tail -1
 
+      # ⚠️ **에뮬레이터를 띄우기 전에 Gradle 데몬을 내린다.** 이 러너는 RAM 이 7GB 뿐인데
+      # 데몬이 빌드 뒤에도 heap 을 쥐고 남아 있고, 에뮬레이터는 스스로 2560MB 를 잡는다.
+      # AVD 설정만 떼어 놓고 보면 잘 뜨는데(탐침 잡으로 확인) 이 잡에서만 못 뜨던 차이가 여기다.
+      - name: Gradle 데몬 내리기
+        run: |
+          ./gradlew --stop || true
+          free -h | head -2
+
       - name: KVM 켜기
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -163,9 +171,12 @@ jobs:
           # 액션 기본값이 `-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim`
           # 으로 필요한 것을 이미 다 담고 있다.
           #
-          # 기본 `cores` 가 2 라 에뮬레이터가 「4 코어에서 더 매끄럽다」고 직접 경고한다.
-          # ubuntu-latest 는 4 vCPU 라 그만큼 준다 — 부팅이 느려 타임아웃에 걸리던 것과 같은 건이다.
-          cores: 4
+          # ⚠️ **`cores` 를 올리지 않는다.** 에뮬레이터가 「4 코어에서 더 매끄럽다」고 경고하길래
+          # 4 를 줬는데, 이 러너는 **2 코어**다(ubuntu24 · 2 코어 · RAM 7GB, 탐침으로 실측).
+          # qemu 가 `Number of SMP cpus requested (4) exceeds the recommended cpus supported by
+          # KVM (2)` 로 되받는다 — 빌드 직후의 바쁜 러너에서는 그 초과 구독이 그대로 느려짐이 된다.
+          # 기본값 2 를 쓴다.
+          #
           # 기본 600초로는 잘렸다. 이 잡은 어차피 오래 도는 관문이라 넉넉히 준다.
           emulator-boot-timeout: 1200
           disable-animations: true
