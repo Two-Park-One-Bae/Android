@@ -351,7 +351,7 @@ private fun PillRow(
             }
 
             Text(
-                text = selected?.let { it.pillName ?: it.pillCode } ?: "알약을 선택해주세요",
+                text = selected?.pillName ?: "알약을 선택해주세요",
                 style = if (selected != null) RowTitleDone else RowTitle,
                 color = if (selected != null) colors.textPrimary else colors.textSecondary,
                 maxLines = 1,

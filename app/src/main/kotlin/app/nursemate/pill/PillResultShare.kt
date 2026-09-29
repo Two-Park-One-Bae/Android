@@ -87,8 +87,10 @@ internal fun List<PillCandidate>.toShareText(today: LocalDate = LocalDate.now())
         appendLine(DIVIDER)
 
         pills.forEachIndexed { index, pill ->
-            appendLine("${index + 1}. ${pill.pillName ?: "이름 미상"}")
-            pill.companyName?.takeIf { it.isNotBlank() }?.let { appendLine("   제조사: $it") }
+            // 계약이 required 라 null 은 오지 않는다. 빈 값은 여전히 올 수 있고, 그때 빈 줄로
+            // 흘려보내면 **몇 번 알약이 빠졌는지 알 수 없다** — 앱 밖으로 나가는 문서라 남긴다.
+            appendLine("${index + 1}. ${pill.pillName.ifBlank { "이름 미상" }}")
+            pill.companyName.takeIf { it.isNotBlank() }?.let { appendLine("   제조사: $it") }
             appendLine("   품목코드: ${pill.pillCode}")
             appendLine()
         }
