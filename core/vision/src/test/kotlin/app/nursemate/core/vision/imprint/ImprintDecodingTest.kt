@@ -19,7 +19,7 @@ class ImprintDecodingTest {
         val classes = ImprintDecoding.CHARSET.length + 1
         // softmax = e^x / (e^x + (n-1)) 이 p 가 되도록 x 를 잡는다.
         val x = ln(probability * (classes - 1) / (1 - probability))
-        return FloatArray(classes).also { it[index] = x.toFloat() }
+        return FloatArray(classes).also { it[index] = x }
     }
 
     private fun indexOf(c: kotlin.Char) = ImprintDecoding.CHARSET.indexOf(c) + 1

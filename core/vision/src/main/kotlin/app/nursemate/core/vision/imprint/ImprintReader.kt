@@ -69,8 +69,17 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
 
     private fun readBlocking(crop: Bitmap): Result {
         val gray = crop.toGrayOnWhite()
+        return readGray(gray).also { gray.release() }
+    }
+
+    /**
+     * 회색조 한 장에서 바로 읽는다 — 비트맵 디코딩을 건너뛰는 자리.
+     *
+     * 대조 테스트가 쓴다. 픽스처를 PNG 로 두면 파이썬과 Android 의 **디코더 차이가 섞여**
+     * 전처리가 아닌 것을 재게 되므로, 기준값은 숫자 배열로 두고 여기로 들어온다.
+     */
+    internal fun readGray(gray: Mat): Result {
         val squared = ImprintPreprocess.toSquare(gray)
-        gray.release()
 
         var offset = 0
         for (zoom in ImprintPreprocess.ZOOMS) {
