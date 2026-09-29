@@ -145,6 +145,9 @@ internal object ImprintPreprocess {
         } else {
             cut.clone()
         }
+        // 뷰도 해제한다. 부모(`p`)의 버퍼를 참조로 붙들고 있어, 이걸 두면 `p.release()` 를
+        // 해도 실제 메모리가 풀리지 않는다.
+        cut.release()
         p.release()
 
         return if (minOf(framed.rows(), framed.cols()) < 4) {
@@ -254,9 +257,15 @@ internal object ImprintPreprocess {
         ffMask.release()
 
         // holes = 1 - flood, 결과 = m | holes
+        //
+        // ⚠️ `Mat.ones(...)` 를 인자 자리에 바로 쓰지 않는다. OpenCV Java 의 Mat 은 네이티브
+        // 버퍼를 들고 있고 GC 파이널라이저에 기대 해제되는데, 회전 144회마다 하나씩 쌓이면
+        // 실기기에서 lowmemorykiller 가 프로세스를 거둬 간다(Galaxy S24 에서 실제로 겪었다).
+        val ones = Mat.ones(m.size(), CvType.CV_8U)
         val holes = Mat()
-        Core.subtract(Mat.ones(m.size(), CvType.CV_8U), flood, holes)
+        Core.subtract(ones, flood, holes)
         Core.bitwise_or(m, holes, m)
+        ones.release()
         holes.release()
         flood.release()
     }

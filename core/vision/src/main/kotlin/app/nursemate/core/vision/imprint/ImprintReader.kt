@@ -79,6 +79,7 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
      * 전처리가 아닌 것을 재게 되므로, 기준값은 숫자 배열로 두고 여기로 들어온다.
      */
     internal fun readGray(gray: Mat): Result {
+        val t0 = System.nanoTime()
         val squared = ImprintPreprocess.toSquare(gray)
 
         var offset = 0
@@ -97,7 +98,19 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
         }
         squared.release()
 
-        return decode(runSession())
+        val t1 = System.nanoTime()
+        val logits = runSession()
+        val t2 = System.nanoTime()
+        val result = decode(logits)
+        val t3 = System.nanoTime()
+
+        return result.copy(
+            timings = Timings(
+                preprocessMs = (t1 - t0) / NANOS_PER_MS,
+                inferenceMs = (t2 - t1) / NANOS_PER_MS,
+                decodeMs = (t3 - t2) / NANOS_PER_MS
+            )
+        )
     }
 
     /** @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). */
@@ -137,7 +150,8 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
         return Result(
             imprint = ImprintDecoding.adopt(bestChars, bestScore),
             pair = bestPair,
-            score = bestScore
+            score = bestScore,
+            timings = Timings()
         )
     }
 
@@ -152,7 +166,20 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
      * @param pair 고르는 데 쓴 두 글자. 진단용이고 서버로 보내지 않는다
      * @param score 그 두 글자의 확신도. [ImprintDecoding.ADOPT_THRESHOLD] 와 비교된 값이다
      */
-    data class Result(val imprint: String?, val pair: String, val score: Float)
+    data class Result(val imprint: String?, val pair: String, val score: Float, val timings: Timings = Timings())
+
+    /**
+     * 단계별 소요. **어디가 비싼지 알아야 줄일 곳을 정한다.**
+     *
+     * 전처리가 지배적이면 TTA 장수를 줄이는 것이 답이고, 추론이 지배적이면 스레드나 배치를
+     * 손봐야 한다. 합계만 보면 둘을 구분할 수 없다.
+     *
+     * ⚠️ **세션 생성은 여기 없다.** 21MB 모델을 여는 비용은 한 번만 드는데 여기 섞으면
+     * 알약마다 그만큼 든다고 잘못 읽힌다. 그건 호출부가 따로 잰다.
+     */
+    data class Timings(val preprocessMs: Long = 0, val inferenceMs: Long = 0, val decodeMs: Long = 0) {
+        val totalMs: Long get() = preprocessMs + inferenceMs + decodeMs
+    }
 
     companion object {
         /** 검출기와 같은 값. 실측 근거는 `PillDetector.DEFAULT_THREADS`. */
@@ -164,6 +191,7 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
         private const val INPUT_NAME = "image"
         private const val PLANE = ImprintPreprocess.SIDE * ImprintPreprocess.SIDE
         private const val SIDE_L = ImprintPreprocess.SIDE.toLong()
+        private const val NANOS_PER_MS = 1_000_000L
     }
 }
 
