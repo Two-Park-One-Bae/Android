@@ -180,20 +180,8 @@ jobs:
           # 기본 600초로는 잘렸다. 이 잡은 어차피 오래 도는 관문이라 넉넉히 준다.
           emulator-boot-timeout: 1200
           disable-animations: true
-          script: |
-            ./.github/scripts/release-smoke.sh
-            ./gradlew :app:connectedReleaseAndroidTest --console=plain
+          script: ./.github/scripts/release-smoke.sh
 
       # ⚠️ **산출물을 올리지 않는다.** 옛 release.yml 을 지운 이유 하나가 이것이었다 —
       #    CI 가 내놓은 AAB 를 사정 모르는 사람이 Play 에 올릴 위험. 이 잡은 검사만 하고
       #    아무것도 남기지 않는다. Play 에 올릴 산출물은 태그 커밋에서 로컬로 만든다.
-      - name: 실패 시 로그만 남긴다
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-smoke-reports
-          path: |
-            app/build/reports/androidTests/
-            app/build/outputs/androidTest-results/
-          retention-days: 7
-          if-no-files-found: ignore

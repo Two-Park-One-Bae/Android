@@ -47,8 +47,6 @@ android {
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
         versionCode = 11
         versionName = "1.0.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -82,22 +80,6 @@ android {
             configure<CrashlyticsExtension> { nativeSymbolUploadEnabled = true }
         }
     }
-
-    // ⚠️ **계측 테스트는 release 를 상대로 돌린다 — debug 로는 잡을 게 없다.**
-    // 여기 있는 테스트의 존재 이유가 R8 이다. 우리가 릴리스에서만 겪은 결함 넷 중 셋이
-    // `assembleRelease` 로는 안 보이고 **그 빌드를 실제로 실행해야** 보였다
-    // (카카오 enum 리플렉션 · WorkManagerInitializer · ONNX 클래스 리네임). debug 로 돌리면
-    // 그 셋을 전부 통과시킨다. 표는 docs/RELEASE.md 「릴리스 스모크 CI」.
-    //
-    // 대가가 둘 있다.
-    // - `connectedAndroidTest` 가 release 를 쓰므로 **서명이 없으면 설치가 안 된다** —
-    //   `secrets.properties` 의 `RELEASE_*` 가 없는 사람은 이 태스크를 못 돈다
-    //   (`ReleaseSigning.kt` 는 서명 정보가 없으면 미서명으로 빌드한다). CI 는 키스토어를
-    //   복원해서 돌린다.
-    // - **단위 테스트도 함께 release 변이를 탄다**(`test` → `testReleaseUnitTest`). 그래서
-    //   `BuildConfig.DEBUG` 가 false 다. 지금 테스트들은 그 값을 보지 않아 영향이 없지만,
-    //   앞으로 debug 를 전제한 테스트를 쓰면 여기서 갈린다.
-    testBuildType = "release"
 }
 
 dependencies {
@@ -166,11 +148,81 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+}
 
-    // R8 을 거친 release 빌드를 실제로 실행해 보는 계측 테스트(`testBuildType = "release"`).
-    androidTestImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.ext.junit)
+// R8 이 ONNX Runtime 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+//
+// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
+// ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
+// (`FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`), Java 코드가 그 클래스들을 직접
+// 부르지 않아 R8 이 지워도 되는 것으로 본다. 지금은 `proguard-rules.pro` 의
+// `-keep class ai.onnxruntime.** { *; }` 가 막고 있다.
+//
+// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 컴파일도 단위 테스트도
+// 아무 말을 하지 않는다. 그런데 증거는 매핑 파일에 그대로 남는다 — ⑩ 문서가 적어 둔 형태가
+// 바로 이것이다:
+//
+//     살아 있을 때:  ai.onnxruntime.TensorInfo -> ai.onnxruntime.TensorInfo:
+//     깨졌을 때:     ai.onnxruntime.TensorInfo -> at4:
+//
+// 그래서 매핑을 읽어 대조한다. 에뮬레이터로 실제 추론을 돌려 보는 길도 있었지만, 그러자면
+// 계측 테스트를 minify 된 앱에 붙여야 하고 그러면 테스트 하네스가 요구하는 것들을
+// (`androidx.tracing.Trace` · `kotlin.LazyKt` …) 운영 R8 규칙에 계속 남겨야 한다 —
+// 검사 하나 때문에 출시 산출물을 건드리는 맞바꿈이라 접었다. 이 대조는 같은 결함을
+// 에뮬레이터 없이 초 단위로, 결정적으로 잡는다.
+run {
+    // JNI 가 이름으로 찾는 것들. 하나라도 리네임되면 그 타입이 나오는 순간 프로세스가 죽는다.
+    val jniLookedUp = listOf(
+        "ai.onnxruntime.TensorInfo",
+        "ai.onnxruntime.OnnxTensor",
+        "ai.onnxruntime.MapInfo",
+        "ai.onnxruntime.SequenceInfo",
+        "ai.onnxruntime.OnnxJavaType"
+    )
+    val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
+
+    tasks.matching { it.name == "minifyReleaseWithR8" }.configureEach {
+        doLast {
+            val file = mapping.get().asFile
+            check(file.isFile) { "매핑 파일이 없습니다: $file" }
+
+            val renamed = mutableListOf<String>()
+            val seen = mutableSetOf<String>()
+            file.useLines { lines ->
+                for (line in lines) {
+                    // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
+                    if (!line.startsWith("ai.onnxruntime.")) continue
+                    val arrow = line.indexOf(" -> ")
+                    if (arrow < 0) continue
+                    val from = line.substring(0, arrow)
+                    if (from !in jniLookedUp) continue
+                    seen += from
+                    val to = line.substring(arrow + 4).removeSuffix(":")
+                    if (to != from) renamed += "  $from -> $to"
+                }
+            }
+
+            check(renamed.isEmpty()) {
+                """
+                R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
+                ${renamed.joinToString("\n")}
+
+                `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
+                사정은 docs/KNOWN-ISSUES.md ⑩.
+                """.trimIndent()
+            }
+            val missing = jniLookedUp - seen
+            check(missing.isEmpty()) {
+                """
+                매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
+
+                지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
+                알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
+                """.trimIndent()
+            }
+            logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
+        }
+    }
 }
 
 // 릴리스 산출물에 검출 모델이 빠지지 않게, 그리고 **정본이 아닌 모델이 들어가지 않게** 막는다.

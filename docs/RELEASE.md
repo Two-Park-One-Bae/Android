@@ -96,22 +96,30 @@ CI 는 실패했을 때의 테스트 리포트만 남긴다.
 
 ### 왜 빌드에서 멈추지 않고 켜 보는가
 
-릴리스에서만 겪은 결함을 늘어놓고 무엇이 잡히는지 세어 보면 이렇다.
+릴리스에서만 겪은 결함을 늘어놓고 무엇이 잡히는지 세어 보면 이렇다. 「빌드만」은 로컬
+릴리스 빌드에서도 그대로 걸린다 — 가드가 Gradle 에 있지 CI 에 있지 않다.
 
 | 결함 | 증상 시점 | 빌드만 | 켜 보면 |
 |---|---|---|---|
 | 카카오 `*ErrorCause` enum 을 R8 이 리네임 (PR #14) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ ¹ |
 | `glance-appwidget` 이 끌고 온 `WorkManagerInitializer` (PR #21) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ |
 | 워치 릴리스가 미서명 (PR #21, 같은 날) | 설치 불가 · Data Layer 단절 | **○** | ○ |
-| R8 이 `ai.onnxruntime.**` 리네임 (⑩ · NM-466) | 「알약 식별」 100% | ✗ | ○ ² |
+| R8 이 `ai.onnxruntime.**` 리네임 (⑩ · NM-466) | 「알약 식별」 100% | **○** ² | ○ |
 | ONNX Runtime 1.29.0 의 SME 명령 (⑧) | 「이 사진 사용」 직후 | ✗ | ✗ ³ |
 | App Check 에 SHA-256 미등록 (⑦) | Play 설치본만 | ✗ | ✗ ⁴ |
 
 1. **`KAKAO_APP_KEY_RELEASE` 시크릿이 있어야 이 줄이 ○ 다.** 키가 비면 앱이 `KakaoSdk.init` 을
    건너뛰어(`NurseMateApplication`) 그 경로가 실행되지 않는다. 시크릿이 없으면 ✗ 로 읽어야 한다.
-2. `PillDetectorReleaseSmokeTest`(`app/src/androidTest`)가 본다. 빈 비트맵으로 충분하다 —
-   죽던 자리가 검출이 아니라 **결과를 읽는 단계**다. `testBuildType = "release"` 로 두어야
-   R8 을 거친 코드를 상대한다.
+2. **에뮬레이터가 필요 없다 — 매핑 파일이 답을 갖고 있다.** ⑩ 은 `-keep class
+   ai.onnxruntime.** { *; }` 가 사라지면 재발하는데, 그러면 매핑에 그대로 찍힌다:
+   `ai.onnxruntime.TensorInfo -> at4:`. `app/build.gradle.kts` 의 가드가
+   `minifyReleaseWithR8` 뒤에 매핑을 읽어 JNI 가 이름으로 찾는 클래스 다섯이 리네임되지
+   않았는지 대조하고, 하나라도 바뀌었으면 빌드를 세운다. **로컬 릴리스 빌드도 같이 막는다.**
+
+   에뮬레이터로 실제 추론을 돌리는 길도 시도했으나 접었다. 계측 테스트를 minify 된 앱에
+   붙이려면 `testBuildType = "release"` 가 필요하고, 그러면 테스트 APK 도 R8 을 타면서
+   하네스가 요구하는 것들(`androidx.tracing.Trace`·`kotlin.LazyKt` …)을 **운영 R8 규칙에**
+   계속 남겨야 한다 — 검사 하나 때문에 출시 산출물을 건드리는 맞바꿈이다.
 3. Exynos 2400 에 SME 가 없어서 나는 것이라 에뮬레이터 CPU 로는 원리상 재현되지 않는다.
    debug 에서도 났으니 릴리스 전용도 아니다.
 4. Play 앱 서명과 Play Integrity 가 필요하다 — Play 내부 테스트에서 본다.
