@@ -108,8 +108,13 @@ CI 는 실패했을 때의 테스트 리포트만 남긴다.
 | ONNX Runtime 1.29.0 의 SME 명령 (⑧) | 「이 사진 사용」 직후 | ✗ | ✗ ³ |
 | App Check 에 SHA-256 미등록 (⑦) | Play 설치본만 | ✗ | ✗ ⁴ |
 
-1. **`KAKAO_APP_KEY_RELEASE` 시크릿이 있어야 이 줄이 ○ 다.** 키가 비면 앱이 `KakaoSdk.init` 을
-   건너뛰어(`NurseMateApplication`) 그 경로가 실행되지 않는다. 시크릿이 없으면 ✗ 로 읽어야 한다.
+1. **`KAKAO_APP_KEY_RELEASE` 시크릿이 있어야 이 줄이 ○ 다** — 2026-09-29 등록했다.
+   키가 비면 앱이 `KakaoSdk.init` 을 **조용히 건너뛰는데**(`NurseMateApplication`) 기동 검사는
+   그대로 통과한다. 덮지 못한 채 초록불이 되는 것이 가장 나쁘므로, 잡이 키 주입 여부를 따로
+   확인한다 — `kakaoAppKey()` 가 키가 비면 매니페스트 스킴을 `kakao-unset` 으로 박으므로
+   빌드된 APK 에서 그 값을 aapt2 로 꺼내 대조한다(`kakao` + 32자리 = 37자).
+   키 해시는 필요 없다. 그건 **로그인 요청 때** 카카오 서버가 검증하는 값이고 이 잡은
+   로그인을 하지 않는다 — 릴리스는 App Check 가 Play Integrity 라 에뮬레이터에서 어차피 막힌다.
 2. **에뮬레이터가 필요 없다 — 매핑 파일이 답을 갖고 있다.** ⑩ 은 `-keep class
    ai.onnxruntime.** { *; }` 가 사라지면 재발하는데, 그러면 매핑에 그대로 찍힌다:
    `ai.onnxruntime.TensorInfo -> at4:`. `app/build.gradle.kts` 의 가드가
