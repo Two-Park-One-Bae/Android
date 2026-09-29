@@ -156,16 +156,18 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
-          # ⚠️ **userdata 파티션을 명시해 줄인다 — 늘리는 게 아니다.** api-level 34 의 기본값은
-          # 7372.80 MB 를 요구하는데 이 잡이 여기 올 때쯤 러너에 남는 공간이 그보다 적어
-          # 에뮬레이터가 부팅 전에 `FATAL | Not enough space to create userdata partition` 으로
-          # 죽는다(실측 4763.75 MB 남음). 우리가 쓰는 양은 APK 130MB + 테스트가 asset 의 모델
-          # 125MB 를 cacheDir 로 꺼내는 것(`PillModelFile` 과 같은 사정 — ORT 세션이 파일 경로를
-          # 요구한다)이라 3G 로 충분하다.
-          disk-size: 3G
-          # 추론이 네이티브로 125MB 를 올린다. 에뮬레이터가 스스로 2560MB 로 올리지만 여유를 준다.
-          ram-size: 4096M
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          # ⚠️ **`disk-size`·`ram-size` 를 주지 않는다.** userdata 를 3G 로 줄여 봤더니 에뮬레이터가
+          # 뜨기는 하는데 `device offline` 에 머물러 부팅을 못 끝냈다. api-level 34 가 요구하는
+          # 7372.80 MB 에는 이유가 있다 — 공간이 모자랄 때의 답은 파티션을 줄이는 것이 아니라
+          # **러너를 비우는 것**이고, 그건 위 단계가 한다. `emulator-options` 도 주지 않는다:
+          # 액션 기본값이 `-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim`
+          # 으로 필요한 것을 이미 다 담고 있다.
+          #
+          # 기본 `cores` 가 2 라 에뮬레이터가 「4 코어에서 더 매끄럽다」고 직접 경고한다.
+          # ubuntu-latest 는 4 vCPU 라 그만큼 준다 — 부팅이 느려 타임아웃에 걸리던 것과 같은 건이다.
+          cores: 4
+          # 기본 600초로는 잘렸다. 이 잡은 어차피 오래 도는 관문이라 넉넉히 준다.
+          emulator-boot-timeout: 1200
           disable-animations: true
           script: |
             ./.github/scripts/release-smoke.sh
