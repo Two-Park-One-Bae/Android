@@ -36,28 +36,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: 빌드 환경 (JDK · Gradle · secrets · google-services)
+        uses: ./.github/actions/setup-android
         with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: gradle/actions/setup-gradle@v6
-
-      - name: secrets.properties 생성
-        run: |
-          printf 'BASE_URL_DEBUG=%s\nBASE_URL_RELEASE=%s\n' \
-            "${{ secrets.BASE_URL_DEV }}" "${{ secrets.BASE_URL_PROD }}" > secrets.properties
-
-      # ⚠️ debug·release 를 **각각** 만든다 — 플러그인이 파일 안의 패키지명을 검증한다
-      #    (사정은 ci.yml 의 같은 단계).
-      - name: google-services.json 생성
-        env:
-          GS_DEBUG: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG }}
-          GS_RELEASE: ${{ secrets.GOOGLE_SERVICES_JSON_RELEASE }}
-        run: |
-          mkdir -p app/src/debug app/src/release
-          printf '%s' "$GS_DEBUG"   | base64 -d > app/src/debug/google-services.json
-          printf '%s' "$GS_RELEASE" | base64 -d > app/src/release/google-services.json
+          base-url-dev: ${{ secrets.BASE_URL_DEV }}
+          base-url-prod: ${{ secrets.BASE_URL_PROD }}
+          google-services-debug: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG }}
+          google-services-release: ${{ secrets.GOOGLE_SERVICES_JSON_RELEASE }}
 
       # ⚠️ **서명까지 해야 이 검사가 뜻이 있다.** `ReleaseSigning.kt` 는 서명 정보가 없으면
       #    release 를 조용히 미서명으로 내놓는데, 미서명 APK 는 에뮬레이터에 설치되지 않는다.
