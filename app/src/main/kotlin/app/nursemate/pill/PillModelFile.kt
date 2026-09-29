@@ -23,7 +23,10 @@ import kotlinx.coroutines.withContext
  *
  * ## 저장소를 두 배 쓴다
  * APK 안(압축)과 꺼낸 파일 양쪽에 있게 된다. Play Asset Delivery 를 쓰면 꺼내는 단계 없이
- * 경로를 받을 수 있는데, 그건 모델 배포 방식을 정할 때 함께 본다(NM-396 ADR).
+ * 경로를 받을 수 있는데, 그건 모델 배포 방식을 정할 때 함께 본다 — **아직 티켓이 없다.**
+ * (NM-396 을 가리키고 있었으나 그건 「RF-DETR-seg Android 변환 스파이크」로 2026-09-01 에
+ * 닫혔고 배포 방식과는 무관하다. 모델 수급 경로는 NM-483 에서 DVC 로 정했다 —
+ * `docs/RELEASE.md` 「검출 모델」.)
  */
 @Singleton
 class PillModelFile @Inject constructor(@param:ApplicationContext private val context: Context) {

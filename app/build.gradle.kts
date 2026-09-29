@@ -1,4 +1,5 @@
 import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -46,6 +47,8 @@ android {
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
         versionCode = 11
         versionName = "1.0.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -79,6 +82,22 @@ android {
             configure<CrashlyticsExtension> { nativeSymbolUploadEnabled = true }
         }
     }
+
+    // ⚠️ **계측 테스트는 release 를 상대로 돌린다 — debug 로는 잡을 게 없다.**
+    // 여기 있는 테스트의 존재 이유가 R8 이다. 우리가 릴리스에서만 겪은 결함 넷 중 셋이
+    // `assembleRelease` 로는 안 보이고 **그 빌드를 실제로 실행해야** 보였다
+    // (카카오 enum 리플렉션 · WorkManagerInitializer · ONNX 클래스 리네임). debug 로 돌리면
+    // 그 셋을 전부 통과시킨다. 표는 docs/RELEASE.md 「릴리스 스모크 CI」.
+    //
+    // 대가가 둘 있다.
+    // - `connectedAndroidTest` 가 release 를 쓰므로 **서명이 없으면 설치가 안 된다** —
+    //   `secrets.properties` 의 `RELEASE_*` 가 없는 사람은 이 태스크를 못 돈다
+    //   (`ReleaseSigning.kt` 는 서명 정보가 없으면 미서명으로 빌드한다). CI 는 키스토어를
+    //   복원해서 돌린다.
+    // - **단위 테스트도 함께 release 변이를 탄다**(`test` → `testReleaseUnitTest`). 그래서
+    //   `BuildConfig.DEBUG` 가 false 다. 지금 테스트들은 그 값을 보지 않아 영향이 없지만,
+    //   앞으로 debug 를 전제한 테스트를 쓰면 여기서 갈린다.
+    testBuildType = "release"
 }
 
 dependencies {
@@ -147,19 +166,34 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+
+    // R8 을 거친 release 빌드를 실제로 실행해 보는 계측 테스트(`testBuildType = "release"`).
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
 
-// 릴리스 산출물에 검출 모델이 빠지지 않게 막는다.
+// 릴리스 산출물에 검출 모델이 빠지지 않게, 그리고 **정본이 아닌 모델이 들어가지 않게** 막는다.
 //
 // 모델(119MB)은 저장소에 넣지 않으므로(.gitignore) 파일이 없어도 빌드는 그냥 성공한다 —
 // 그 AAB 를 올리면 사용자는 알약 식별을 시도할 때마다 '분석 실패'만 본다.
 // 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
+//
+// ⚠️ **해시까지 본다 — 있는 것만 확인하면 부족했다.** 2026-09-29 까지 assets 에 있던 사본은
+// DVC 정본과 md5 가 달랐다(`10ff2d39…` vs `cb20efc7…`). 뜯어보니 그래프 1005 노드와 가중치
+// 450 개가 전부 같고 INT64 상수 16 개의 protobuf 필드(`raw_data` ↔ `int64_data`)와 producer
+// 문자열만 달라 **내용은 같은 모델**이었지만, 그걸 알아내는 데 파일을 통째로 비교해야 했다.
+// 해시를 박아 두면 다음부터는 빌드가 즉시 답한다. 해시는 그대로 DVC 원격의 객체 키이기도 하다
+// (`s3://nursemate-ml-models/files/md5/cb/20efc7d4…`) — 받는 경로와 검사가 같은 값을 쓴다.
 //
 // 디버그는 막지 않는다 — adb 로 밀어 넣은 파일로 돌릴 수 있다.
 // `run { }` 으로 감싸 **진짜 지역 변수**로 만든다. 스크립트 최상위 val 로 두면 그것도
 // 스크립트 프로퍼티라, doFirst 가 스크립트 객체를 붙들어 설정 캐시가 직렬화하지 못한다.
 run {
     val detectionModel = layout.projectDirectory.file("src/main/assets/rfdetr_seg_small.onnx").asFile
+    // 해시는 `app/detection-model.md5` 한 곳에만 둔다. CI 도 **같은 파일**을 읽어 S3 객체 키를
+    // 만든다(`.github/workflows/release-smoke.yml`) — 받는 경로와 검사가 갈라질 수 없다.
+    val expectedMd5File = layout.projectDirectory.file("detection-model.md5").asFile
 
     tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
         doFirst {
@@ -169,6 +203,26 @@ run {
 
                 저장소에 넣지 않는 파일이라 릴리스 빌드 전에 직접 두어야 합니다.
                 자세한 절차는 docs/RELEASE.md 참고.
+                """.trimIndent()
+            }
+            val expectedMd5 = expectedMd5File.readText().trim()
+            val digest = MessageDigest.getInstance("MD5")
+            detectionModel.inputStream().use { stream ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val actualMd5 = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actualMd5 == expectedMd5) {
+                """
+                검출 모델이 정본이 아닙니다: $detectionModel
+                  기대 md5: $expectedMd5
+                  실제 md5: $actualMd5
+
+                DVC 원격의 것으로 다시 받으십시오 — 절차는 docs/RELEASE.md 「검출 모델」.
                 """.trimIndent()
             }
         }

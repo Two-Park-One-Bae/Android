@@ -1,0 +1,158 @@
+name: 릴리스 스모크
+
+# `main` 으로 가는 PR 에서만 돈다 — 그게 릴리스가 나가는 유일한 경로다(`release/*` → `main`).
+#
+# ⚠️ **모든 PR 에 걸지 않는다.** 에뮬레이터를 띄우고 R8 빌드를 돌려 30분 이상 걸린다.
+# 여기서 base 를 좁히는 것은 `ci.yml` 의 주의사항과 반대로 보이지만 사정이 다르다 —
+# `ci.yml` 은 스택 PR 이 검증 없이 지나가는 것을 막아야 하고, 이쪽은 릴리스 직전 관문이다.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  # TODO(NM-483): 이 잡이 초록불인 것을 확인하려고 둔 임시 트리거다. 머지 전에 지운다.
+  push:
+    branches: ['feature/NM-483-dvc-model-release-path']
+
+concurrency:
+  group: release-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # DVC 원격(S3)에서 검출 모델을 받으려면 OIDC 토큰이 필요하다.
+  # 역할은 `nursemate-ml-models-read-role`, 신뢰 정책이 이 저장소를 이미 허용한다(NM-480).
+  id-token: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: secrets.properties 생성
+        run: |
+          printf 'BASE_URL_DEBUG=%s\nBASE_URL_RELEASE=%s\n' \
+            "${{ secrets.BASE_URL_DEV }}" "${{ secrets.BASE_URL_PROD }}" > secrets.properties
+
+      # ⚠️ debug·release 를 **각각** 만든다 — 플러그인이 파일 안의 패키지명을 검증한다
+      #    (사정은 ci.yml 의 같은 단계).
+      - name: google-services.json 생성
+        env:
+          GS_DEBUG: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG }}
+          GS_RELEASE: ${{ secrets.GOOGLE_SERVICES_JSON_RELEASE }}
+        run: |
+          mkdir -p app/src/debug app/src/release
+          printf '%s' "$GS_DEBUG"   | base64 -d > app/src/debug/google-services.json
+          printf '%s' "$GS_RELEASE" | base64 -d > app/src/release/google-services.json
+
+      # ⚠️ **서명까지 해야 이 검사가 뜻이 있다.** `ReleaseSigning.kt` 는 서명 정보가 없으면
+      #    release 를 조용히 미서명으로 내놓는데, 미서명 APK 는 에뮬레이터에 설치되지 않는다.
+      #    그리고 「워치만 미서명」이 실제로 나갔던 결함이라(2026-09-11) 두 APK 의 인증서를
+      #    맞대 보는 것 자체가 검사 항목이다.
+      - name: 업로드 키스토어 복원
+        env:
+          KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: printf '%s' "$KEYSTORE" | base64 -d > upload-keystore.jks
+
+      - name: AWS 자격 증명 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ML_MODELS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      # DVC 원격은 **내용주소 저장소**다 — 객체 키가 곧 md5 다. 그래서 `dvc` 도, ML 저장소
+      # 접근 권한도 필요하지 않다. `aws s3 cp` 한 줄이면 되고, 받은 것이 맞는지는 경로 자체가
+      # 보증한다(그래도 Gradle 가드가 한 번 더 본다).
+      # 해시는 `app/detection-model.md5` 가 정본 — 사람이 받는 절차는 docs/RELEASE.md.
+      - name: 검출 모델 받기
+        run: |
+          MD5="$(tr -d '[:space:]' < app/detection-model.md5)"
+          echo "정본 md5: $MD5"
+          aws s3 cp "s3://nursemate-ml-models/files/md5/${MD5:0:2}/${MD5:2}" \
+            app/src/main/assets/rfdetr_seg_small.onnx
+          ls -l app/src/main/assets/rfdetr_seg_small.onnx
+
+      - name: 릴리스 빌드 (폰 · 워치)
+        env:
+          RELEASE_STORE_FILE: upload-keystore.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          # 비어 있으면 앱이 KakaoSdk.init 을 건너뛴다 — 그러면 카카오 enum 리플렉션 경로가
+          # 실행되지 않아 PR #14 부류를 못 잡는다. 시크릿이 없으면 그만큼 덜 덮는다.
+          KAKAO_APP_KEY_RELEASE: ${{ secrets.KAKAO_APP_KEY_RELEASE }}
+        run: ./gradlew :app:assembleRelease :wear:assembleRelease --console=plain
+
+      # Data Layer 는 applicationId 가 같고 **인증서까지 같은** 앱끼리만 붙는다.
+      # `jarsigner` 를 쓰지 않는다 — minSdk 26 이라 v1 서명이 없을 수 있어 「미서명」으로 잘못 읽는다.
+      - name: 두 APK 의 서명이 같은지 대조
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -1)"
+          echo "apksigner: $APKSIGNER"
+          fingerprint() {
+            "$APKSIGNER" verify --print-certs "$1" \
+              | sed -n 's/.*SHA-256 digest: \([0-9a-f]*\).*/\1/p' | head -1
+          }
+          PHONE="$(fingerprint app/build/outputs/apk/release/app-release.apk)"
+          WEAR="$(fingerprint wear/build/outputs/apk/release/wear-release.apk)"
+          echo "폰 : ${PHONE:-(없음)}"
+          echo "워치: ${WEAR:-(없음)}"
+          if [ -z "$PHONE" ] || [ -z "$WEAR" ]; then
+            echo "::error::서명 인증서를 읽지 못했다 — 미서명 산출물일 수 있다"
+            exit 1
+          fi
+          if [ "$PHONE" != "$WEAR" ]; then
+            echo "::error::폰과 워치의 서명 인증서가 다르다 — 릴리스에서 Data Layer 가 끊긴다"
+            exit 1
+          fi
+
+      - name: KVM 켜기
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # ⚠️ `google_apis` 이미지를 쓴다. Firebase(Crashlytics·Analytics·Remote Config)가
+      #    Play 서비스를 찾으므로, 없는 이미지에서는 실기기와 다른 경로를 탄다.
+      #    Play Integrity 는 어차피 통하지 않는다 — App Check 가 막히는 것은 정상이고
+      #    크래시가 아니다(docs/RELEASE.md 「사이드로드라서 고장 난 것처럼 보이는 것들」).
+      - name: 에뮬레이터에서 기동 검사 + ONNX 왕복
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          RELEASE_STORE_FILE: upload-keystore.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          KAKAO_APP_KEY_RELEASE: ${{ secrets.KAKAO_APP_KEY_RELEASE }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            ./.github/scripts/release-smoke.sh
+            ./gradlew :app:connectedReleaseAndroidTest --console=plain
+
+      # ⚠️ **산출물을 올리지 않는다.** 옛 release.yml 을 지운 이유 하나가 이것이었다 —
+      #    CI 가 내놓은 AAB 를 사정 모르는 사람이 Play 에 올릴 위험. 이 잡은 검사만 하고
+      #    아무것도 남기지 않는다. Play 에 올릴 산출물은 태그 커밋에서 로컬로 만든다.
+      - name: 실패 시 로그만 남긴다
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-smoke-reports
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          retention-days: 7
+          if-no-files-found: ignore
