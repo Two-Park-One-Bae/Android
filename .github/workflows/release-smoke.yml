@@ -62,14 +62,18 @@ jobs:
       # DVC 원격은 **내용주소 저장소**다 — 객체 키가 곧 md5 다. 그래서 `dvc` 도, ML 저장소
       # 접근 권한도 필요하지 않다. `aws s3 cp` 한 줄이면 되고, 받은 것이 맞는지는 경로 자체가
       # 보증한다(그래도 Gradle 가드가 한 번 더 본다).
-      # 해시는 `app/detection-model.md5` 가 정본 — 사람이 받는 절차는 docs/RELEASE.md.
-      - name: 검출 모델 받기
+      #
+      # 목록은 `app/models.md5` 가 정본이고 **Gradle 가드도 같은 파일을 읽는다** — 받는 경로와
+      # 검사가 갈라질 수 없다. 사람이 받는 절차는 docs/RELEASE.md 「검출 모델」.
+      - name: 온디바이스 모델 받기
         run: |
-          MD5="$(tr -d '[:space:]' < app/detection-model.md5)"
-          echo "정본 md5: $MD5"
-          aws s3 cp "s3://nursemate-ml-models/files/md5/${MD5:0:2}/${MD5:2}" \
-            app/src/main/assets/rfdetr_seg_small.onnx
-          ls -l app/src/main/assets/rfdetr_seg_small.onnx
+          mkdir -p app/src/main/assets
+          grep -vE '^\s*(#|$)' app/models.md5 | while read -r MD5 NAME; do
+            echo "받는 중: $NAME (md5 $MD5)"
+            aws s3 cp "s3://nursemate-ml-models/files/md5/${MD5:0:2}/${MD5:2}" \
+              "app/src/main/assets/$NAME"
+          done
+          ls -l app/src/main/assets/
 
       - name: 릴리스 빌드 (폰 · 워치)
         env:

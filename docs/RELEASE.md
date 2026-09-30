@@ -26,40 +26,44 @@
 - 주입 경로: `secrets.properties`(gitignored) > 환경변수 — `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` (`secrets.properties.sample` 참고).
 - 서명 정보가 없으면 release 빌드는 **미서명**으로 산출된다 (PR CI가 여기 해당 — 빌드는 성공하되 Play 업로드 불가).
 
-## 검출 모델 (필수 · 저장소에 없음)
+## 온디바이스 모델 (필수 · 저장소에 없음)
 
-알약 식별용 ONNX 모델은 **저장소에 넣지 않는다.** 119MB 바이너리라 한 번 커밋하면 이후 모든
-clone 이 영구히 그 비용을 낸다(git 은 큰 파일을 되돌려 지우지 못한다).
+ONNX 모델은 **저장소에 넣지 않는다.** 한 번 커밋하면 이후 모든 clone 이 영구히 그 비용을
+낸다(git 은 큰 파일을 되돌려 지우지 못한다).
 
-**정본은 ML 저장소의 DVC 다** — `models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx.dvc`
-가 가리키는 S3 객체(`s3://nursemate-ml-models` · `ap-northeast-2`). 릴리스 빌드 전에 받아 둔다:
+**목록과 해시는 `app/models.md5` 한 곳이다.**
+
+| 모델 | 크기 | 쓰는 곳 |
+|---|---|---|
+| `rfdetr_seg_small.onnx` | 119MB | 낱알 검출·마스크 (`PillDetector`) |
+| `reader_ep60_s1.onnx` | 21MB | 각인 판독 (`ImprintReader`, NM-485) |
+
+**정본은 ML 저장소의 DVC** 다(`s3://nursemate-ml-models` · `ap-northeast-2`).
+릴리스 빌드 전에 받아 둔다:
 
 ```bash
 # 사전: dvc(brew install dvc) · ML 저장소 SSH 접근 · 버킷 읽기 권한이 있는 AWS 프로필
 AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
-  models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx \
-  -o app/src/main/assets/
+  models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx -o app/src/main/assets/
+AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
+  models/imprint/20260907-crnn-ep60-s1/reader_ep60_s1.onnx -o app/src/main/assets/
 ```
 
 `dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(125MB, 약 16초).
-ML 클론이 이미 있으면 그쪽이 더 빠르다:
+ML 클론이 이미 있으면 `dvc pull` 후 복사하는 쪽이 더 빠르다.
 
-```bash
-(cd ../ML && AWS_PROFILE=nursemate-dvc dvc pull models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx)
-cp ../ML/models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx app/src/main/assets/
-```
-
-- **맞는 파일인지는 빌드가 본다.** 정본 md5 가 `app/detection-model.md5` 에 있고
-  `bundleRelease`·`assembleRelease` 가 매번 대조한다. 파일이 없거나 해시가 다르면 그 자리에서
-  **실패한다**(`app/build.gradle.kts` 의 가드). 조용히 모델 없는 AAB 가 나가면 사용자는
-  식별할 때마다 '분석 실패'만 본다.
+- **맞는 파일인지는 빌드가 본다.** `bundleRelease`·`assembleRelease` 가 `app/models.md5` 의
+  모든 항목을 대조한다. 파일이 없거나 해시가 다르면 그 자리에서 **실패한다**
+  (`app/build.gradle.kts` 의 가드). 조용히 모델 없는 AAB 가 나가면 사용자는 식별할 때마다
+  '분석 실패'만 본다.
 - ⚠️ **해시를 보는 이유.** 2026-09-29 까지 `assets` 에 있던 사본은 md5 가 `10ff2d39…` 로
   정본(`cb20efc7…`)과 달랐다. 뜯어 보니 그래프 1005 노드와 가중치 450 개가 전부 같고 INT64
   상수 16 개의 protobuf 필드(`raw_data` ↔ `int64_data`)와 producer 문자열만 달라 **내용은 같은
   모델**이었지만, 그걸 확인하려고 두 파일을 통째로 비교해야 했다. 이제 해시 하나로 끝난다.
-- CI 도 **같은 해시 파일**을 읽어 받는다(`release-smoke.yml`). DVC 원격은 내용주소 저장소라
+- CI 도 **같은 파일**을 읽어 받는다(`release-smoke.yml`). DVC 원격은 내용주소 저장소라
   객체 키가 곧 md5 여서, 러너는 `dvc` 도 ML 저장소 접근 권한도 필요하지 않다 —
-  `aws s3 cp s3://nursemate-ml-models/files/md5/cb/20efc7d4…` 한 줄이다.
+  `aws s3 cp s3://nursemate-ml-models/files/md5/<앞2>/<나머지>` 를 항목마다 돌린다.
+  **받는 경로와 검사가 같은 값을 쓰므로 갈라질 수 없다.**
 - 앱은 첫 식별 때 asset 을 앱 전용 저장소로 꺼내 쓴다(`PillModelFile`). 저장소를 두 배 쓰므로
   Play Asset Delivery 나 원격 다운로드로 옮기는 건 따로 정해야 한다 — **NM-396 은 그 티켓이
   아니다**(「RF-DETR-seg Android 변환 스파이크」로 2026-09-01 완료). 아직 티켓이 없다.
@@ -247,8 +251,8 @@ adb logcat | grep NM467
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
    ```bash
    git checkout v<versionName>
-   md5 -q app/src/main/assets/rfdetr_seg_small.onnx   # app/detection-model.md5 와 같아야 한다
-   #                                                   다르거나 없으면 위 "검출 모델" 절 참고
+   (cd app/src/main && md5 -r assets/*.onnx | sed 's|assets/||')   # app/models.md5 와 같아야 한다
+   #                                                               다르면 위 "온디바이스 모델" 절 참고
    ./gradlew :app:bundleRelease :wear:bundleRelease
    jarsigner -verify app/build/outputs/bundle/release/app-release.aab    # "jar verified."
    jarsigner -verify wear/build/outputs/bundle/release/wear-release.aab  # "jar verified."

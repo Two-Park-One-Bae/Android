@@ -1,5 +1,6 @@
 import com.android.build.api.artifact.SingleArtifact
 import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
+import java.io.File
 import java.security.MessageDigest
 import java.util.Properties
 
@@ -151,7 +152,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
-// R8 이 ONNX Runtime 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+// R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
 //
 // `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
 // ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
@@ -183,7 +184,12 @@ androidComponents {
         "ai.onnxruntime.OnnxTensor",
         "ai.onnxruntime.MapInfo",
         "ai.onnxruntime.SequenceInfo",
-        "ai.onnxruntime.OnnxJavaType"
+        "ai.onnxruntime.OnnxJavaType",
+        // OpenCV 도 같은 부류다(NM-485). 네이티브가 이름으로 찾는 값 타입들이다.
+        "org.opencv.core.Mat",
+        "org.opencv.core.Size",
+        "org.opencv.core.Scalar",
+        "org.opencv.core.Point"
     )
 
     onVariants(selector().withBuildType("release")) { variant ->
@@ -199,7 +205,10 @@ androidComponents {
                 file.useLines { lines ->
                     for (line in lines) {
                         // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
-                        if (!line.startsWith("ai.onnxruntime.")) continue
+                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가
+                        // OpenCV 를 목록에 더했을 때 그 줄을 통째로 건너뛰어, 멀쩡히 있는
+                        // 클래스를 「매핑에서 찾지 못했다」로 잘못 읽었다(NM-485).
+                        if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') continue
                         val arrow = line.indexOf(" -> ")
                         if (arrow < 0) continue
                         val from = line.substring(0, arrow)
@@ -212,23 +221,23 @@ androidComponents {
 
                 check(renamed.isEmpty()) {
                     """
-                    R8 이 ONNX Runtime 클래스 이름을 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
+                    R8 이 네이티브가 이름으로 찾는 클래스를 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
                     ${renamed.joinToString("\n")}
 
-                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.** { *; }` 를 확인하십시오.
+                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.**` · `org.opencv.**` 를 확인하십시오.
                     사정은 docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
                 val missing = jniLookedUp - seen
                 check(missing.isEmpty()) {
                     """
-                    매핑에서 ONNX Runtime 클래스를 찾지 못했습니다: ${missing.joinToString()}
+                    매핑에서 다음 클래스를 찾지 못했습니다: ${missing.joinToString()}
 
                     지워졌거나(keep 규칙 확인) 의존성이 빠진 것입니다. 둘 다 릴리스에서
                     알약 식별이 죽는 상태입니다 — docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
-                logger.lifecycle("ONNX 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
+                logger.lifecycle("JNI 가 이름으로 찾는 클래스 ${seen.size}개가 리네임되지 않았습니다 — ⑩ 방어 확인.")
             }
         }
         // 산출물을 만드는 태스크가 이 검사를 반드시 거치게 한다 — CI 뿐 아니라 로컬도.
@@ -237,58 +246,69 @@ androidComponents {
     }
 }
 
-// 릴리스 산출물에 검출 모델이 빠지지 않게, 그리고 **정본이 아닌 모델이 들어가지 않게** 막는다.
+// 릴리스 산출물에 모델이 빠지거나 **정본이 아닌 것이 들어가지 않게** 막는다.
 //
-// 모델(119MB)은 저장소에 넣지 않으므로(.gitignore) 파일이 없어도 빌드는 그냥 성공한다 —
-// 그 AAB 를 올리면 사용자는 알약 식별을 시도할 때마다 '분석 실패'만 본다.
+// 모델은 저장소에 넣지 않으므로(.gitignore 의 *.onnx) 파일이 없어도 빌드는 그냥 성공한다 —
+// 그 AAB 를 올리면 사용자는 식별을 시도할 때마다 '분석 실패'만 본다.
 // 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
 //
-// ⚠️ **해시까지 본다 — 있는 것만 확인하면 부족했다.** 2026-09-29 까지 assets 에 있던 사본은
-// DVC 정본과 md5 가 달랐다(`10ff2d39…` vs `cb20efc7…`). 뜯어보니 그래프 1005 노드와 가중치
-// 450 개가 전부 같고 INT64 상수 16 개의 protobuf 필드(`raw_data` ↔ `int64_data`)와 producer
-// 문자열만 달라 **내용은 같은 모델**이었지만, 그걸 알아내는 데 파일을 통째로 비교해야 했다.
-// 해시를 박아 두면 다음부터는 빌드가 즉시 답한다. 해시는 그대로 DVC 원격의 객체 키이기도 하다
-// (`s3://nursemate-ml-models/files/md5/cb/20efc7d4…`) — 받는 경로와 검사가 같은 값을 쓴다.
+// ⚠️ **해시까지 본다 — 있는 것만 확인하면 부족했다.** 2026-09-29 까지 assets 에 있던 seg 사본은
+// DVC 정본과 md5 가 달랐다(`10ff2d39…` vs `cb20efc7…`). 뜯어보니 내용은 같은 모델이었지만,
+// 그걸 알아내는 데 파일을 통째로 비교해야 했다. 해시를 박아 두면 빌드가 즉시 답한다.
+//
+// 목록은 `app/models.md5` 한 곳이다. 해시가 곧 DVC 원격의 객체 키라 **받는 경로와 검사가 같은
+// 값을 쓴다**. CI 도 같은 파일을 읽는다(`.github/workflows/release-smoke.yml`).
 //
 // 디버그는 막지 않는다 — adb 로 밀어 넣은 파일로 돌릴 수 있다.
 // `run { }` 으로 감싸 **진짜 지역 변수**로 만든다. 스크립트 최상위 val 로 두면 그것도
 // 스크립트 프로퍼티라, doFirst 가 스크립트 객체를 붙들어 설정 캐시가 직렬화하지 못한다.
 run {
-    val detectionModel = layout.projectDirectory.file("src/main/assets/rfdetr_seg_small.onnx").asFile
-    // 해시는 `app/detection-model.md5` 한 곳에만 둔다. CI 도 **같은 파일**을 읽어 S3 객체 키를
-    // 만든다(`.github/workflows/release-smoke.yml`) — 받는 경로와 검사가 갈라질 수 없다.
-    val expectedMd5File = layout.projectDirectory.file("detection-model.md5").asFile
+    val assetsDir = layout.projectDirectory.dir("src/main/assets").asFile
+    val manifest = layout.projectDirectory.file("models.md5").asFile
 
     tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
         doFirst {
-            check(detectionModel.isFile) {
-                """
-                검출 모델이 없습니다: $detectionModel
+            val entries = manifest.readLines()
+                .map(String::trim)
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .map { line ->
+                    val parts = line.split(Regex("\\s+"), limit = 2)
+                    check(parts.size == 2) { "models.md5 의 줄이 「해시 두 칸 이름」이 아닙니다: $line" }
+                    parts[0] to parts[1]
+                }
+            check(entries.isNotEmpty()) { "models.md5 에 모델이 하나도 없습니다" }
 
-                저장소에 넣지 않는 파일이라 릴리스 빌드 전에 직접 두어야 합니다.
-                자세한 절차는 docs/RELEASE.md 참고.
-                """.trimIndent()
-            }
-            val expectedMd5 = expectedMd5File.readText().trim()
-            val digest = MessageDigest.getInstance("MD5")
-            detectionModel.inputStream().use { stream ->
-                val buffer = ByteArray(1 shl 16)
-                while (true) {
-                    val read = stream.read(buffer)
-                    if (read < 0) break
-                    digest.update(buffer, 0, read)
+            for ((expected, name) in entries) {
+                val model = File(assetsDir, name)
+                check(model.isFile) {
+                    """
+                    모델이 없습니다: $model
+
+                    저장소에 넣지 않는 파일이라 릴리스 빌드 전에 직접 두어야 합니다.
+                    자세한 절차는 docs/RELEASE.md 「검출 모델」.
+                    """.trimIndent()
+                }
+                val digest = MessageDigest.getInstance("MD5")
+                model.inputStream().use { stream ->
+                    val buffer = ByteArray(1 shl 16)
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read < 0) break
+                        digest.update(buffer, 0, read)
+                    }
+                }
+                val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                check(actual == expected) {
+                    """
+                    모델이 정본이 아닙니다: $model
+                      기대 md5: $expected
+                      실제 md5: $actual
+
+                    DVC 원격의 것으로 다시 받으십시오 — 절차는 docs/RELEASE.md 「검출 모델」.
+                    """.trimIndent()
                 }
             }
-            val actualMd5 = digest.digest().joinToString("") { "%02x".format(it) }
-            check(actualMd5 == expectedMd5) {
-                """
-                검출 모델이 정본이 아닙니다: $detectionModel
-                  기대 md5: $expectedMd5
-                  실제 md5: $actualMd5
-
-                DVC 원격의 것으로 다시 받으십시오 — 절차는 docs/RELEASE.md 「검출 모델」.
-                """.trimIndent()
-            }
+            logger.lifecycle("모델 ${entries.size}개가 정본과 같습니다 — ${entries.joinToString { it.second }}")
         }
     }
 }
