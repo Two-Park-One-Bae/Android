@@ -7,7 +7,7 @@ android {
     namespace = "app.nursemate.core.vision"
 }
 
-/**
+/*
  * 에뮬레이터에서만 OpenCV 를 내려 쓰는 탈출구.
  *
  * ## 왜 필요한가 — 에뮬레이터가 CPU 를 잘못 광고한다
