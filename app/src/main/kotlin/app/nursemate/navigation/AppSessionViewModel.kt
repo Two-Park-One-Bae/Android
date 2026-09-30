@@ -14,6 +14,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -64,6 +65,22 @@ class AppSessionViewModel @Inject constructor(
     /** 회원 정보를 한 번도 못 받았는가. 받은 뒤의 실패는 화면을 흔들지 않으므로 여기 반영하지 않는다. */
     private val initialLoadFailed = MutableStateFlow(false)
 
+    private val forcedSignOut = MutableStateFlow(false)
+
+    /**
+     * 내 의사와 무관하게 세션이 끊겼는가 — 로그인 화면이 **왜 여기 와 있는지** 알리는 데 쓴다.
+     *
+     * ## 로그아웃과 만료는 결론만 같다
+     * 둘 다 로그인 화면으로 보내지만 사용자에게는 전혀 다른 사건이다. 내가 누른 로그아웃은
+     * 설명이 필요 없고, 세션 만료는 **내가 한 일이 아니라** 이유를 말해 주지 않으면 앱이
+     * 고장난 것으로 읽힌다. 예전에는 둘을 구분하지 않고 [AuthRepository.signOut] 만 불렀고,
+     * 홈에 있던 사용자가 아무 안내 없이 로그인 화면으로 돌아오는 증상이 났다.
+     *
+     * 화면이 아니라 여기서 신호하는 이유는 **만료를 아는 곳이 여기뿐**이기 때문이다 —
+     * 로그인 화면은 세션이 이미 없어진 뒤에 그려져 사유를 알 길이 없다.
+     */
+    val sessionExpired: StateFlow<Boolean> = forcedSignOut.asStateFlow()
+
     val entry: StateFlow<AppEntry> =
         combine(authRepository.session, currentUser, initialLoadFailed) { session, user, failed ->
             when (session) {
@@ -97,6 +114,9 @@ class AppSessionViewModel @Inject constructor(
                         initialLoadFailed.value = false
                         usageHolder.clear()
                     } else {
+                        // 로그인에 성공했으니 지난 만료 안내는 역할을 다했다. 남겨 두면 나중에
+                        // 스스로 로그아웃하고 돌아왔을 때 엉뚱한 이유가 떠 있다.
+                        forcedSignOut.value = false
                         loadUser()
                     }
                 }
@@ -144,6 +164,10 @@ class AppSessionViewModel @Inject constructor(
                     // 기기에서 탈퇴하면 서버가 리프레시 토큰을 폐기하는데, 이 기기의 Firebase
                     // 세션은 로컬에 남아 있어 SignedIn 인 채로 401 만 반복된다 — 재시도 화면에
                     // 머무르게 두지 않고 로그아웃해 로그인으로 돌려보낸다.
+                    // 화면을 갈아끼우기 **전에** 세운다. signOut 이 세션을 SignedOut 으로 바꾸면
+                    // 그 즉시 로그인 화면이 그려지는데, 그때 이미 이유가 있어야 한 박자 늦게
+                    // 안내가 튀어나오지 않는다.
+                    forcedSignOut.value = true
                     authRepository.signOut()
                     return@onFailure
                 }

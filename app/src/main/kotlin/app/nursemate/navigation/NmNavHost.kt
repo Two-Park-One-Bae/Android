@@ -68,6 +68,7 @@ fun NurseMateApp(
     val colors = NmTheme.semanticColors
     val sessionViewModel: AppSessionViewModel = hiltViewModel()
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
+    val sessionExpired by sessionViewModel.sessionExpired.collectAsStateWithLifecycle()
 
     // 포그라운드 복귀마다 회원 정보를 다시 받는다 — 약관이 개정되면 서버가
     // onboardingRequired 를 다시 true 로 주고, 그래야 동의 화면이 뜬다(spec §약관 개정).
@@ -90,6 +91,7 @@ fun NurseMateApp(
 
             else -> NmNavHost(
                 entry = entry,
+                sessionExpired = sessionExpired,
                 openTimerTab = openTimerTab,
                 onTimerTabOpened = onTimerTabOpened,
                 startPresetId = startPresetId,
@@ -127,6 +129,7 @@ private fun ServiceUnavailable(onRetry: () -> Unit) {
 @Composable
 private fun NmNavHost(
     entry: AppEntry,
+    sessionExpired: Boolean,
     openTimerTab: Boolean,
     onTimerTabOpened: () -> Unit,
     startPresetId: String?,
@@ -204,7 +207,10 @@ private fun NmNavHost(
                 // 직접 띄우기 때문이다. Compose 밖(프리뷰 등)에서는 null 이라 그때는 아무 일도
                 // 하지 않는다. 실기기에서는 항상 있다.
                 onAppleClick = { activity?.let(viewModel::signInWithApple) },
-                onKakaoClick = { viewModel.signInWithKakao(context) }
+                onKakaoClick = { viewModel.signInWithKakao(context) },
+                // 내 의사와 무관하게 끊겨 돌아온 것이면 이유를 알린다. 스스로 누른
+                // 로그아웃에는 뜨지 않는다 — 가르는 일은 AppSessionViewModel 이 한다.
+                sessionExpired = sessionExpired
             )
         }
 
