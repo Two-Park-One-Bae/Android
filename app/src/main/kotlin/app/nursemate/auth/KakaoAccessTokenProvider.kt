@@ -82,7 +82,9 @@ fun Throwable.toKakaoAuthError(): AuthError = when {
 
     this is ApiFailure -> when (code) {
         ApiErrorCode.KAKAO_TOKEN_INVALID -> AuthError.KakaoTokenInvalid
+
         ApiErrorCode.SERVICE_UNAVAILABLE -> AuthError.ServiceUnavailable
+
         // 500 도 로그아웃 사유는 아니지만(`ApiFailure.requiresSignIn`) 사용자가 할 수 있는 일이
         // 「잠시 후 다시」뿐이라 따로 가르지 않는다. iOS 도 같은 칸에 둔다.
         else -> AuthError.Unknown(this)
