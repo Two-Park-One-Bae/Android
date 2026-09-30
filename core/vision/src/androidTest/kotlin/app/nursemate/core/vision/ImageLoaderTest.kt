@@ -35,7 +35,7 @@ class ImageLoaderTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
-    fun 가로_사진은_중앙_정사각으로_잘린다() {
+    fun `가로_사진은_중앙_정사각으로_잘린다`() {
         val loaded = ImageLoader.load(context, jpeg(width = 1200, height = 900))
 
         assertEquals("짧은 변 기준 정사각이어야 한다", loaded.height, loaded.width)
@@ -43,7 +43,7 @@ class ImageLoaderTest {
     }
 
     @Test
-    fun 세로_사진도_짧은_변_기준이다() {
+    fun `세로_사진도_짧은_변_기준이다`() {
         val loaded = ImageLoader.load(context, jpeg(width = 900, height = 1200))
 
         assertEquals(loaded.height, loaded.width)
@@ -55,7 +55,7 @@ class ImageLoaderTest {
      * 거치므로 상한이 달라지면 최종 텐서가 달라진다([ImageLoader.load] KDoc).
      */
     @Test
-    fun 최장변은_2048_이하로_줄어든다() {
+    fun `최장변은_2048_이하로_줄어든다`() {
         val loaded = ImageLoader.load(context, jpeg(width = 4000, height = 3000))
 
         assertTrue(
@@ -67,7 +67,7 @@ class ImageLoaderTest {
 
     /** 이미 작은 사진을 굳이 키우지 않는다. 없는 화소를 만들어 봐야 각인이 선명해지지 않는다. */
     @Test
-    fun 작은_사진은_키우지_않는다() {
+    fun `작은_사진은_키우지_않는다`() {
         val loaded = ImageLoader.load(context, jpeg(width = 400, height = 400))
 
         assertEquals(400, loaded.width)
@@ -81,7 +81,7 @@ class ImageLoaderTest {
      * 「BBOX 는 정상인데 크롭만 엉뚱한 영역」이 나왔다(커밋 `c4f4b90`, [ImageLoader] KDoc).
      */
     @Test
-    fun EXIF_회전이_픽셀에_구워진다() {
+    fun `EXIF_회전이_픽셀에_구워진다`() {
         val uri = jpeg(
             width = 600,
             height = 600,
@@ -99,11 +99,9 @@ class ImageLoaderTest {
      * 색을 **정확히** 비교하지 않는다 — JPEG 는 손실 압축이라 빨강이 `0xFFFF0000` 에서
      * `0xFFFE0000` 으로 밀린다. 보려는 것은 「표식이 어느 모서리에 있나」지 색값이 아니다.
      */
-    private fun Int.isReddish(): Boolean =
-        Color.red(this) > 200 && Color.green(this) < 80 && Color.blue(this) < 80
+    private fun Int.isReddish(): Boolean = Color.red(this) > 200 && Color.green(this) < 80 && Color.blue(this) < 80
 
-    private fun Int.isWhitish(): Boolean =
-        Color.red(this) > 200 && Color.green(this) > 200 && Color.blue(this) > 200
+    private fun Int.isWhitish(): Boolean = Color.red(this) > 200 && Color.green(this) > 200 && Color.blue(this) > 200
 
     /**
      * 테스트용 JPEG 를 만들어 `file://` URI 로 돌려준다.
