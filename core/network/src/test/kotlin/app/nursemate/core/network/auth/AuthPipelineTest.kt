@@ -75,7 +75,9 @@ class AuthPipelineTest {
     fun `공개 경로에는 Bearer 를 붙이지 않는다`() {
         val client = clientWith(FakeTokens())
 
-        listOf("/actuator/health", "/health", "/api/v0/consents", "/api/v0/auth/kakao/token")
+        // `/health` 는 여기 있었다. 명세에서 삭제돼(NM-453) 공개 목록에서도 뺐다 —
+        // 남아 있던 주석은 deprecated 라고 했지만 실제로는 이미 사라진 경로였다.
+        listOf("/actuator/health", "/api/v0/consents", "/api/v0/auth/kakao/token")
             .forEach { path ->
                 server.enqueue(MockResponse().setResponseCode(HTTP_OK).setBody("{}"))
                 call(client, path).use { }

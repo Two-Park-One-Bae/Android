@@ -93,7 +93,7 @@ fun PillCandidateRow(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = candidate.pillName ?: candidate.pillCode,
+                    text = candidate.pillName,
                     style = NameStyle,
                     color = colors.textPrimary,
                     // 품목명은 길다("○○정 100밀리그램(염산○○○)"). 줄바꿈을 허용하면 카드마다
@@ -105,15 +105,13 @@ fun PillCandidateRow(
                 )
                 if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
             }
-            candidate.companyName?.let {
-                Text(
-                    text = it,
-                    style = SubStyle,
-                    color = colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = candidate.companyName,
+                style = SubStyle,
+                color = colors.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         // 선택과 독립이다 — 고르기 전에 상세를 먼저 확인할 수 있어야 한다(spec §세부정보 조회).

@@ -181,10 +181,10 @@ data class PillFaceRequest(
 data class PillCandidate(
     val pillCode: String,
     val licenseStatus: LicenseStatus,
-    val pillName: String? = null,
-    val companyName: String? = null,
-    val pillThumbnailUrl: String? = null,
-    val pillImageUrl: String? = null
+    val pillName: String,
+    val companyName: String,
+    val pillThumbnailUrl: String,
+    val pillImageUrl: String
 )
 
 /** 커서 페이지네이션. [nextCursor] 가 null 이면 마지막 장이다. */

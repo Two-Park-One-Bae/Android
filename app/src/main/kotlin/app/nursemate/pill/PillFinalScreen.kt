@@ -163,15 +163,13 @@ private fun FinalRow(pill: PillCandidate, onClick: () -> Unit) {
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                text = pill.pillName ?: pill.pillCode,
+                text = pill.pillName,
                 style = RowName,
                 color = colors.textPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            pill.companyName?.let {
-                Text(text = it, style = RowCompany, color = colors.textSecondary, maxLines = 1)
-            }
+            Text(text = pill.companyName, style = RowCompany, color = colors.textSecondary, maxLines = 1)
         }
         Icon(
             painter = painterResource(R.drawable.nm_ic_info),
