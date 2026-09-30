@@ -64,6 +64,7 @@ fun TimerGateHost(
         is TimerGate.None -> Unit
 
         is TimerGate.Permission -> PermissionSheet(
+            step = gate.step,
             denied = gate.denied,
             onRequest = {
                 onAsked(gate.step)
@@ -109,24 +110,62 @@ fun TimerGateHost(
 /**
  * A3 안내·거부 — 정본 두 프레임이 문구와 색만 다르고 뼈대가 같아 한 컴포저블로 둔다.
  *
- * [denied] 는 "한 번 요청했는데도 권한이 없다"는 뜻이다. 같은 안내를 반복하면 사용자가
- * 무엇이 잘못됐는지 모르므로, 문구를 바꾸고 설정으로 유도한다.
+ * ## 단계마다 문구를 가른다 (NM-530)
+ * 예전에는 [step] 을 받지 않아 **세 단계가 글자 하나 다르지 않은 같은 시트**를 그렸다.
+ * 알림을 허용하고 돌아오면 `denied=false` 인 새 단계라 똑같은 화면이 다시 떴고, 사용자에게는
+ * 「허용했는데 또 물어본다」로 읽혔다.
+ *
+ * 문구 규칙은 둘이다.
+ * - **제목은 무엇을 켜야 하는지** 말한다. 이때 **OS 설정 화면에 적힌 항목 이름을 그대로 쓴다** —
+ *   설정으로 나간 사용자가 찾아야 할 글자와 같아야 한다. 단계마다 이름이 다르니 반복 느낌도
+ *   함께 사라진다. 실기기에서 확인한 One UI 표기다(S24 · Android 16).
+ * - **본문은 왜 필요한지 한 줄.** 어디서 켜는지는 버튼과 열린 화면이 이미 말한다 —
+ *   인텐트에 `package:` 가 붙어 **앱 전용 페이지로 바로 떨어지므로**(토글 하나뿐) 「설정에서
+ *   널스메이트를 찾아」같은 안내는 없는 절차를 시키는 셈이다.
+ *
+ * [denied] 는 "한 번 요청했는데도 권한이 없다"는 뜻이다.
  */
 @Composable
-private fun PermissionSheet(denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
+private fun PermissionSheet(step: PermissionStep, denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
     TimerNoticeSheet(
         icon = if (denied) DsR.drawable.nm_ic_bell_off else DsR.drawable.nm_ic_bell,
         iconTint = if (denied) NmColor.Error.C600 else NmColor.Primary.C600,
         iconBackground = if (denied) NmColor.Error.C50 else NmColor.Primary.C50,
-        title = if (denied) "알람이 꺼져 있어요" else "알람 권한이 필요해요",
-        body = if (denied) DENIED_BODY else NOTICE_BODY,
-        primaryLabel = if (denied) "설정에서 켜기" else "허용하고 시작하기",
+        title = step.title(denied),
+        body = step.body(denied),
+        primaryLabel = if (denied) "설정에서 켜기" else step.primaryLabel(),
         onPrimary = onRequest,
         secondaryLabel = if (denied) "닫기" else "나중에 할게요",
         onSecondary = onDismiss,
         onDismiss = onDismiss
     )
 }
+
+internal fun PermissionStep.title(denied: Boolean): String = when (this) {
+    PermissionStep.NOTIFICATION -> if (denied) "알림이 꺼져 있어요" else "알림을 켜 주세요"
+
+    PermissionStep.EXACT_ALARM ->
+        if (denied) "알람 및 리마인더가 꺼져 있어요" else "알람 및 리마인더를 켜 주세요"
+
+    PermissionStep.FULL_SCREEN ->
+        if (denied) "전체 화면 알림이 꺼져 있어요" else "전체 화면 알림을 켜 주세요"
+}
+
+internal fun PermissionStep.body(denied: Boolean): String = when (this) {
+    PermissionStep.NOTIFICATION ->
+        if (denied) "알림을 켜야 타이머를 시작할 수 있어요." else "타이머가 끝나면 알림으로 알려드려요."
+
+    PermissionStep.EXACT_ALARM ->
+        if (denied) "이 설정이 없으면 정한 시각에 울리지 못해요." else "이 설정이 있어야 정한 시각에 울려요."
+
+    // 권한이 없어도 알람이 사라지지는 않는다 — 헤드업 알림으로 낮춰 표시된다(AndroidManifest 주석).
+    // 「안 울려요」로 쓰면 틀린다.
+    PermissionStep.FULL_SCREEN ->
+        if (denied) "잠금화면에는 안 뜨고 알림으로만 와요." else "잠금화면에서도 알람 화면이 바로 떠요."
+}
+
+/** 알림만 앱 안에서 팝업으로 받고, 나머지 둘은 설정 화면으로 나간다. 버튼이 그 차이를 말한다. */
+internal fun PermissionStep.primaryLabel(): String = if (this == PermissionStep.NOTIFICATION) "알림 켜기" else "설정 열기"
 
 /** 정본 `무음 안내` — 12 / text-tertiary / 가운데 정렬. */
 @Composable
@@ -139,8 +178,3 @@ private fun AlertModeNotice() {
         modifier = Modifier.padding(top = 4.dp)
     )
 }
-
-private const val NOTICE_BODY =
-    "타이머가 끝나면 시계 알람처럼 울려요.\n알람을 허용해야 타이머를 시작할 수 있어요."
-private const val DENIED_BODY =
-    "알람이 꺼져 있으면 타이머를 시작할 수 없어요.\n설정에서 널스메이트 알람을 허용해주세요."
