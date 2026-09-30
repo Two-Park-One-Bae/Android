@@ -68,7 +68,8 @@ fun LoginScreen(
     onGoogleClick: () -> Unit,
     onAppleClick: () -> Unit,
     onKakaoClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sessionExpired: Boolean = false
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
@@ -116,7 +117,9 @@ fun LoginScreen(
             modifier = Modifier.padding(top = 16.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val notice = state.error?.toMessage()
+            // 방금 누른 시도의 실패가 **먼저다.** 지난 만료 안내를 그대로 두면 사용자가 자기
+            // 행동의 결과를 못 보고 엉뚱한 이유를 읽는다.
+            val notice = state.error?.toMessage() ?: SESSION_EXPIRED.takeIf { sessionExpired }
             if (notice != null) {
                 Text(
                     text = notice,
@@ -234,8 +237,24 @@ private fun AuthError.toMessage(): String = when (this) {
 
     AuthError.NoCredential -> "기기에 구글 계정이 없어요. 설정에서 계정을 추가해 주세요"
 
+    // 우리 카카오 앱에서 발급된 토큰이 아니거나 만료됐다. 다시 시도하면 새 토큰이 나온다.
+    AuthError.KakaoTokenInvalid -> "카카오 로그인에 실패했어요. 다시 시도해 주세요"
+
+    // 카카오·Firebase 쪽 일시 장애라 **구글·애플은 멀쩡하다.** 그 길을 같이 알려 준다 —
+    // 「잠시 후 다시」만 말하면 지금 당장 들어갈 방법이 있는데도 기다리게 된다.
+    AuthError.ServiceUnavailable ->
+        "잠시 연결이 원활하지 않아요. 잠시 후 다시 시도하거나 다른 방법으로 로그인해 주세요"
+
     is AuthError.Unknown -> "로그인하지 못했어요. 잠시 후 다시 시도해 주세요"
 }
+
+/**
+ * 세션이 강제로 끊겨 돌아온 사람에게만 보인다.
+ *
+ * 스스로 누른 로그아웃에는 띄우지 않는다 — 방금 한 일을 설명하면 오작동처럼 읽힌다.
+ * 가르는 일은 `AppSessionViewModel.sessionExpired` 가 한다.
+ */
+private const val SESSION_EXPIRED = "로그인 정보가 만료되어 로그아웃했어요. 다시 로그인해 주세요"
 
 /**
  * 카피 위 여백 : 아래 여백 = 292 : 87 (정본 실측). 3.36 : 1.

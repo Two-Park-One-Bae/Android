@@ -2,6 +2,8 @@ package app.nursemate.auth
 
 import android.content.Context
 import app.nursemate.core.data.auth.AuthError
+import app.nursemate.core.network.error.ApiErrorCode
+import app.nursemate.core.network.error.ApiFailure
 import com.kakao.sdk.auth.model.OAuthToken
 import com.kakao.sdk.common.model.ClientError
 import com.kakao.sdk.common.model.ClientErrorCause
@@ -68,5 +70,23 @@ class KakaoAccessTokenProvider @Inject constructor() {
 /** 사용자가 로그인 창을 닫았는가. 이건 오류로 다루지 않는다. */
 fun Throwable.isUserCancellation(): Boolean = this is ClientError && reason == ClientErrorCause.Cancelled
 
-/** 카카오 예외를 화면이 분기할 수 있는 형태로 바꾼다. */
-fun Throwable.toKakaoAuthError(): AuthError = if (isUserCancellation()) AuthError.Cancelled else AuthError.Unknown(this)
+/**
+ * 카카오 예외를 화면이 분기할 수 있는 형태로 바꾼다.
+ *
+ * 카카오 로그인은 **두 단계**라 실패도 두 갈래다. 카카오 SDK 단계에서는 취소만 가려내면 되고,
+ * 서버 교환 단계에서는 [ApiFailure] 의 코드가 그대로 사유다 — 401 은 우리 앱에서 발급된 토큰이
+ * 아니라는 뜻이고 503 은 일시 장애다. 둘을 `Unknown` 으로 합치면 화면이 같은 문구만 말한다.
+ */
+fun Throwable.toKakaoAuthError(): AuthError = when {
+    isUserCancellation() -> AuthError.Cancelled
+
+    this is ApiFailure -> when (code) {
+        ApiErrorCode.KAKAO_TOKEN_INVALID -> AuthError.KakaoTokenInvalid
+        ApiErrorCode.SERVICE_UNAVAILABLE -> AuthError.ServiceUnavailable
+        // 500 도 로그아웃 사유는 아니지만(`ApiFailure.requiresSignIn`) 사용자가 할 수 있는 일이
+        // 「잠시 후 다시」뿐이라 따로 가르지 않는다. iOS 도 같은 칸에 둔다.
+        else -> AuthError.Unknown(this)
+    }
+
+    else -> AuthError.Unknown(this)
+}
