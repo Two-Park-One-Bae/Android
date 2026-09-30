@@ -53,31 +53,33 @@ data class DetectionResult(
  *
  * 세션 로드가 수백 ms 걸리므로 한 번만 만들고 재사용한다.
  *
- * ## 실행 백엔드는 CPU만 쓴다
- * NM-396에서 실측한 결과다(Galaxy S24 / Exynos 2400, fp32):
+ * ## 실행 백엔드는 WebGPU, 없으면 CPU (NM-534)
+ * NM-396에서 가속 경로를 전부 재 봤다(Galaxy S24 / Exynos 2400, fp32).
  * ```
  * CPU      1550 ms
  * XNNPACK  3410 ms   (오히려 느림)
  * NNAPI    실패      (Android 15에서 deprecated된 API이기도 하다)
- * WebGPU    845 ms   (1.75배 — 단, 프리빌트 배포본에는 EP가 없어 소스 빌드가 필요)
+ * WebGPU    845 ms
  * ```
- * WebGPU는 11 MB AAR을 저장소에 넣고 minSdk를 28로 올려야 해서 채택하지 않았다.
- * 이 모델이 Conv 1.4% · MatMul 13%인 Transformer라 가속기 이득이 구조적으로 제한된다.
+ * 이 모델이 Conv 1.4% · MatMul 13%인 Transformer라 가속기 이득이 구조적으로 제한되는데,
+ * 그런데도 WebGPU가 유일하게 살아남은 경로다.
+ *
+ * ⚠️ **당시에는 채택하지 않았다** — 프리빌트 Maven 배포본에 EP가 없어 11 MB 커스텀 AAR을
+ * 저장소에 넣고 minSdk를 28로 올려야 했다. **공식 `onnxruntime-android` 1.30.0부터는 들어
+ * 있다**(ABI 4개 전부 · minSdk 24). 저장소가 1.22.0에 머물러 있었을 뿐이다.
+ * ORT 1.30 재측정은 CPU 1572 ms / WebGPU 813 ms다. 세션 여는 일은 [OrtBackend]가 한다.
  */
 class PillDetector(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
 
-    private val session: OrtSession = env.createSession(
-        modelFile.absolutePath,
-        OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(threads)
-            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-            // ⚠️ VERBOSE는 디스패치마다 로그를 찍어 성능을 크게 왜곡한다. 측정할 일이 있어
-            //    노드 배정을 봐야 한다면 그때만 올리고, 그때 잰 시간은 믿지 말 것.
-            setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING)
-        }
-    )
+    private val session: OrtSession = OrtBackend.openSession(env, modelFile) {
+        setIntraOpNumThreads(threads)
+        setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        // ⚠️ VERBOSE는 디스패치마다 로그를 찍어 성능을 크게 왜곡한다. 측정할 일이 있어
+        //    노드 배정을 봐야 한다면 그때만 올리고, 그때 잰 시간은 믿지 말 것.
+        setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING)
+    }
 
     private val inputName: String = session.inputNames.first()
 
