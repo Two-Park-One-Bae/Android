@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
@@ -99,16 +98,8 @@ fun PillCameraScreen(
 
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
-    var torchOn by remember { mutableStateOf(false) }
+    var flashOn by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
-
-    // CameraX 는 백그라운드→포그라운드 복귀 시 세션을 자체적으로 닫았다 다시 여는데,
-    // 이때 토치는 꺼진 채로 재개된다. torchOn 은 remember 라 이전 값(true)을 그대로
-    // 들고 있어 화면과 실제 상태가 어긋난다 — 재개 시점에 다시 걸어 맞춘다.
-    LifecycleResumeEffect(camera, torchOn) {
-        if (torchOn) camera?.cameraControl?.enableTorch(true)
-        onPauseOrDispose {}
-    }
 
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -125,13 +116,11 @@ fun PillCameraScreen(
         SystemBarIcons(darkIcons = false)
 
         CameraTopBar(
-            torchOn = torchOn,
-            torchAvailable = camera?.cameraInfo?.hasFlashUnit() == true,
+            flashOn = flashOn,
+            // 스펙: 「기기에 플래시 유닛이 없으면 버튼을 노출하지 않는다」.
+            flashAvailable = camera?.cameraInfo?.hasFlashUnit() == true,
             onClose = onClose,
-            onToggleTorch = {
-                torchOn = !torchOn
-                camera?.cameraControl?.enableTorch(torchOn)
-            }
+            onToggleFlash = { flashOn = !flashOn }
         )
 
         Column(modifier = Modifier.weight(1f)) {
@@ -187,6 +176,10 @@ fun PillCameraScreen(
             },
             onShutter = {
                 val capture = imageCapture ?: return@CameraControls
+                // **누를 때 건다.** 토글 시점에 걸어 두면 CameraX 가 복귀하며 세션을 다시 열 때
+                // 값이 초기화돼 화면 표시와 실제 동작이 어긋난다. 여기서 걸면 그럴 일이 없다.
+                capture.flashMode =
+                    if (flashOn) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
                 capturing = true
                 capture.takeAndSave(context) { uri ->
                     capturing = false
@@ -205,12 +198,19 @@ fun PillCameraScreen(
 /**
  * 상단바 — 닫기 · "알약 촬영" · 플래시. 디자인: 56dp, 좌우 16, space-between.
  *
- * ⚠️ **iOS와 동작이 다르다.** iOS는 `cameraFlashMode` 를 켜고 꺼서 **촬영 순간에만** 터뜨린다.
- * 여기서는 **토치(계속 켜짐)** 로 간다 — 어두운 병동에서 정사각 가이드 안에 알약을 맞추는
- * 동안 빛이 필요하기 때문이다. 켜져 있는지도 프리뷰로 바로 보인다.
+ * ## 토치가 아니라 플래시다 (NM-440)
+ * 예전에는 토치(계속 켜짐)였다. 어두운 병동에서 가이드 안에 알약을 맞추는 동안 빛이 필요하고
+ * 켜진 것도 프리뷰로 바로 보인다는 이유였는데, **스프린트에서 플래시로 뒤집혔다** —
+ * 표준 카메라 동작을 따르고 iOS 와 같은 온·오프 2단으로 맞춘다.
+ *
+ * > 촬영 순간에만 발광하고 대기·미리보기 중에는 켜 두지 않는다 — 상시 점등(토치)이 아니라
+ * > 표준 카메라 동작을 따른다. (`spec/feature/pill-recognition/README.md` §흐름 규칙)
+ *
+ * ⚠️ 근접 촬영에서 플래시는 광택 있는 정제·PTP 포장에 반사를 만들어 각인을 가릴 수 있다.
+ * 티켓이 「식별 고도화 논의 때 두 방식을 비교 촬영해볼 만하다」고 남겨 두었다.
  */
 @Composable
-private fun CameraTopBar(torchOn: Boolean, torchAvailable: Boolean, onClose: () -> Unit, onToggleTorch: () -> Unit) {
+private fun CameraTopBar(flashOn: Boolean, flashAvailable: Boolean, onClose: () -> Unit, onToggleFlash: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -232,14 +232,14 @@ private fun CameraTopBar(torchOn: Boolean, torchAvailable: Boolean, onClose: () 
             style = NmTypography.title.copy(fontSize = 17.sp),
             color = Color.White
         )
-        if (torchAvailable) {
+        if (flashAvailable) {
             Icon(
                 painter = painterResource(R.drawable.nm_ic_flash),
-                contentDescription = if (torchOn) "조명 끄기" else "조명 켜기",
-                tint = if (torchOn) NmColor.Warning.C300 else Color.White,
+                contentDescription = if (flashOn) "플래시 끄기" else "플래시 켜기",
+                tint = if (flashOn) NmColor.Warning.C300 else Color.White,
                 modifier = Modifier
                     .size(24.dp)
-                    .clickable(onClick = onToggleTorch)
+                    .clickable(onClick = onToggleFlash)
             )
         } else {
             // 플래시가 없는 기기에서도 제목이 가운데 오도록 자리는 남긴다.

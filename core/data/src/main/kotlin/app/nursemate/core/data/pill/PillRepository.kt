@@ -97,8 +97,11 @@ class PillRepository @Inject constructor(
     suspend fun detail(pillCode: String): Result<PillDetail> = runCatching { pillApi.pillDetail(pillCode) }
 
     /**
-     * 원본 사진을 학습데이터로 올린다. **결과를 기다릴 필요가 없다** —
-     * 실패해도 식별 플로우에 영향이 없다(NM-348).
+     * 학습데이터를 올린다. **결과를 기다릴 필요가 없다** — 실패해도 식별 플로우에 영향이 없다(NM-348).
+     *
+     * ⚠️ 받는 것은 **원본이 아니라 가공본**이다(NM-440) — EXIF 회전 · 중앙 정사각 1:1 ·
+     * 최장변 2048px 까지 마치고 JPEG 로 다시 압축한 것, 즉 **모델이 실제로 보는 그림**이다.
+     * 원본을 올리면 학습 분포가 추론 경로와 갈리고 전송량만 커진다.
      */
     suspend fun uploadOriginal(jpeg: ByteArray): Boolean = uploader.upload(jpeg)
 

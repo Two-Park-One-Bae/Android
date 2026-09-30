@@ -72,9 +72,6 @@ class PillRecognitionViewModel @Inject constructor(
     /** ONNX 세션은 로드에 수백 ms가 걸린다. 한 번 만들고 플로우 내내 재사용한다. */
     private var detector: PillDetector? = null
 
-    /** 학습데이터 축적용 **원본** 파일. 화면이 쓰는 비트맵은 축소·크롭된 것이라 원본이 아니다. */
-    private var sourceUri: Uri? = null
-
     /**
      * 촬영·선택한 사진을 읽는다.
      *
@@ -82,7 +79,6 @@ class PillRecognitionViewModel @Inject constructor(
      * 4000×3000 원본 기준 500 ms 안팎이 걸리므로 미리보기에 로딩 표시가 필요하다.
      */
     fun selectPhoto(uri: Uri) {
-        sourceUri = uri
         _state.update { PillUiState(isLoadingPhoto = true) }
         viewModelScope.launch {
             runCatching {
@@ -103,7 +99,6 @@ class PillRecognitionViewModel @Inject constructor(
 
     /** 재촬영 — 고른 사진과 검출 결과를 버린다. */
     fun discardPhoto() {
-        sourceUri = null
         // 새 사진은 새 세션이다. 안 비우면 앞 사진의 수정 횟수·체류시간이 그대로 얹힌다.
         analyticsSession.reset()
         // 비트맵을 recycle()하지 않는다. 화면 전환 애니메이션이 아직 그리고 있을 수 있어
@@ -201,19 +196,19 @@ class PillRecognitionViewModel @Inject constructor(
     private suspend fun extractAttributes(result: DetectionResult) {
         _state.update { it.copy(attributes = AttributePhase.Running) }
 
-        // 원본 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
+        // 학습데이터 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
         //
-        // JPEG 일 때만 보낸다 — presigned 서명에 image/jpeg 가 박혀 있어 갤러리에서 고른
-        // HEIC·PNG 를 그 타입으로 올리면 깨진 파일이 쌓인다. 촬영 결과는 항상 JPEG 다.
-        // **화면이 쓰는 비트맵이 아니라 원본 URI 에서 읽는다** — 그 비트맵은 축소·크롭됐다.
-        sourceUri?.let { uri ->
+        // **화면이 쓰는 그 비트맵을 보낸다**(NM-440). 예전에는 원본 URI 의 바이트를 그대로
+        // 올렸는데, 스펙이 「학습데이터 업로드본도 이 가공본이다 — 정사각 1:1 · 최장변 2048px ·
+        // JPEG 재압축」으로 정했다. 학습 데이터는 **모델이 실제로 보는 그림과 같아야** 하고,
+        // 12MP 원본은 전송량만 키운다.
+        //
+        // 가공본을 보내므로 「JPEG 일 때만」 가드도 사라졌다 — 갤러리에서 고른 HEIC·PNG 도
+        // 여기서 JPEG 로 다시 압축되어 나가므로 presigned 서명의 image/jpeg 와 어긋나지 않는다.
+        _state.value.photo?.let { processed ->
             viewModelScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        if (context.contentResolver.getType(uri) != JPEG_MIME) return@withContext null
-                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    }
-                }.getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
+                runCatching { withContext(Dispatchers.IO) { processed.toJpegBytes() } }
+                    .getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
             }
         }
 
@@ -288,7 +283,6 @@ class PillRecognitionViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "NM394"
-        const val JPEG_MIME = "image/jpeg"
 
         // `pill_identify_result.outcome` — iOS 와 같은 값을 쓴다.
         const val OUTCOME_SUCCESS = "success"
@@ -372,6 +366,21 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
     compress(Bitmap.CompressFormat.PNG, 100, out)
     out.toByteArray()
 }
+
+/**
+ * 학습데이터로 올릴 JPEG.
+ *
+ * 품질 90 은 iOS `jpegData(compressionQuality: 0.9)` 와 맞춘 값이다 — 두 앱이 같은 형태를
+ * 쌓아야 학습 데이터가 한 벌이 된다. 크롭은 PNG 로 보낸다([toPngBytes]): 그쪽은 서버가
+ * 속성을 뽑는 입력이라 손실 압축을 끼워 넣지 않는다.
+ */
+private fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+    compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, out)
+    out.toByteArray()
+}
+
+/** iOS `compressionQuality: 0.9` 와 같은 값. */
+private const val UPLOAD_JPEG_QUALITY = 90
 
 /**
  * 검출 순서(0부터)로 정하는 세션 로컬 키.
