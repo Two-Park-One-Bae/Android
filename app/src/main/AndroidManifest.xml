@@ -217,5 +217,32 @@
                     android:scheme="wear" />
             </intent-filter>
         </service>
+
+        <!--
+            ⚠️ ONNX Runtime 1.30 의 텔레메트리를 **끈다** (NM-534).
+
+            AAR 이 `ai.onnxruntime.TelemetryInitializer` 를 ContentProvider 로 선언한다.
+            ContentProvider 는 `Application.onCreate` 보다 먼저 자동으로 돌아서, **우리 코드가
+            ONNX 를 부르지 않아도 앱을 켜는 순간 실행된다.** 딸려 있는 클래스가 `HttpClient` ·
+            `ConnectivityCallback` · `PowerInfoReceiver` 라 기기 정보를 모아 밖으로 보낸다.
+
+            간호 기록을 다루는 앱이라 우리가 신고하지 않은 수집 경로를 둘 수 없다 —
+            Play 데이터 보안 신고와 개인정보처리방침이 모두 어긋난다.
+
+            `tools:ignore="MissingClass"` 가 필요하다 — onnxruntime 은 `core:vision` 의
+            `implementation` 이라 app 모듈 클래스패스에 없고, lint 가 지우려는 클래스를 못 찾는다.
+
+            AAR 이 함께 선언하는 `ACCESS_NETWORK_STATE` 는 **빼지 않는다** — Firebase Analytics 가
+            같은 권한을 요구한다(lint `MissingPermission`). 텔레메트리만 막으면 된다.
+
+            ORT 1.22 에는 없던 것이다. **버전을 올릴 때마다 병합 매니페스트를 다시 본다**
+            (`app/build/intermediates/merged_manifest/release/.../AndroidManifest.xml`).
+        -->
+        <provider
+            android:name="ai.onnxruntime.TelemetryInitializer"
+            android:authorities="${applicationId}.onnxruntime_telemetry_initializer"
+            tools:node="remove"
+            tools:ignore="MissingClass" />
+
     </application>
 </manifest>

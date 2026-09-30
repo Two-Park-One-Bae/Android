@@ -4,6 +4,7 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
+import app.nursemate.core.vision.OrtBackend
 import java.io.Closeable
 import java.io.File
 import java.nio.FloatBuffer
@@ -34,6 +35,21 @@ import org.opencv.imgproc.Imgproc
  * ⚠️ **알약 하나당 144회다.** 셋을 찍으면 432회이고 저사양 기기의 대기 시간은 재봐야 한다
  * (NM-485 「정할 것」 1번).
  *
+ * ## `rnn` 만 CPU 에 남긴다 (NM-534)
+ * WebGPU 로 그냥 열면 **3배 느려진다** — Galaxy S24 에서 CPU 3472 ms 대 WebGPU 9943 ms 다.
+ * EP 가 나쁜 게 아니라 `LstmCell` 셰이더가 **타임스텝마다 디스패치를 하나씩** 내기 때문이다
+ * (양방향 × 2층 × 32스텝 = 실행당 128회). 그 한 덩어리가 전체의 84%를 먹는다.
+ *
+ * 같은 EP 에서 Conv·attention 은 2배 빠르므로, `rnn` 만 CPU 로 돌려 둘을 다 챙긴다.
+ *
+ * | | 각인 144장 |
+ * |---|---|
+ * | CPU 만 | 3472 ms |
+ * | WebGPU 만 | 9943 ms |
+ * | **WebGPU + `cpu(/rnn/)`** | **1796 ms** |
+ *
+ * `/out/` 까지 묶으면 1880 ms 로 오히려 느려서 `rnn` 하나만 고정한다.
+ *
  * ## 못 읽으면 null 이다
  * 빈 문자열이 아니다. 계약에서 `imprint: ""` 는 「각인이 없는 알약만」이라는 하드 조건이라,
  * 못 읽은 것을 그렇게 보내면 각인이 있는 정답이 전부 탈락한다.
@@ -47,10 +63,9 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
 
-    private val session: OrtSession = env.createSession(
-        modelFile.absolutePath,
-        OrtSession.SessionOptions().apply { setIntraOpNumThreads(threads) }
-    )
+    private val session: OrtSession = OrtBackend.openSession(env, modelFile, cpuNodeNames = RNN_ON_CPU) {
+        setIntraOpNumThreads(threads)
+    }
 
     /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
     private val input = FloatArray(ImprintPreprocess.SAMPLES * PLANE)
@@ -182,6 +197,14 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
     }
 
     companion object {
+        /**
+         * `rnn` 을 CPU 에 고정하는 노드 이름 조각 — 부분 문자열로 맞는다.
+         *
+         * WebGPU EP 전용 옵션 `forceCpuNodeNames` 로도 해 봤는데 **안 먹는다**(11715 ms).
+         * 그쪽은 정확한 노드 이름 목록을 받는 것으로 보인다.
+         */
+        private const val RNN_ON_CPU = "/rnn/"
+
         /** 검출기와 같은 값. 실측 근거는 `PillDetector.DEFAULT_THREADS`. */
         const val DEFAULT_THREADS = 4
 
