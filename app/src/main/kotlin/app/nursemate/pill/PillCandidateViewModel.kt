@@ -180,7 +180,7 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
  * 면 조건은 [FaceInput.toRequest] 가 만든다 — 요청의 null 이 "조건 제외"라 '없음'을 걸려면
  * 값을 명시해야 하고, 그 판단은 화면 입력값을 봐야 할 수 있는 일이다.
  */
-private fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
+internal fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
     val front = faces.front.toRequest()
     val back = faces.back.toRequest()
     return PillCandidatesRequest(
@@ -211,10 +211,10 @@ private fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
  * 임베딩은 **자르지도 않고 줄만 세우는** 값이라, 그것만으로 띄운 200개는 사용자가 보기엔
  * 아무 근거 없는 목록이다.
  */
-private val PillCandidatesRequest.hasCondition: Boolean
+internal val PillCandidatesRequest.hasCondition: Boolean
     get() = attributeToken != null || colors.isNotEmpty() || shape != null ||
         formulation != null || front.hasFilter || back.hasFilter
 
 /** 그 면이 후보를 **자르는가**. 임베딩만 실린 면은 아니다. */
-private val PillFaceRequest?.hasFilter: Boolean
+internal val PillFaceRequest?.hasFilter: Boolean
     get() = this != null && (imprint != null || dividingLine != null || hasMark != null)
