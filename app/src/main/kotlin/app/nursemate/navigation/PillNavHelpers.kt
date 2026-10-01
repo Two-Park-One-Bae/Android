@@ -5,6 +5,8 @@ import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import app.nursemate.core.model.LicenseStatus
+import app.nursemate.core.model.PillCandidate
 import app.nursemate.home.NmTab
 import app.nursemate.pill.PillRecognitionViewModel
 
@@ -41,4 +43,16 @@ internal fun NavController.exitToHome(viewModel: PillRecognitionViewModel) {
     viewModel.discardPhoto()
     popBackStack(NmRoute.PILL_CAPTURE, inclusive = false)
     switchTab(NmTab.Home)
+}
+
+/**
+ * 후보에서 세부정보로 — **선택과 독립**이다. 고르기 전에 상세를 먼저 확인할 수 있어야 한다.
+ *
+ * 허가 종료 여부를 함께 넘긴다. 그 품목은 세부정보 조회를 건너뛰고 배지만 보여 주기 때문이다.
+ */
+internal fun openDetail(navController: NavController, tracking: EditTracking, candidate: PillCandidate) {
+    tracking.buttonTapped("pill_detail")
+    navController.navigate(
+        NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+    )
 }

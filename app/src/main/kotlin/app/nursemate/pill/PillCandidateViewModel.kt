@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
+import app.nursemate.core.model.PillFaceRequest
 import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.vision.mark.MarkReader
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,7 +33,15 @@ data class CandidateUiState(
     val searched: Boolean = false,
     val failed: Boolean = false,
     val truncated: Boolean = false,
-    val loadingMore: Boolean = false
+    val loadingMore: Boolean = false,
+    /**
+     * 이어서 조회가 실패했다 — **조회 실패와 다르다**(NM-529).
+     *
+     * 이미 보이는 후보는 그대로 두고 목록 끝에만 알린다. 그리고 **자동으로 다시 시도하지
+     * 않는다** — 목록 끝에 닿을 때마다 저절로 재요청하면 끊긴 망에서 같은 실패를 쉬지 않고
+     * 반복한다.
+     */
+    val loadMoreFailed: Boolean = false
 ) {
     /** 아직 상세를 못 받은 후보가 남아 있는가. 커서가 아니라 **받은 개수**로 센다. */
     val hasMore: Boolean get() = candidates.size < ids.size
@@ -90,9 +99,17 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
                 }
                 .onFailure { throwable ->
                     Log.w(TAG, "후보 조회 실패", throwable)
-                    _state.update { it.copy(loading = false, searched = true, failed = true) }
+                    // 목록을 **지운다**. 조건이 바뀌어 요청한 것이라, 남겨 두면 지금 조건과
+                    // 맞지 않는 후보를 보여 주게 된다(NM-529).
+                    _state.value = CandidateUiState(searched = true, failed = true)
                 }
         }
+    }
+
+    /** 사용자가 목록 끝의 「다시 시도」를 눌렀다. 실패 표시를 지우고 같은 구간을 다시 부른다. */
+    fun retryLoadMore() {
+        _state.update { it.copy(loadMoreFailed = false) }
+        loadMore()
     }
 
     /**
@@ -107,7 +124,9 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
      */
     fun loadMore() {
         val current = _state.value
-        if (!current.hasMore || current.loadingMore) return
+        // ⚠️ 한 번 실패하면 **사용자가 다시 시도를 누를 때까지** 부르지 않는다. 목록 끝에
+        //    닿을 때마다 저절로 재요청하면 끊긴 망에서 같은 실패를 쉬지 않고 반복한다.
+        if (!current.hasMore || current.loadingMore || current.loadMoreFailed) return
 
         val next = current.ids.drop(current.candidates.size).take(PAGE_SIZE)
         if (next.isEmpty()) return
@@ -124,14 +143,15 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
                             candidates = state.candidates + added,
                             // 사라진 품목을 ids 에서도 지운다 — 안 그러면 hasMore 가 영영 참이다.
                             ids = state.ids - page.missing.toSet(),
-                            loadingMore = false
+                            loadingMore = false,
+                            loadMoreFailed = false
                         )
                     }
                 }
                 .onFailure { throwable ->
                     Log.w(TAG, "후보 카드 이어받기 실패", throwable)
-                    // 목록은 그대로 두고 표시만 끈다 — 받아 둔 후보까지 잃을 이유가 없다.
-                    _state.update { it.copy(loadingMore = false) }
+                    // 목록은 그대로 두고 끝에만 알린다 — 받아 둔 후보까지 잃을 이유가 없다.
+                    _state.update { it.copy(loadingMore = false, loadMoreFailed = true) }
                 }
         }
     }
@@ -178,11 +198,23 @@ private fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
 }
 
 /**
- * 서버에 물어볼 게 하나라도 있는가.
+ * 서버에 물어볼 게 하나라도 있는가 — 「입력 전」을 가르는 기준이다(NM-529).
  *
  * 토큰만 있어도 부를 값어치가 있다 — 조건 없이도 모델값 정렬로 후보가 나온다.
- * 다 비어 있을 때만(수동 추가 직후) 부르지 않는다.
+ *
+ * ## ⚠️ 마크 임베딩은 **입력으로 치지 않는다**
+ * 면이 비어 있지 않다고 세면 안 된다. 추출 실패 알약도 사진은 있어 임베딩은 딸려 오는데,
+ * 그걸 입력으로 치면 **사용자가 아무것도 넣지 않았는데 후보 200개가 쏟아진다.** 정본은 그
+ * 자리에 「속성·각인을 입력하면 후보가 나타나요」를 둔다. iOS 도 같은 규칙이다
+ * (`PillCandidateQuery.isWithoutInput`).
+ *
+ * 임베딩은 **자르지도 않고 줄만 세우는** 값이라, 그것만으로 띄운 200개는 사용자가 보기엔
+ * 아무 근거 없는 목록이다.
  */
 private val PillCandidatesRequest.hasCondition: Boolean
     get() = attributeToken != null || colors.isNotEmpty() || shape != null ||
-        formulation != null || front != null || back != null
+        formulation != null || front.hasFilter || back.hasFilter
+
+/** 그 면이 후보를 **자르는가**. 임베딩만 실린 면은 아니다. */
+private val PillFaceRequest?.hasFilter: Boolean
+    get() = this != null && (imprint != null || dividingLine != null || hasMark != null)

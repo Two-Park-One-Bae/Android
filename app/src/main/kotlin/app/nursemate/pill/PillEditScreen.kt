@@ -87,6 +87,8 @@ fun PillEditScreen(
     onCancel: () -> Unit,
     onDetail: (PillCandidate) -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    onRetryLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
     /** 지금 펼쳐 둔 선택판. 이탈 지표(`pill_flow_exit.editing_attribute`)가 읽는다. */
     onPanelChange: (AttributePanel?) -> Unit = {},
@@ -224,7 +226,9 @@ fun PillEditScreen(
                             onCompare()
                             comparing = it
                         },
-                        onLoadMore = onLoadMore
+                        onLoadMore = onLoadMore,
+                        onRetry = onRetry,
+                        onRetryLoadMore = onRetryLoadMore
                     )
                 )
             }
@@ -310,12 +314,19 @@ private fun LazyListScope.candidateSection(
     actions: CandidateActions
 ) {
     if (state.candidates.isEmpty()) {
-        item { CandidateEmpty(state, modifier = Modifier.padding(top = BlockGap)) }
+        item {
+            CandidateEmpty(
+                state = state,
+                onRetry = actions.onRetry,
+                modifier = Modifier.padding(top = BlockGap)
+            )
+        }
         return
     }
 
     itemsIndexed(state.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
-        // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
+        // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이거나 **한 번 실패했으면** 뷰모델이
+        // 무시한다 — 실패 뒤 자동 재시도는 하지 않는다(NM-529).
         if (index == state.candidates.lastIndex && state.hasMore) {
             LaunchedEffect(candidate.pillCode) { actions.onLoadMore() }
         }
@@ -328,6 +339,25 @@ private fun LazyListScope.candidateSection(
             // 헤더와 첫 행 사이만 블록 간격(14)이고, 행끼리는 8 이다.
             modifier = if (index == 0) Modifier.padding(top = BlockGap) else Modifier
         )
+    }
+
+    candidateListTail(state = state, selected = selected, actions = actions)
+}
+
+/**
+ * 목록 **끝**에 붙는 것들 — 이어서 조회 실패 · 받는 중 · 200개+ 안내 · 선택 안내.
+ *
+ * 넷은 서로 배타적이지 않다(잘렸는데 아직 안 고른 경우가 그렇다). 본문에 섞어 두면 어느
+ * 것이 어느 조건에 뜨는지가 안 보여 갈라 뒀다.
+ */
+private fun LazyListScope.candidateListTail(
+    state: CandidateUiState,
+    selected: PillCandidate?,
+    actions: CandidateActions
+) {
+    // 이어서 조회가 실패했으면 목록 끝에 한 줄만 둔다 — 보이는 후보는 그대로다(NM-529).
+    if (state.loadMoreFailed) {
+        item { CandidateLoadMoreFailed(onRetry = actions.onRetryLoadMore) }
     }
 
     if (state.loadingMore) {
