@@ -1,20 +1,24 @@
 package app.nursemate.pill
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
@@ -23,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
+import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
@@ -36,7 +41,7 @@ import app.nursemate.core.designsystem.NmTypography
 */
 
 @Composable
-internal fun CandidateEmpty(state: CandidateUiState, modifier: Modifier = Modifier) {
+internal fun CandidateEmpty(state: CandidateUiState, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         when {
             // 첫 조회 중. 정본에 없는 상태라 인디케이터만 둔다 — 다시 그릴 문구를 지어내지 않는다.
@@ -46,7 +51,9 @@ internal fun CandidateEmpty(state: CandidateUiState, modifier: Modifier = Modifi
                 modifier = Modifier.padding(vertical = 40.dp).size(24.dp)
             )
 
-            // 통신 실패도 정본에 없다. ⑧-g 와 같은 틀에 아이콘·문구만 바꿔 얹는다.
+            // 정본은 ⑧-g 후보 0개 틀을 그대로 쓰고 아이콘·문구·버튼만 바꾼다(NM-529).
+            // 부제는 인식 실패·세부정보 실패와 **같은 문장**이다 — 같은 원인에 다른 말을 하면
+            // 사용자는 다른 문제로 읽는다.
             state.failed -> EmptyBlock(
                 icon = R.drawable.nm_ic_wifi_off,
                 circle = 64.dp,
@@ -54,7 +61,9 @@ internal fun CandidateEmpty(state: CandidateUiState, modifier: Modifier = Modifi
                 gap = 14.dp,
                 padding = 24.dp,
                 title = "후보를 불러오지 못했어요",
-                subtitle = "잠시 후 다시 시도해 주세요"
+                subtitle = "네트워크 연결을 확인하고 다시 시도해 주세요",
+                // 재시도는 **식별 횟수를 쓰지 않는다** — 후보 조회는 차감 대상이 아니다.
+                action = "다시 시도" to onRetry
             )
 
             state.searched -> EmptyBlock(
@@ -87,7 +96,16 @@ internal fun CandidateEmpty(state: CandidateUiState, modifier: Modifier = Modifi
  *              240 폭에 13/500 으로 그린다(정본이 그 자리만 굵기를 올려 둔다).
  */
 @Composable
-private fun EmptyBlock(icon: Int, circle: Dp, iconSize: Dp, gap: Dp, padding: Dp, title: String?, subtitle: String) {
+private fun EmptyBlock(
+    icon: Int,
+    circle: Dp,
+    iconSize: Dp,
+    gap: Dp,
+    padding: Dp,
+    title: String?,
+    subtitle: String,
+    action: Pair<String, () -> Unit>? = null
+) {
     val colors = NmTheme.semanticColors
     Column(
         modifier = Modifier.padding(horizontal = 20.dp, vertical = padding),
@@ -121,6 +139,35 @@ private fun EmptyBlock(icon: Int, circle: Dp, iconSize: Dp, gap: Dp, padding: Dp
                 textAlign = TextAlign.Center
             )
         }
+        action?.let { (label, onClick) ->
+            NmButtonSecondary(text = label, onClick = onClick, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+/**
+ * 이어서 조회가 실패했을 때 **목록 끝**에 붙는 한 줄 — 정본 NM-529.
+ *
+ * 조회 실패와 다르다. 이미 보이는 후보는 그대로 두고 「다음이 안 왔다」만 말한다 — 여기서
+ * 화면을 비우면 사용자가 보던 후보까지 사라진다.
+ */
+@Composable
+internal fun CandidateLoadMoreFailed(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = NmTheme.semanticColors
+    Row(
+        modifier = modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = "불러오지 못했어요", style = EmptyBody, color = colors.textTertiary)
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onRetry)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(text = "다시 시도", style = RetryLabel, color = NmColor.Primary.C600)
+        }
     }
 }
 
@@ -139,3 +186,4 @@ private val EmptyBody = NmTypography.body.copy(
     lineBreak = LineBreak.Heading
 )
 private val EmptyHint = EmptyBody.copy(fontWeight = FontWeight.Medium)
+private val RetryLabel = EmptyBody.copy(fontWeight = FontWeight.SemiBold)

@@ -247,8 +247,35 @@ data class PillCandidate(
     val pillName: String,
     val companyName: String,
     val pillThumbnailUrl: String,
-    val pillImageUrl: String
+    val pillImageUrl: String,
+    /** 카탈로그 앞면 — 후보 카드의 면 요약이 읽는다. */
+    val front: PillCandidateFace = PillCandidateFace(),
+    /** 카탈로그 뒷면. 아무것도 없으면 카드가 「—」로 적는다. */
+    val back: PillCandidateFace = PillCandidateFace()
 )
+
+/**
+ * 후보 카드에 그릴 **카탈로그** 면 정보 (NM-488).
+ *
+ * ## 사용자가 넣는 값이 아니다
+ * [PillFaceRequest] 는 「무엇으로 찾을까」이고 이건 「이 약은 이렇게 생겼다」다. 그래서
+ * 여기 null 은 「조건 제외」가 아니라 **그 면에 그게 없다**는 뜻이다 — 요청과 정반대다.
+ *
+ * @param markCode 식약처 마크 코드. **검색에 쓰지 않는 표시용**이다. 그림은 앱이 들고
+ *   있는데 수급 경로와 이름 규칙은 NM-506 이 정한다 — 아직 없어 그릴 수 없는 코드가 있고,
+ *   그때도 화면이 깨지지 않아야 한다
+ */
+@Serializable
+data class PillCandidateFace(
+    val imprint: String? = null,
+    val dividingLine: DividingLine? = null,
+    val hasMark: Boolean = false,
+    val markCode: String? = null
+) {
+    /** 그릴 것이 하나도 없는가. 카드가 「—」를 적는 기준이다. */
+    val isEmpty: Boolean
+        get() = imprint.isNullOrBlank() && (dividingLine == null || dividingLine == DividingLine.NONE) && !hasMark
+}
 
 /**
  * 후보 조회 결과 — 커서 페이지네이션을 대체한다 (NM-488 · NM-489).

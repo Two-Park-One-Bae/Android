@@ -35,7 +35,12 @@ import coil3.compose.AsyncImage
 /**
  * 후보 한 줄 — 디자인 `⑧ 후보 리스트 / Row`.
  *
- * 라디오 20 · 썸네일 72×38 · 품목명 14/600 + 업체명 12 · 세부정보 버튼 28.
+ * 라디오 20 · 썸네일 48×28 · 품목명 14/600 + 업체명 11 · **면 요약** · 세부정보 버튼 28.
+ *
+ * ## 둘째 줄이 면 요약이다 (NM-517)
+ * 각인이 같은 약이 수두룩하고 이름도 비슷비슷하다("설트라정" · "셀트라정"). 손에 든 알약과
+ * 대조할 거리는 **앞뒤에 뭐가 찍혀 있나**라, 업체명을 품목명 옆으로 올리고 아랫줄을
+ * [PillCandidateFaceSummary] 에 내줬다.
  *
  * 과녁이 셋이다 — **카드**는 선택, **썸네일**은 이미지 비교, **ⓘ**는 세부정보.
  *
@@ -71,27 +76,27 @@ fun PillCandidateRow(
                 shape = shape
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Radio(selected = selected)
 
         AsyncImage(
             model = candidate.pillThumbnailUrl,
             contentDescription = null,
-            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 72×38(1.89)이라 잘려 나가는 게 거의 없다.
+            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 48×28(1.71)이라 잘려 나가는 게 적다.
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(width = 72.dp, height = 38.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(width = 48.dp, height = 28.dp)
+                .clip(RoundedCornerShape(6.dp))
                 .background(NmColor.Neutral.C100)
                 // 썸네일만 비교 뷰어를 연다 — 카드 탭(선택)·세부정보는 그대로다(spec NM-354).
                 .clickable(onClick = onThumbnailClick)
         )
 
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = candidate.pillName,
                     style = NameStyle,
@@ -103,15 +108,18 @@ fun PillCandidateRow(
                     // 배지가 먼저 잘리지 않게 이름 쪽이 줄어든다.
                     modifier = Modifier.weight(1f, fill = false)
                 )
+                // 업체명은 **같은 줄**이다(정본 ②) — 동명이약을 가르는 값이라 품목명 옆에 붙어야
+                // 한눈에 비교된다. 아랫줄은 면 요약이 가져갔다.
+                Text(
+                    text = candidate.companyName,
+                    style = SubStyle,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
             }
-            Text(
-                text = candidate.companyName,
-                style = SubStyle,
-                color = colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            PillCandidateFaceSummary(front = candidate.front, back = candidate.back)
         }
 
         // 선택과 독립이다 — 고르기 전에 상세를 먼저 확인할 수 있어야 한다(spec §세부정보 조회).
@@ -157,5 +165,5 @@ private fun RevokedBadge() {
 }
 
 private val NameStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-private val SubStyle = NmTypography.caption
+private val SubStyle = NmTypography.caption.copy(fontSize = 11.sp)
 private val BadgeStyle = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium)
