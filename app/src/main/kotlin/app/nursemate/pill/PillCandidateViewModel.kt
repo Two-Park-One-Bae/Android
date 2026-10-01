@@ -139,8 +139,14 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     private companion object {
         const val TAG = "NM393"
 
-        /** 한 번에 이어받을 후보 카드 수. 첫 응답이 20개를 주므로 같은 단위로 맞춘다. */
-        const val PAGE_SIZE = 20
+        /**
+         * 한 번에 이어받을 후보 카드 수 — **50** 이다(NM-517).
+         *
+         * 첫 응답이 20개를 주길래 같은 단위로 맞춰 뒀었는데, 그 20 은 서버가 **한 왕복에
+         * 첫 화면을 그리라고** 끼워 준 수지 이어받기 단위가 아니다. 계약이 `items` 를
+         * 1~50 으로 열어 뒀으니 끝까지 쓴다 — 200개를 훑는 데 왕복이 10번에서 4번으로 준다.
+         */
+        const val PAGE_SIZE = 50
         const val DEBOUNCE_MS = 250L
     }
 }

@@ -212,7 +212,7 @@ fun PillEditScreen(
                     )
                 }
 
-                item { CandidateHeader() }
+                item { CandidateHeader(state = candidates) }
 
                 candidateSection(
                     state = candidates,
@@ -269,9 +269,18 @@ fun PillEditScreen(
     }
 }
 
-/** 후보 헤더 — '후보' + 번개 아이콘 '실시간'. 정본 padding=[4,2,0,2]. */
+/**
+ * 후보 헤더 — '후보 N개' + 번개 아이콘 '실시간'. 정본 padding=[4,2,0,2].
+ *
+ * ## 개수를 적는다 (NM-517)
+ * 조건을 하나 고칠 때마다 이 숫자가 줄어드는 것이 **이 화면에서 사용자가 받는 유일한
+ * 피드백**이다. 38 → 12 → 4 로 줄어드는 걸 보고 「각인을 더 칠까」를 정한다.
+ *
+ * 200 에서 잘렸으면 `200개+` 로 적는다 — 「딱 200개」와 「200개 넘게 있는데 거기서 끊었다」는
+ * 다른 말이고, 뒤쪽은 조건을 더 넣어야 한다는 신호다.
+ */
 @Composable
-private fun CandidateHeader() {
+private fun CandidateHeader(state: CandidateUiState) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier
@@ -281,7 +290,7 @@ private fun CandidateHeader() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = "후보", style = SectionTitle, color = colors.textPrimary)
+        Text(text = state.headerLabel(), style = SectionTitle, color = colors.textPrimary)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(
                 painter = painterResource(R.drawable.nm_ic_zap),
@@ -330,6 +339,20 @@ private fun LazyListScope.candidateSection(
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+
+    // 200 에서 잘렸으면 목록 끝에서 한 번 더 알린다. 헤더의 `200개+` 는 들어올 때 한 번
+    // 보고 지나치는데, 끝까지 훑고도 못 찾은 사람에게는 **여기가 할 말을 할 자리**다.
+    if (state.truncated && !state.hasMore) {
+        item {
+            Text(
+                text = "찾는 약이 없다면 조건을 더 입력해 주세요",
+                style = SelectHint,
+                color = NmTheme.semanticColors.textTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            )
         }
     }
 
@@ -394,3 +417,15 @@ private val SelectHint = NmTypography.body.copy(fontSize = 13.sp)
 private val BlockGap = 6.dp
 
 private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal)
+
+/**
+ * 헤더에 적을 말.
+ *
+ * 아직 안 불렀으면 개수를 말할 수 없다 — 숫자 자리를 비워 두고 「후보」만 적는다.
+ * 0 을 적으면 「없다」는 단언이 되는데, 조회 전과 0개는 다른 상태다.
+ */
+private fun CandidateUiState.headerLabel(): String = when {
+    !searched -> "후보"
+    truncated -> "후보 ${ids.size}개+"
+    else -> "후보 ${ids.size}개"
+}
