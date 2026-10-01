@@ -147,17 +147,28 @@ private fun RowScope.FaceColumn(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ConditionCell(
-                label = "구분선",
-                value = input.dividingLine.conditionLabel(),
-                certain = input.dividingLine != null,
-                open = menu == FaceMenu.Line,
-                options = LineOptions,
-                selected = input.dividingLine,
-                onOpen = { menu = FaceMenu.Line },
-                onDismiss = { menu = null },
-                onSelect = { onInputChange(input.copy(dividingLine = it)) }
-            )
+            // 구분선만 **그림 칸 메뉴**다(정본 ④ · ⑩) — 「(+)형」·「(−)형」은 말보다 그림이
+            // 빠르다. 사용자는 손에 든 알약을 보고 고르지 이름으로 떠올리지 않는다.
+            Box(modifier = Modifier.weight(1f)) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    ConditionLabel("구분선")
+                    ConditionDropdown(
+                        value = input.dividingLine.conditionLabel(),
+                        certain = input.dividingLine != null,
+                        onClick = { menu = FaceMenu.Line },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (menu == FaceMenu.Line) {
+                    AttributeMenuPopup(onDismiss = { menu = null }) {
+                        DividingLineMenu(
+                            selected = input.dividingLine,
+                            onSelect = { onInputChange(input.copy(dividingLine = it)) },
+                            onClear = { onInputChange(input.copy(dividingLine = null)) }
+                        )
+                    }
+                }
+            }
             Box(modifier = Modifier.width(1.dp).height(44.dp).background(NmColor.Neutral.C200))
             ConditionCell(
                 label = "마크",
@@ -281,12 +292,6 @@ private enum class FaceMenu { Imprint, Line, Mark }
 private enum class ImprintChoice { Blank, Typed }
 
 private val ImprintOptions = listOf(ImprintChoice.Blank to "없음", ImprintChoice.Typed to "입력")
-
-private val LineOptions = listOf(
-    DividingLine.NONE to "없음",
-    DividingLine.PLUS to "(+)형",
-    DividingLine.MINUS to "(−)형"
-)
 
 private val MarkOptions = listOf(false to "없음", true to "있음")
 

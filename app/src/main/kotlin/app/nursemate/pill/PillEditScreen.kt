@@ -104,10 +104,13 @@ fun PillEditScreen(
     // 하는 화면이 아니다. 면 카드는 늘 보이고, 여기서 여는 것은 색·모양·제형 메뉴뿐이다.
     var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
 
-    // ⚠️ 들어오자마자 **펼친 채로** 시작한다. 정본 ② 는 접힌 상태를 그리지만, 이 화면에
-    // 들어온 이유가 곧 「고치러 왔다」다 — 접어 두면 한 번 더 눌러야 시작한다.
-    // 수동 추가·추출 실패 알약은 채울 것이 더 많아 더더욱 그렇다(NM-516).
-    var expanded by rememberSaveable { mutableStateOf(true) }
+    // 들어오면 **접힌 채로** 시작한다 — 정본 ② 다. 수정하러 들어왔다고 곧바로 고칠 칸을
+    // 펼치면, 사진에서 읽은 값을 **확인할 겨를 없이** 손대게 된다. 먼저 읽고 고칠 데를
+    // 고르는 순서다.
+    //
+    // ⚠️ 둘만 예외로 펼친다 — **수동 추가와 추출 실패**. 보여 줄 모델값이 없어 접어 봐야
+    // 「전체」만 늘어서고, 그 화면에서 해야 할 일은 읽기가 아니라 채우기다(NM-516).
+    var expanded by rememberSaveable { mutableStateOf(manual || attribute.failed) }
 
     // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
     LaunchedEffect(open) { onPanelChange(open) }

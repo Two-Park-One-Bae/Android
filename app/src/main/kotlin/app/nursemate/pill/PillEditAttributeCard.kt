@@ -254,12 +254,11 @@ private fun AttributeRow(
             manual = manual,
             onClick = { onToggle(AttributePanel.Color) }
         ) {
+            // 사용자가 고른 색이 있으면 그걸, 없으면 모델이 읽은 색을 조각 원으로.
             if (conditions.colors.isNotEmpty()) {
-                ColorDots(colors = conditions.colors)
+                ColorDots(colors = conditions.colors, placeholder = manual)
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    attribute.colorHexes.orEmpty().forEach { HexSwatch(it) }
-                }
+                HexPie(hexes = attribute.colorHexes)
             }
         }
 
