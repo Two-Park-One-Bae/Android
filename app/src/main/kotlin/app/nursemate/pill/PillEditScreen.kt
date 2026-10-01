@@ -451,11 +451,18 @@ private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, fontWeight 
 /**
  * 헤더에 적을 말.
  *
- * 아직 안 불렀으면 개수를 말할 수 없다 — 숫자 자리를 비워 두고 「후보」만 적는다.
- * 0 을 적으면 「없다」는 단언이 되는데, 조회 전과 0개는 다른 상태다.
+ * 개수를 **아는 때만** 적는다. 숫자를 붙이면 그 자체가 단언이라, 모르는 상태에서 0 을
+ * 적으면 「조건에 맞는 약이 없다」가 된다.
+ *
+ * | | |
+ * |---|---|
+ * | 조회 전 | 「후보」 — 아직 아무것도 안 물었다 |
+ * | **조회 실패** | 「후보」 — 못 물어봤지 없는 게 아니다 |
+ * | 0개 | 「후보 0개」 — 물어봤고 정말 없다 |
+ * | 200 에서 잘림 | 「후보 200개+」 |
  */
 private fun CandidateUiState.headerLabel(): String = when {
-    !searched -> "후보"
+    !searched || failed -> "후보"
     truncated -> "후보 ${ids.size}개+"
     else -> "후보 ${ids.size}개"
 }
