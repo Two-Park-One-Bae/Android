@@ -110,13 +110,7 @@ fun PillCandidateRow(
                 )
                 // 업체명은 **같은 줄**이다(정본 ②) — 동명이약을 가르는 값이라 품목명 옆에 붙어야
                 // 한눈에 비교된다. 아랫줄은 면 요약이 가져갔다.
-                Text(
-                    text = candidate.companyName,
-                    style = SubStyle,
-                    color = colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(text = candidate.companyName.short(), style = SubStyle, color = colors.textTertiary)
                 if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
             }
             PillCandidateFaceSummary(front = candidate.front, back = candidate.back)
@@ -167,3 +161,16 @@ private fun RevokedBadge() {
 private val NameStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 private val SubStyle = NmTypography.caption.copy(fontSize = 11.sp)
 private val BadgeStyle = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium)
+
+/**
+ * 업체명은 **4자를 넘으면 말줄임** — 품목명에 자리를 내준다(spec 후보 목록 · iOS 와 같다).
+ *
+ * 폭이 아니라 **글자 수**로 자른다. 폭으로 두면 기기·글꼴 크기에 따라 어디서 끊길지 달라져
+ * 품목명이 먹는 자리도 함께 흔들린다 — 목록을 훑는 동안 줄마다 길이가 들쭉날쭉해진다.
+ *
+ * ⚠️ `(주)` 도 글자로 센다. 「(주)한국로슈」가 「(주)한…」이 되어 읽히지 않는데, 정본이
+ * 접두·접미 처리를 적지 않았고 iOS 도 같다 — 바꾸려면 스펙부터다.
+ */
+private fun String.short(): String = if (length > COMPANY_MAX) take(COMPANY_MAX) + "…" else this
+
+private const val COMPANY_MAX = 4
