@@ -17,20 +17,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
@@ -264,3 +270,51 @@ internal fun Boolean?.markConditionLabel(manual: Boolean = false): String = when
 private val FieldLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
 private val DropdownValue = NmTypography.body.copy(fontSize = 12.sp)
 private val MenuLabel = NmTypography.body.copy(fontSize = 14.sp)
+
+/**
+ * 외형 메뉴를 **화면 폭으로** 띄운다 — 정본은 좌우 16 을 남기고 칩 줄 바닥에서 7 아래다.
+ *
+ * ## 왜 카드 안에 깔지 않는가
+ * 색 메뉴는 네 줄이라 351 이다. 카드 안에 깔면 카드가 그만큼 길어져 **후보 목록이 화면 밖으로
+ * 밀려난다** — 조건을 고치는 내내 후보가 어떻게 바뀌는지를 못 보게 된다. 정본이 띄운 이유다.
+ *
+ * 앵커의 창 기준 좌표를 그대로 받아 쓰므로 카드가 어디 있든 같은 자리에 선다.
+ */
+@Composable
+internal fun AttributeMenuPopup(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    val side = with(density) { MenuSideMargin.roundToPx() }
+    val gap = with(density) { MenuAnchorGap.roundToPx() }
+    val provider = remember(side, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize
+            ): IntOffset {
+                // 아래로 넘치면 위로 붙인다 — 긴 색 메뉴가 작은 기기에서 잘리지 않게.
+                val below = anchorBounds.bottom + gap
+                val y = if (below + popupContentSize.height <= windowSize.height) {
+                    below
+                } else {
+                    (windowSize.height - popupContentSize.height - gap).coerceAtLeast(0)
+                }
+                return IntOffset(x = side, y = y)
+            }
+        }
+    }
+    Popup(
+        popupPositionProvider = provider,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        Box(modifier = Modifier.width(LocalConfiguration.current.screenWidthDp.dp - MenuSideMargin * 2)) {
+            content()
+        }
+    }
+}
+
+/** 정본 메뉴는 화면 좌우 16 을 남기고 칩 줄 바닥에서 7 아래에 선다. */
+private val MenuSideMargin = 16.dp
+private val MenuAnchorGap = 7.dp

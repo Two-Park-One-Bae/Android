@@ -96,38 +96,71 @@ fun PillEditAttributeCard(
                     style = CardTitle,
                     color = NmTheme.semanticColors.textPrimary
                 )
-                AttributeRow(
-                    attribute = attribute,
-                    conditions = conditions,
-                    manual = manual,
-                    expanded = expanded,
-                    open = open,
-                    onToggle = onToggle
-                )
+                Box {
+                    AttributeRow(
+                        attribute = attribute,
+                        conditions = conditions,
+                        manual = manual,
+                        expanded = expanded,
+                        open = open,
+                        onToggle = onToggle
+                    )
+                    // 메뉴는 칩 줄을 앵커로 삼아 화면 폭으로 뜬다(정본 ③·④·⑤).
+                    if (expanded && open != null) {
+                        AttributeMenuPopup(onDismiss = { onToggle(open) }) {
+                            OpenMenu(
+                                panel = open,
+                                attribute = attribute,
+                                conditions = conditions,
+                                onColorToggle = onColorToggle,
+                                onChange = onChange
+                            )
+                        }
+                    }
+                }
             }
             ExpandButton(expanded = expanded, onClick = { onExpandedChange(!expanded) })
         }
 
-        if (expanded) {
-            when (open) {
-                AttributePanel.Color -> ColorPanel(selected = conditions.colors, onToggle = onColorToggle)
-
-                AttributePanel.Shape -> ShapePanel(selected = conditions.shape) { shape ->
-                    // 같은 값을 다시 누르면 조건에서 뺀다 — 잘못 골랐을 때 되돌릴 길이 필요하다.
-                    onChange(conditions.copy(shape = shape.takeIf { it != conditions.shape }))
-                }
-
-                AttributePanel.Formulation -> FormulationPanel(selected = conditions.formulation) { formulation ->
-                    onChange(conditions.copy(formulation = formulation.takeIf { it != conditions.formulation }))
-                }
-
-                // 각인은 칩이 아니라 면 카드 안에 있다 — 여기서 펼칠 판이 없다.
-                AttributePanel.Imprint, null -> Unit
-            }
-        }
-
         // 접히면 읽기만, 펼치면 고친다. 둘은 **같은 말·같은 색**을 쓴다.
         if (expanded) faceCard() else PillFaceSummary(faces = faces, manual = manual)
+    }
+}
+
+/** 지금 열어 둔 메뉴. 고른 뒤에도 닫지 않는다 — 색은 여러 개를 이어서 고른다. */
+@Composable
+private fun OpenMenu(
+    panel: AttributePanel,
+    attribute: PillAttribute,
+    conditions: PillConditions,
+    onColorToggle: (PillColor) -> Unit,
+    onChange: (PillConditions) -> Unit
+) {
+    when (panel) {
+        AttributePanel.Color -> ColorMenu(
+            selected = conditions.colors,
+            modelHexes = attribute.colorHexes,
+            onToggle = onColorToggle,
+            onClear = { onChange(conditions.copy(colors = emptyList())) }
+        )
+
+        AttributePanel.Shape -> ShapeMenu(
+            selected = conditions.shape,
+            modelShape = attribute.shape,
+            // 같은 값을 다시 눌러도 조건에서 빼지 않는다 — 푸는 길은 메뉴 맨 위의 「전체」다.
+            onSelect = { onChange(conditions.copy(shape = it)) },
+            onClear = { onChange(conditions.copy(shape = null)) }
+        )
+
+        AttributePanel.Formulation -> FormulationMenu(
+            selected = conditions.formulation,
+            modelFormulation = attribute.formulation,
+            onSelect = { onChange(conditions.copy(formulation = it)) },
+            onClear = { onChange(conditions.copy(formulation = null)) }
+        )
+
+        // 각인은 칩이 아니라 면 카드 안에 있다 — 여기서 열 메뉴가 없다.
+        AttributePanel.Imprint -> Unit
     }
 }
 

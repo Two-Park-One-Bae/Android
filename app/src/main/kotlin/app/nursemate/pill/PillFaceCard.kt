@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,13 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
@@ -60,11 +54,8 @@ import app.nursemate.core.model.ImprintSource
 internal fun PillFaceCard(
     faces: FaceInputs,
     reading: FaceReading?,
-    frontText: TextFieldValue,
-    backText: TextFieldValue,
     onChange: (FaceInputs) -> Unit,
-    onTextChange: (FaceSide, TextFieldValue) -> Unit,
-    onFocus: (FaceSide?) -> Unit,
+    onEditImprint: (FaceSide) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -77,20 +68,16 @@ internal fun PillFaceCard(
             input = faces.front,
             // 모델이 읽은 것은 **사진에 찍힌 면**뿐이다 — 뒷면에는 되돌릴 값이 없다.
             modelImprint = reading?.imprint,
-            text = frontText,
             onInputChange = { onChange(faces.copy(front = it)) },
-            onTextChange = onTextChange,
-            onFocus = onFocus
+            onEditImprint = onEditImprint
         )
         FaceColumn(
             title = "뒷면",
             side = FaceSide.Back,
             input = faces.back,
             modelImprint = null,
-            text = backText,
             onInputChange = { onChange(faces.copy(back = it)) },
-            onTextChange = onTextChange,
-            onFocus = onFocus
+            onEditImprint = onEditImprint
         )
     }
 }
@@ -101,10 +88,8 @@ private fun RowScope.FaceColumn(
     side: FaceSide,
     input: FaceInput,
     modelImprint: String?,
-    text: TextFieldValue,
     onInputChange: (FaceInput) -> Unit,
-    onTextChange: (FaceSide, TextFieldValue) -> Unit,
-    onFocus: (FaceSide?) -> Unit
+    onEditImprint: (FaceSide) -> Unit
 ) {
     val colors = NmTheme.semanticColors
     var menu by remember { mutableStateOf<FaceMenu?>(null) }
@@ -137,7 +122,8 @@ private fun RowScope.FaceColumn(
                     onDismiss = { menu = null },
                     onChange = { next ->
                         onInputChange(next)
-                        onTextChange(side, TextFieldValue(next.imprint.orEmpty()))
+                        // 「입력」을 고르면 곧바로 칠 수 있게 줄을 띄운다.
+                        if (next.imprint?.isNotEmpty() == true) onEditImprint(side)
                     }
                 )
             }
@@ -146,18 +132,12 @@ private fun RowScope.FaceColumn(
         // 각인을 「입력」으로 둔 면에만 칸이 뜬다. 「전체」·「없음」에는 적을 것이 없다.
         if (input.imprint != null && input.imprint.isNotEmpty()) {
             ImprintField(
-                text = text,
+                value = input.imprint,
                 revertTo = modelImprint?.takeIf { it != input.imprint },
-                onValueChange = { value ->
-                    onTextChange(side, value)
-                    onInputChange(input.typed(value.text))
-                },
+                onClick = { onEditImprint(side) },
                 onRevert = {
-                    val model = modelImprint.orEmpty()
-                    onTextChange(side, TextFieldValue(model))
-                    onInputChange(input.copy(imprint = model, imprintSource = ImprintSource.MODEL))
-                },
-                onFocusChange = { focused -> onFocus(if (focused) side else null) }
+                    onInputChange(input.copy(imprint = modelImprint.orEmpty(), imprintSource = ImprintSource.MODEL))
+                }
             )
         }
 
@@ -251,17 +231,11 @@ private fun ImprintMenu(input: FaceInput, onDismiss: () -> Unit, onChange: (Face
 /**
  * 각인 칸 — 정본 ⑪ 는 높이 34 · `$warning-50` 바탕 · 글자 15/800 이고 오른쪽에 되돌리기다.
  *
- * ⚠️ 정본은 이 칸을 **키보드 위 화면 폭 줄**로 적게 한다 — 여기 칸은 약 8자라 좁다. 그 줄은
- * 아직 없어서 지금은 칸에 바로 적는다(NM-516 「각인 입력 줄」).
+ * **여기서 치지 않는다.** 누르면 키보드 위 화면 폭 줄이 올라온다([PillImprintInputRow]) —
+ * 이 칸은 약 8자라 좁다(정본 ⑦).
  */
 @Composable
-private fun ImprintField(
-    text: TextFieldValue,
-    revertTo: String?,
-    onValueChange: (TextFieldValue) -> Unit,
-    onRevert: () -> Unit,
-    onFocusChange: (Boolean) -> Unit
-) {
+private fun ImprintField(value: String, revertTo: String?, onClick: () -> Unit, onRevert: () -> Unit) {
     val colors = NmTheme.semanticColors
     val shape = RoundedCornerShape(8.dp)
     Row(
@@ -271,22 +245,17 @@ private fun ImprintField(
             .clip(shape)
             .background(NmColor.Warning.C50)
             .border(1.dp, NmColor.Warning.C300, shape)
+            .clickable(onClick = onClick)
             .padding(start = 8.dp, end = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        BasicTextField(
-            value = text,
-            onValueChange = onValueChange,
-            textStyle = FieldValue.copy(color = colors.textPrimary),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Characters,
-                imeAction = ImeAction.Done
-            ),
-            cursorBrush = SolidColor(NmColor.Warning.C700),
-            modifier = Modifier
-                .weight(1f)
-                .onFocusChanged { onFocusChange(it.isFocused) }
+        Text(
+            text = value,
+            style = FieldValue,
+            color = colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
         )
         // 되돌릴 모델값이 있을 때만 보인다. 없으면 자리도 비운다 — 누를 수 없는 단추를
         // 흐리게 남겨 두면 「왜 안 눌리지」가 된다.

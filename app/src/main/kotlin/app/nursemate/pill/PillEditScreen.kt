@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -107,11 +108,12 @@ fun PillEditScreen(
     // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
     LaunchedEffect(open) { onPanelChange(open) }
 
-    // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
-    // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
-    var frontText by remember { mutableStateOf(TextFieldValue(faces.front.imprint.orEmpty())) }
-    var backText by remember { mutableStateOf(TextFieldValue(faces.back.imprint.orEmpty())) }
-    var focusedSide by remember { mutableStateOf<FaceSide?>(null) }
+    // 각인을 치는 중인 면. null 이면 입력 줄이 안 떠 있다(정본 ⑦).
+    var editingSide by remember { mutableStateOf<FaceSide?>(null) }
+
+    // 치는 동안의 **초안**이다. 글자의 주인은 뷰모델([faces])이고, 확인을 눌러야 넘어간다 —
+    // 한 글자마다 넘기면 후보가 글자 수만큼 왕복한다. 커서 자리는 기호를 끼워 넣을 때 쓴다.
+    var draft by remember { mutableStateOf(TextFieldValue()) }
 
     // 이미지 비교 뷰어에 띄울 후보. null 이면 안 열려 있다.
     var comparing by remember { mutableStateOf<PillCandidate?>(null) }
@@ -121,11 +123,19 @@ fun PillEditScreen(
     //    (safeDrawing 을 먹은 Column 안이어도 WindowInsets.ime 는 창 원본 값을 준다.)
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
+    // 뒤로 키로 키보드를 내린 것은 「그만 친다」다. 줄만 남아 화면 아래에 떠 있으면
+    // 무엇을 하는 중인지 알 수 없다 — 쳐 둔 글자는 그대로 넘긴다.
     LaunchedEffect(imeVisible) {
-        if (!imeVisible) {
-            focusedSide = null
-            // 포커스까지 풀어야 각인 칸 테두리가 파란 채로 남지 않는다. 키보드를 내린 것은
-            // "다 적었다"는 뜻인데 칸만 열려 있으면 아직 입력 중처럼 보인다.
+        if (!imeVisible && editingSide != null) {
+            val typed = draft.text.trim()
+            onFacesChange(
+                if (editingSide == FaceSide.Front) {
+                    faces.copy(front = faces.front.typed(typed))
+                } else {
+                    faces.copy(back = faces.back.typed(typed))
+                }
+            )
+            editingSide = null
             focusManager.clearFocus()
         }
     }
@@ -159,17 +169,19 @@ fun PillEditScreen(
                         expanded = expanded,
                         onExpandedChange = { next ->
                             expanded = next
-                            // 접으면 열어 둔 메뉴도 같이 닫는다 — 안 보이는 판이 열린 채로
-                            // 남아 다시 펼쳤을 때 뜬금없이 튀어나온다.
+                            // 접으면 열어 둔 메뉴·입력 줄도 같이 닫는다 — 안 보이는 판이
+                            // 열린 채로 남아 다시 펼쳤을 때 뜬금없이 튀어나온다.
                             if (!next) {
                                 open = null
-                                focusedSide = null
+                                editingSide = null
                             }
                         },
                         open = open,
                         onToggle = { panel ->
                             open = panel.takeIf { it != open }
-                            if (open != AttributePanel.Imprint) focusedSide = null
+                            // 외형 메뉴를 열면 각인 줄은 내린다 — 둘이 같이 떠 있으면
+                            // 키보드가 메뉴를 가린다.
+                            if (open != null) editingSide = null
                         },
                         onColorToggle = { color ->
                             val current = conditions.colors
@@ -182,13 +194,13 @@ fun PillEditScreen(
                             PillFaceCard(
                                 faces = faces,
                                 reading = reading,
-                                frontText = frontText,
-                                backText = backText,
                                 onChange = onFacesChange,
-                                onTextChange = { side, value ->
-                                    if (side == FaceSide.Front) frontText = value else backText = value
-                                },
-                                onFocus = { side -> focusedSide = side }
+                                onEditImprint = { side ->
+                                    val current = if (side == FaceSide.Front) faces.front else faces.back
+                                    val value = current.imprint.orEmpty().trim()
+                                    draft = TextFieldValue(value, selection = TextRange(value.length))
+                                    editingSide = side
+                                }
                             )
                         }
                     )
@@ -214,20 +226,27 @@ fun PillEditScreen(
             // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
             EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
 
-            val side = focusedSide
-            if (side != null && imeVisible) {
-                PillSymbolBar(
-                    onSymbol = { symbol ->
-                        val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
-                        if (side == FaceSide.Front) {
-                            frontText = next
-                            onFacesChange(faces.copy(front = faces.front.typed(next.text)))
-                        } else {
-                            backText = next
-                            onFacesChange(faces.copy(back = faces.back.typed(next.text)))
-                        }
+            // 각인 입력 줄 + 기호 바는 키보드 **바로 위**에 쌓인다(정본 ⑦).
+            val side = editingSide
+            if (side != null) {
+                val commit = {
+                    val typed = draft.text.trim()
+                    val next = if (side == FaceSide.Front) {
+                        faces.copy(front = faces.front.typed(typed))
+                    } else {
+                        faces.copy(back = faces.back.typed(typed))
                     }
+                    onFacesChange(next)
+                    editingSide = null
+                    focusManager.clearFocus()
+                }
+                PillImprintInputRow(
+                    side = side,
+                    text = draft,
+                    onTextChange = { draft = it },
+                    onConfirm = commit
                 )
+                PillSymbolBar(onSymbol = { symbol -> draft = draft.insert(symbol) })
             }
         }
 
