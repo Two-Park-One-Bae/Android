@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -145,7 +147,11 @@ fun PillEditScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                // ⚠️ 아래쪽 여백은 **하단 묶음만** 먹는다. 여기서 통째로 먹으면 키보드가
+                // 뜰 때 목록까지 키보드 높이만큼 줄어, 조건을 고치는 동안 후보가 거의 안 보인다.
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                )
         ) {
             NmNavBar(title = "수정", onBack = onCancel)
 
@@ -223,30 +229,34 @@ fun PillEditScreen(
                 )
             }
 
-            // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
-            EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
+            // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이
+            // 키보드와 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
+            Column(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
+                EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
 
-            // 각인 입력 줄 + 기호 바는 키보드 **바로 위**에 쌓인다(정본 ⑦).
-            val side = editingSide
-            if (side != null) {
-                val commit = {
-                    val typed = draft.text.trim()
-                    val next = if (side == FaceSide.Front) {
-                        faces.copy(front = faces.front.typed(typed))
-                    } else {
-                        faces.copy(back = faces.back.typed(typed))
+                // 각인 입력 줄 + 기호 바는 키보드 **바로 위**에 쌓인다(정본 ⑦).
+                val side = editingSide
+                if (side != null) {
+                    val commit = {
+                        val typed = draft.text.trim()
+                        val next = if (side == FaceSide.Front) {
+                            faces.copy(front = faces.front.typed(typed))
+                        } else {
+                            faces.copy(back = faces.back.typed(typed))
+                        }
+                        onFacesChange(next)
+                        editingSide = null
+                        focusManager.clearFocus()
                     }
-                    onFacesChange(next)
-                    editingSide = null
-                    focusManager.clearFocus()
+                    PillImprintInputRow(
+                        side = side,
+                        text = draft,
+                        onTextChange = { draft = it },
+                        onConfirm = commit
+                    )
+                    PillSymbolBar(onSymbol = { symbol -> draft = draft.insert(symbol) })
                 }
-                PillImprintInputRow(
-                    side = side,
-                    text = draft,
-                    onTextChange = { draft = it },
-                    onConfirm = commit
-                )
-                PillSymbolBar(onSymbol = { symbol -> draft = draft.insert(symbol) })
             }
         }
 
