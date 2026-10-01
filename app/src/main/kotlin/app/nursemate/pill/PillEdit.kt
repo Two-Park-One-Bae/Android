@@ -45,5 +45,5 @@ internal fun PillEdit.enteredValuesSummary(): String = buildList {
     if (conditions.shape != null) add("shape")
     if (conditions.colors.isNotEmpty()) add("color")
     if (conditions.formulation != null) add("formulation")
-    if (faces.front.toFace() != null || faces.back.toFace() != null) add("imprint")
+    if (faces.front.hasCondition || faces.back.hasCondition) add("imprint")
 }.ifEmpty { listOf("none") }.joinToString(",")

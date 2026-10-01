@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  가로 슬라이더 — 접힌 속성 카드의 '수정' 단추
+  출처: Lucide "sliders-horizontal" (ISC License) https://lucide.dev
+  펼치면 같은 자리가 체크(완료)로 바뀐다.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M10,5H3 M12,19H3 M14,3v4 M16,17v4 M21,12h-9 M21,19h-5 M21,5h-7 M8,10v4 M8,12H3"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

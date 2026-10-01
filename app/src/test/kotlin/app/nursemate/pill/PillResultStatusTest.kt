@@ -13,7 +13,7 @@ class PillResultStatusTest {
     private fun edit(error: String? = null) = PillEdit(
         attribute = PillAttribute(pillId = "p1", error = error),
         conditions = PillConditions(),
-        faces = FaceInputs.from()
+        faces = FaceInputs()
     )
 
     private val candidate = PillCandidate(

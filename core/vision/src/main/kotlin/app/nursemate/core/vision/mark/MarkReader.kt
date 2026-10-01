@@ -207,6 +207,18 @@ class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
         /** assets·DVC 에서 이 이름으로 온다. **fp16 판이다** — 53MB 이고 fp32(106MB)와 답이 같다(NM-526). */
         const val MODEL_FILE_NAME = "mark_species_fp16.onnx"
 
+        /**
+         * 임베딩을 뽑은 모델 버전 — **ML 레포 모델 폴더 이름 그대로**다.
+         *
+         * 후보 조회 요청의 `markEmbeddingModel` 로 나가고 서버가 카탈로그 임베딩과 판을
+         * 맞춘다. 버전이 다른 임베딩끼리는 코사인이 성립하지 않는데 **에러 없이 순서만**
+         * 틀어지기 때문이다(NM-533).
+         *
+         * ⚠️ **모델 파일을 바꾸면 이 값도 같이 바꾼다.** 파일 이름에는 날짜가 없어 둘이
+         * 조용히 갈릴 수 있다 — 갈리면 서버가 엉뚱한 카탈로그와 견준다.
+         */
+        const val MODEL_VERSION = "20260925-convnext-species"
+
         /** 임베딩 차원. fp16 판은 그래프에 768 로 박혀 있다(fp32 판은 동적이다). */
         const val EMBEDDING_DIM = 768
 

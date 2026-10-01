@@ -7,6 +7,7 @@ import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
 import app.nursemate.core.network.api.PillCandidatesRequest
+import app.nursemate.core.vision.mark.MarkReader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -153,14 +154,22 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
  * 면 조건은 [FaceInput.toRequest] 가 만든다 — 요청의 null 이 "조건 제외"라 '없음'을 걸려면
  * 값을 명시해야 하고, 그 판단은 화면 입력값을 봐야 할 수 있는 일이다.
  */
-private fun PillConditions.toRequest(faces: FaceInputs) = PillCandidatesRequest(
-    attributeToken = attributeToken,
-    colors = colors,
-    shape = shape,
-    formulation = formulation,
-    front = faces.front.toRequest(),
-    back = faces.back.toRequest()
-)
+private fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
+    val front = faces.front.toRequest()
+    val back = faces.back.toRequest()
+    return PillCandidatesRequest(
+        attributeToken = attributeToken,
+        // 어느 면이든 임베딩이 있으면 **필수**다. 빠지면 400 INVALID_REQUEST 이고,
+        // 보내도 서버가 모르는 버전이면 임베딩 항만 빠진다 — 에러가 아니다(NM-533).
+        markEmbeddingModel = MarkReader.MODEL_VERSION
+            .takeIf { front?.markEmbedding != null || back?.markEmbedding != null },
+        colors = colors,
+        shape = shape,
+        formulation = formulation,
+        front = front,
+        back = back
+    )
+}
 
 /**
  * 서버에 물어볼 게 하나라도 있는가.

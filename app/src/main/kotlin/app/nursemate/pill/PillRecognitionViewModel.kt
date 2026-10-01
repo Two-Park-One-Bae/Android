@@ -74,6 +74,12 @@ class PillRecognitionViewModel @Inject constructor(
     private var detector: PillDetector? = null
 
     /**
+     * 각인·마크 세션도 같은 수명을 갖는다. Hilt 로 주입하지 않고 여기서 만든다 —
+     * 의존이 [modelFile] 하나뿐이고, 주입하면 생성자만 길어진다.
+     */
+    private val faceReader = PillFaceReader(modelFile)
+
+    /**
      * 촬영·선택한 사진을 읽는다.
      *
      * 최장변 2048 축소, 중앙 정사각 크롭, EXIF 회전이 여기서 끝난다([ImageLoader.load]).
@@ -147,6 +153,9 @@ class PillRecognitionViewModel @Inject constructor(
                         return@onSuccess
                     }
                     _state.update { it.copy(detection = DetectionPhase.Success(result)) }
+                    // 온디바이스 각인·마크는 **서버 왕복과 나란히** 돈다. 결과 화면은
+                    // 속성만 기다리고, 읽은 각인은 늦게 와서 수정 화면에 얹힌다.
+                    readFaces(result)
                     extractAttributes(result)
                 }
                 .onFailure { throwable ->
@@ -231,6 +240,16 @@ class PillRecognitionViewModel @Inject constructor(
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
                 analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = extracted.items.size)
+                // 서버가 무엇을 읽었는지 한 줄로 남긴다. 검출·각인·마크와 나란히 봐야
+                // 「왜 이 후보가 나왔나」를 되짚을 수 있다.
+                extracted.items.forEach {
+                    Log.i(
+                        TAG,
+                        "${it.pillId} 속성 ${it.error ?: "ok"} | 색 ${it.colorHexes ?: "—"} " +
+                            "모양 ${it.shape ?: "—"} 제형 ${it.formulation ?: "—"} " +
+                            "토큰 ${if (it.attributeToken != null) "있음" else "없음"}"
+                    )
+                }
                 // 한도 **소진**은 마지막 1회를 쓴 이 응답에서만 잡힌다 — 막힌 시도가 아니라.
                 if (extracted.usage.exhausted) analyticsSession.limitReached()
                 attributeCache.save(extracted.items)
@@ -273,6 +292,53 @@ class PillRecognitionViewModel @Inject constructor(
      */
     val corrections = PillCorrections(_state)
 
+    /**
+     * 찍힌 면의 각인·마크를 읽어 [PillUiState.faceReadings] 에 쌓는다 — NM-485 · NM-515.
+     *
+     * ## 결과 화면을 막지 않는다
+     * 알약 하나에 2초다(각인 144장 1796 ms + 마크 8장 178 ms, S24 · WebGPU). 셋이면 6초인데,
+     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 두 배 넘게 는다.**
+     * 그래서 별도 코루틴으로 띄우고 한 장씩 들어오는 대로 상태에 넣는다.
+     *
+     * ## 하나씩 넣는다
+     * 다 끝나고 한꺼번에 넣으면 첫 알약을 이미 읽어 놓고도 마지막 알약 때문에 기다린다.
+     *
+     * ## 이미 손댄 알약은 건드리지 않는다
+     * 읽는 동안 사용자가 수정 화면에서 무언가 고쳤으면 [PillUiState.edits] 에 항목이 생긴다.
+     * 그건 사용자값이라 모델값으로 덮지 않는다 — 다만 **아직 면을 손대지 않았으면**
+     * (=[FaceInputs] 가 기본값 그대로) 그 자리에 채워 준다. 조건만 고치고 각인은 그대로 둔
+     * 사람이 읽은 각인을 못 보게 되는 것을 막는다.
+     *
+     * 실패해도 흐름을 세우지 않는다. 각인은 사용자가 직접 칠 수 있고, 못 읽은 면은
+     * 「전체」로 남아 후보를 자르지 않는다.
+     */
+    private fun readFaces(result: DetectionResult) {
+        viewModelScope.launch {
+            result.pills.forEachIndexed { index, pill ->
+                val id = pillId(index)
+                runCatching { faceReader.read(pill.crop) }
+                    .onSuccess { reading -> applyReading(id, reading) }
+                    .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+            }
+        }
+    }
+
+    private fun applyReading(id: String, reading: FaceReading) {
+        _state.update { state ->
+            val edit = state.edits[id]
+            state.copy(
+                faceReadings = state.faceReadings + (id to reading),
+                // 손대지 않은 면만 채운다. `edits` 에 항목이 없으면 `editOf` 가 읽기값에서
+                // 만들어 쓰므로 여기서 할 일이 없다.
+                edits = if (edit != null && edit.faces == FaceInputs()) {
+                    state.edits + (id to edit.copy(faces = reading.toInputs()))
+                } else {
+                    state.edits
+                }
+            )
+        }
+    }
+
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
         PillDetector(modelFile.prepare()).also { detector = it }
     }
@@ -280,6 +346,7 @@ class PillRecognitionViewModel @Inject constructor(
     override fun onCleared() {
         detector?.close()
         detector = null
+        faceReader.close()
     }
 
     private companion object {
@@ -321,7 +388,17 @@ data class PillUiState(
      */
     val manualPillIds: List<String> = emptyList(),
     /** 확정한 후보. 카드 제목이 '알약을 선택해주세요'에서 품목명으로 바뀐다. */
-    val selections: Map<String, PillCandidate> = emptyMap()
+    val selections: Map<String, PillCandidate> = emptyMap(),
+    /**
+     * 온디바이스가 찍힌 면에서 읽은 각인·마크 — 알약이 읽히는 대로 하나씩 채워진다.
+     *
+     * **되돌리기의 기준이기도 하다.** 계약이 「초기 상태와 명시적 원복일 때만 모델값」으로
+     * 정했으므로 사용자가 고친 뒤에도 원본이 남아 있어야 한다 — [edits] 를 덮어쓰지 않고
+     * 따로 든다.
+     *
+     * 아직 안 읽은 알약은 항목이 없다. 검출 직후에는 비어 있고 2초쯤 뒤부터 찬다.
+     */
+    val faceReadings: Map<String, FaceReading> = emptyMap()
 )
 
 /**
@@ -417,7 +494,8 @@ fun PillUiState.editOf(pillId: String): PillEdit {
     return PillEdit(
         attribute = attribute,
         conditions = PillConditions(attributeToken = attribute.attributeToken),
-        faces = FaceInputs.from()
+        // 아직 안 읽었으면 빈 값이다 — 읽히는 대로 여기 들어온다(NM-485 · NM-515).
+        faces = faceReadings[pillId]?.toInputs() ?: FaceInputs()
     )
 }
 
