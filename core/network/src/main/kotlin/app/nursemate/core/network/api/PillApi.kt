@@ -2,7 +2,8 @@ package app.nursemate.core.network.api
 
 import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
-import app.nursemate.core.model.PillCandidatePage
+import app.nursemate.core.model.PillCandidateItems
+import app.nursemate.core.model.PillCandidateResult
 import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillDetail
 import app.nursemate.core.model.PillFaceRequest
@@ -16,6 +17,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * 알약 식별 API.
@@ -40,29 +42,62 @@ interface PillApi {
      * **1회 식별 = 이 요청 1회다.** 사진에 알약이 몇 개든 상관없다. 검출 0개면 아예
      * 부르지 않는다 — 부르면 헛되이 한 번 차감된다.
      *
-     * 각인계열(front·back)은 MVP 에서 서버가 뽑지 않아 항상 null 로 온다.
+     * **각인·마크는 이 응답에 없다** — 앱이 온디바이스로 읽는다(NM-485 · NM-515).
+     * 서버는 색(openCV)·모양·제형(자체 분류 모델)만 뽑는다. 외부 AI 호출이 없어 v0 보다 빠르다.
+     *
+     * 응답에는 `attributeToken` 이 함께 온다. **해석하지 않고** 후보 조회에 그대로 되돌려주면
+     * 서버가 정렬에 쓴다 — 한 식별 흐름 안에서만 유효하다.
      *
      * @throws app.nursemate.core.network.error.ApiFailure
      *   429 `LIMIT_EXCEEDED` — 한도 도달. **차감되지 않으며** 본문의
      *   `ProblemDetail.usage` 에 `remaining=0` 과 리셋 시각이 담겨 온다.
      *   413 — 크롭이 너무 크다. 503 — 외부 AI 일시 오류(재시도 가능).
      */
-    @POST("api/v0/pill-attributes")
+    @POST("api/v1/pill-attributes")
     suspend fun attributes(@Body request: PillAttributesRequest): PillAttributesResponse
 
     /**
-     * 수정한 속성으로 후보를 조회한다.
+     * 사용자가 정한 조건으로 후보를 조회한다 (NM-517).
      *
-     * **하드 필터 AND** 다 — 넣은 조건만 적용되고, 넣을수록 좁아진다. 조건이 좁으면
-     * 후보 0개가 정상 응답이다(빈 목록). 속성을 고칠 때마다 다시 부른다.
+     * ## 자르는 것과 줄 세우는 것이 다르다
+     * | 하드 필터 (자른다) | 소프트 (줄만 세운다) |
+     * |---|---|
+     * | 각인 · 마크 유무 · 구분선 | `attributeToken` (모델 출력 · 로지스틱) |
+     * | 사용자가 **직접 고른** 모양 · 제형 | 마크 임베딩 · 사용자가 고른 **색** |
      *
-     * 정렬은 서버가 한다: 허가 정상 우선 → 색 정확 일치 우선 → pillCode 오름차순.
-     * 앱이 다시 정렬하면 그 규칙이 어긋난다.
+     * ⚠️ **모델이 추정한 모양·제형·색을 조건으로 보내지 않는다.** 보내면 하드 필터가 되어
+     * 정답 약을 떨어뜨린다 — 모델값은 `attributeToken` 하나로 정렬에만 쓰인다
+     * ([app.nursemate.core.model.PillConditions]).
      *
-     * 식별 횟수를 **차감하지 않는다**(Gemini 미사용).
+     * ## 페이지네이션이 없다
+     * 커서 대신 **정렬된 `ids` 전체(최대 200)와 앞 20개 상세**가 한 번에 온다. 21번째부터는
+     * [candidateItems] 로 ID 조회한다(NM-489) — 순서는 이 응답의 `ids` 가 고정한다.
+     *
+     * 식별 횟수를 **차감하지 않는다.**
+     *
+     * @throws app.nursemate.core.network.error.ApiFailure
+     *   400 `INVALID_ATTRIBUTE_TOKEN` — 토큰이 오래됐거나 지원하지 않는 버전이다.
+     *   **앱은 토큰 없이 다시 요청한다** — 후보는 나오고 정렬만 덜 맞는다. 화면에 따로 알리지 않는다
      */
-    @POST("api/v0/pill-candidates")
-    suspend fun candidates(@Body request: PillCandidatesRequest): PillCandidatePage
+    @POST("api/v1/pill-candidates")
+    suspend fun candidates(@Body request: PillCandidatesRequest): PillCandidateResult
+
+    /**
+     * 후보 카드 일괄 조회 — 21번째부터의 상세 (NM-489).
+     *
+     * [candidates] 가 준 `ids` 중 아직 받지 않은 것을 묶어 부른다.
+     *
+     * ⚠️ **`GET` 에 쿼리 파라미터**다 — 본문이 아니라 `pillCodes=코드1,코드2` 로 쉼표 구분해
+     * 보낸다. POST 로 보내면 405 다(실기기에서 확인). 조회 전용이라 식별 횟수와 무관하다.
+     *
+     * **1~50개**만 받는다 — 밖이면 400 `INVALID_REQUEST` 이고 잘라서 돌려주지 않는다.
+     * 중복은 한 번만 담는다.
+     *
+     * ⚠️ **순서가 보장되지 않는다.** 앱이 `ids` 순서대로 다시 배치한다.
+     * 그리고 `missing` 에 담겨 오는 pillCode 는 **목록에서 뺀다** — 로딩 중으로 남기지 않는다.
+     */
+    @GET("api/v1/pill-candidates/items")
+    suspend fun candidateItems(@Query("pillCodes") pillCodes: String): PillCandidateItems
 
     /**
      * 확정한 알약의 세부정보.
@@ -115,22 +150,22 @@ data class PillAttributesResponse(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class PillCandidatesRequest(
+    /**
+     * 속성 추출이 준 토큰을 **그대로** 되돌려준다. 사용자가 무엇을 고쳤든 항상 보낸다 —
+     * 모델이 본 색·모양·제형이 여기 들어 있고 서버가 정렬에 쓴다.
+     * 수동 추가·추출 실패 알약은 null 이다.
+     */
+    val attributeToken: String? = null,
     // ⚠️ 이 프로젝트의 Json 은 explicitNulls=false 뿐 encodeDefaults 는 기본값(false) 이다 —
-    // 기본값과 같은 값은 직렬화에서 통째로 빠진다. openapi.yaml 이 colors 를
-    // required·non-null 로 못박고 있어(빈 배열이면 색 조건 제외라는 뜻으로 서버가 읽는다),
-    // 필드 자체가 빠지면 스키마 검증에서 400 INVALID_REQUEST 다. 이 필드만 항상 실어 보낸다.
+    // 기본값과 같은 값은 직렬화에서 통째로 빠진다. 계약이 colors 에 `default: []` 를 두고 있어
+    // 빠져도 서버가 받아 주지만, 「색 조건 없음」을 명시적으로 보내는 편이 읽기 쉽다.
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val colors: List<PillColor> = emptyList(),
-    val isTransparent: Boolean? = null,
     val shape: PillShape? = null,
     val formulation: PillFormulation? = null,
     val front: PillFaceRequest? = null,
-    val back: PillFaceRequest? = null,
-    val cursor: String? = null,
-    val size: Int = DEFAULT_PAGE_SIZE
+    val back: PillFaceRequest? = null
 )
-
-private const val DEFAULT_PAGE_SIZE = 20
 
 @Serializable
 data class UploadUrlResponse(val uploadUrl: String, val expiresAt: String)

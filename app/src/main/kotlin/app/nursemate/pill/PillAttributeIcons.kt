@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
@@ -41,17 +42,28 @@ internal fun Swatch(color: PillColor) {
     )
 }
 
+/**
+ * 모델이 준 **표시값 hex** 를 그대로 칠한다 (NM-516).
+ *
+ * v1 은 색을 열거형이 아니라 sRGB hex 로 준다. 흰색 계열은 배경에 묻히므로 [Swatch] 와 같은
+ * 규칙으로 테두리를 두른다 — 밝기로 판단한다(열거형이 아니라 어느 값이든 올 수 있다).
+ *
+ * 읽을 수 없는 값이 오면 **그리지 않는다.** 엉뚱한 색을 칠하느니 비우는 편이 낫다.
+ */
 @Composable
-internal fun TransparentTag() {
+internal fun HexSwatch(hex: String) {
     val colors = NmTheme.semanticColors
+    val parsed = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull() ?: return
     Box(
         modifier = Modifier
-            .border(1.dp, colors.border, RoundedCornerShape(6.dp))
-            .padding(horizontal = 2.dp)
-    ) {
-        Text(text = "투명", style = IconTagLabel, color = colors.textTertiary)
-    }
+            .size(12.dp)
+            .background(parsed, CircleShape)
+            .let { if (parsed.luminance() > OUTLINE_LUMINANCE) it.border(1.dp, colors.border, CircleShape) else it }
+    )
 }
+
+/** 이보다 밝으면 흰 배경에 묻혀 테두리를 두른다. [Swatch] 의 `needsOutline` 과 같은 뜻이다. */
+private const val OUTLINE_LUMINANCE = 0.75f
 
 /** 모양 아이콘 — 정본이 도형 자체로 알려 준다. 이름만 있으면 훑을 때 눈에 안 들어온다. */
 @Composable
@@ -86,8 +98,6 @@ internal fun FormulationIcon(formulation: PillFormulation, tint: Color = NmTheme
         }
     }
 }
-
-private val IconTagLabel = NmTypography.caption.copy(fontSize = 11.sp)
 
 /** 고른 색을 점으로 늘어놓는다. 하나도 없으면 칩이 텅 비지 않게 아무것도 그리지 않는다. */
 @Composable

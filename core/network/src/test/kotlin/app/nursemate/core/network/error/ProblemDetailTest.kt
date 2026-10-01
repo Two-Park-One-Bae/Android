@@ -69,9 +69,12 @@ class ProblemDetailTest {
     }
 
     @Test
-    fun `errors_md 의 코드 11종이 모두 매핑된다`() {
+    fun `errors_md 의 HTTP 오류 코드가 모두 매핑된다`() {
+        // 계약에는 13종이 있는데 EXTRACTION_FAILED 는 여기 없다 — HTTP 오류가 아니라
+        // 200 응답 본문의 `PillAttribute.error` 에 실리는 값이라 축이 다르다.
         val fromSpec = listOf(
-            "INVALID_REQUEST", "INVALID_PAGINATION", "UNAUTHORIZED", "APP_CHECK_FAILED",
+            "INVALID_REQUEST", "INVALID_PAGINATION", "INVALID_ATTRIBUTE_TOKEN",
+            "UNAUTHORIZED", "APP_CHECK_FAILED",
             "KAKAO_TOKEN_INVALID", "PILL_DETAIL_NOT_FOUND", "IMAGE_SIZE_EXCEEDED",
             "LIMIT_EXCEEDED", "CLASSIFICATION_FAILED", "INTERNAL_ERROR", "SERVICE_UNAVAILABLE"
         )

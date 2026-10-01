@@ -4,8 +4,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.PillRepository
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
 import app.nursemate.core.network.api.PillCandidatesRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -20,18 +20,21 @@ import kotlinx.coroutines.launch
  * @param candidates 조건에 맞는 후보. **빈 목록은 오류가 아니다** — 조건이 좁아 아무것도
  *                   걸리지 않은 정상 응답이다(spec §후보 0개).
  * @param searched 한 번이라도 조회했는가. 조회 전의 빈 목록과 "0개"를 구분한다.
- * @param nextCursor 다음 장 커서. null 이면 더 없다.
- * @param loadingMore 다음 장을 받는 중. 첫 조회([loading])와 구분해야 목록을 지우지 않는다.
+ * @param ids 서버가 정렬한 **전체 순서**(최대 200). 21번째부터의 상세는 이 순서로 이어 받는다
+ * @param truncated 하드 필터를 통과한 후보가 200개를 넘어 뒤가 잘렸는가 — 목록 끝 안내의 기준
+ * @param loadingMore 뒤쪽을 받는 중. 첫 조회([loading])와 구분해야 목록을 지우지 않는다.
  */
 data class CandidateUiState(
     val candidates: List<PillCandidate> = emptyList(),
+    val ids: List<String> = emptyList(),
     val loading: Boolean = false,
     val searched: Boolean = false,
     val failed: Boolean = false,
-    val nextCursor: String? = null,
+    val truncated: Boolean = false,
     val loadingMore: Boolean = false
 ) {
-    val hasMore: Boolean get() = nextCursor != null
+    /** 아직 상세를 못 받은 후보가 남아 있는가. 커서가 아니라 **받은 개수**로 센다. */
+    val hasMore: Boolean get() = candidates.size < ids.size
 }
 
 /**
@@ -53,18 +56,14 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     private var searchJob: Job? = null
     private var moreJob: Job? = null
 
-    /** 다음 장을 받으려면 그때 쓴 조건이 그대로 필요하다 — 커서만으로는 서버가 뭘 찾는지 모른다. */
-    private var lastRequest: PillCandidatesRequest? = null
-
-    fun search(attribute: PillAttribute?, faces: FaceInputs = FaceInputs()) {
+    fun search(conditions: PillConditions?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
         moreJob?.cancel()
 
         // ⚠️ 조건이 하나도 없으면 **부르지 않는다.** 서버가 400 을 주고 화면에는 오류가 뜨는데,
         //    사용자는 아직 아무것도 입력하지 않았을 뿐이다(수동 추가 진입 직후 — 정본 ⑧-h).
-        val request = attribute?.toRequest(faces)?.takeIf { it.hasCondition }
+        val request = conditions?.toRequest(faces)?.takeIf { it.hasCondition }
         if (request == null) {
-            lastRequest = null
             _state.value = CandidateUiState()
             return
         }
@@ -76,20 +75,16 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
         searchJob = viewModelScope.launch {
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
-            lastRequest = request
 
             pillRepository.candidates(request)
-                .onSuccess { page ->
-                    Log.i(
-                        TAG,
-                        "후보 ${page.candidates.size}개" +
-                            page.candidates.take(2).joinToString { " | ${it.pillCode} ${it.pillThumbnailUrl}" }
-                    )
+                .onSuccess { result ->
+                    Log.i(TAG, "후보 ${result.ids.size}개 (상세 ${result.candidates.size}) 잘림=${result.truncated}")
                     _state.value = CandidateUiState(
-                        candidates = page.candidates,
+                        candidates = result.candidates,
+                        ids = result.ids,
                         loading = false,
                         searched = true,
-                        nextCursor = page.nextCursor
+                        truncated = result.truncated
                     )
                 }
                 .onFailure { throwable ->
@@ -100,31 +95,40 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     }
 
     /**
-     * 다음 장을 이어 붙인다.
+     * 아직 상세를 못 받은 후보를 이어 붙인다 (NM-489).
      *
-     * 목록 끝에 닿을 때마다 불리므로 **이미 받고 있으면 무시한다** — 안 그러면 같은 장을
-     * 여러 번 받아 후보가 중복된다.
+     * 목록 끝에 닿을 때마다 불리므로 **이미 받고 있으면 무시한다.**
+     *
+     * ## 순서는 우리가 잡는다
+     * 서버 응답은 순서를 보장하지 않으므로 [CandidateUiState.ids] 순서대로 다시 배치한다.
+     * `missing`(데이터 갱신으로 사라진 품목)은 **목록에서 뺀다** — 로딩 중으로 남기면
+     * 영원히 안 채워진다.
      */
     fun loadMore() {
-        val request = lastRequest
-        val cursor = _state.value.nextCursor
-        // 조건이 없거나(아직 조회 전) 다음 장이 없거나 이미 받는 중이면 아무것도 하지 않는다.
-        if (request == null || cursor == null || _state.value.loadingMore) return
+        val current = _state.value
+        if (!current.hasMore || current.loadingMore) return
+
+        val next = current.ids.drop(current.candidates.size).take(PAGE_SIZE)
+        if (next.isEmpty()) return
 
         moreJob = viewModelScope.launch {
             _state.update { it.copy(loadingMore = true) }
-            pillRepository.candidates(request.copy(cursor = cursor))
+            pillRepository.candidateItems(next)
                 .onSuccess { page ->
-                    _state.update {
-                        it.copy(
-                            candidates = it.candidates + page.candidates,
-                            nextCursor = page.nextCursor,
+                    _state.update { state ->
+                        val byCode = page.items.associateBy { it.pillCode }
+                        // ids 순서대로 꽂는다. 없는 것(missing)은 그대로 빠진다.
+                        val added = next.mapNotNull(byCode::get)
+                        state.copy(
+                            candidates = state.candidates + added,
+                            // 사라진 품목을 ids 에서도 지운다 — 안 그러면 hasMore 가 영영 참이다.
+                            ids = state.ids - page.missing.toSet(),
                             loadingMore = false
                         )
                     }
                 }
                 .onFailure { throwable ->
-                    Log.w(TAG, "다음 후보 장 실패", throwable)
+                    Log.w(TAG, "후보 카드 이어받기 실패", throwable)
                     // 목록은 그대로 두고 표시만 끈다 — 받아 둔 후보까지 잃을 이유가 없다.
                     _state.update { it.copy(loadingMore = false) }
                 }
@@ -133,26 +137,37 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
 
     private companion object {
         const val TAG = "NM393"
+
+        /** 한 번에 이어받을 후보 카드 수. 첫 응답이 20개를 주므로 같은 단위로 맞춘다. */
+        const val PAGE_SIZE = 20
         const val DEBOUNCE_MS = 250L
     }
 }
 
 /**
- * 속성·각인 → 후보 검색 조건.
+ * 사용자 조건 → 후보 검색 요청.
+ *
+ * ⚠️ **모델값은 여기 들어오지 않는다.** [PillConditions] 에 담긴 것은 사용자가 고른 값뿐이고,
+ * 모델이 본 색·모양·제형은 `attributeToken` 하나로 전달돼 **정렬에만** 쓰인다.
  *
  * 면 조건은 [FaceInput.toRequest] 가 만든다 — 요청의 null 이 "조건 제외"라 '없음'을 걸려면
  * 값을 명시해야 하고, 그 판단은 화면 입력값을 봐야 할 수 있는 일이다.
  */
-private fun PillAttribute.toRequest(faces: FaceInputs) = PillCandidatesRequest(
-    colors = colors.orEmpty(),
-    isTransparent = isTransparent.takeIf { it },
+private fun PillConditions.toRequest(faces: FaceInputs) = PillCandidatesRequest(
+    attributeToken = attributeToken,
+    colors = colors,
     shape = shape,
     formulation = formulation,
     front = faces.front.toRequest(),
     back = faces.back.toRequest()
 )
 
-/** 서버에 물어볼 게 하나라도 있는가. 다 비어 있으면 400 이라 부르지 않는다. */
+/**
+ * 서버에 물어볼 게 하나라도 있는가.
+ *
+ * 토큰만 있어도 부를 값어치가 있다 — 조건 없이도 모델값 정렬로 후보가 나온다.
+ * 다 비어 있을 때만(수동 추가 직후) 부르지 않는다.
+ */
 private val PillCandidatesRequest.hasCondition: Boolean
-    get() = colors.isNotEmpty() || isTransparent != null || shape != null ||
+    get() = attributeToken != null || colors.isNotEmpty() || shape != null ||
         formulation != null || front != null || back != null

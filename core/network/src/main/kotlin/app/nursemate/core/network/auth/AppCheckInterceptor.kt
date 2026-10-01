@@ -43,6 +43,7 @@ internal const val HEADER_APP_CHECK = "X-Firebase-AppCheck"
 /** 정본: `spec/api/openapi.yaml` 에서 `parameters: AppCheckToken` 을 참조하는 오퍼레이션. */
 internal val APP_CHECK_PATHS = setOf(
     "/api/v0/pill-images/upload-url",
-    "/api/v0/pill-attributes",
+    // 속성 추출은 v1 으로 옮겼다(NM-516). 잔여 횟수 조회는 바뀌지 않아 v0 그대로다.
+    "/api/v1/pill-attributes",
     "/api/v0/pill-attributes/usage"
 )

@@ -290,9 +290,13 @@ private fun PillRow(
     val colors = NmTheme.semanticColors
 
     // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다(spec §개별 추출 실패).
-    // 사용자가 직접 채워 넣기 시작하면 안내를 거두고 평소처럼 칩을 보여준다 — 다 채운 카드에
+    // 사용자가 조건을 채워 넣기 시작하면 안내를 거두고 평소처럼 칩을 보여준다 — 다 채운 카드에
     // "인식하지 못했어요"가 남아 있으면 아직 할 일이 있는 것처럼 읽힌다.
-    val showFailure = edit.attribute.failed && edit.attribute.isBlank
+    //
+    // ⚠️ V1 은 속성별 부분 실패가 없다 — 실패면 모델값이 통째로 비어 있다. 그래서 「비었나」를
+    //    따로 보지 않고 사용자가 아무것도 안 넣었는지만 본다.
+    val showFailure = edit.attribute.failed && edit.conditions.colors.isEmpty() &&
+        edit.conditions.shape == null && edit.conditions.formulation == null
 
     // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
     var cardRight by remember { mutableIntStateOf(0) }

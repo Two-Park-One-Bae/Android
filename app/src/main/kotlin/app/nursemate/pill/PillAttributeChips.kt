@@ -53,11 +53,7 @@ fun PillAttributeChips(
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ColorGroup(
-                colors = attribute?.colors,
-                transparent = attribute?.isTransparent == true,
-                manual = manual
-            )
+            ColorGroup(hexes = attribute?.colorHexes, manual = manual)
             ShapeGroup(shape = attribute?.shape, manual = manual)
             FormulationGroup(formulation = attribute?.formulation, manual = manual)
         }
@@ -73,18 +69,25 @@ internal fun ImprintValues(faces: FaceInputs, manual: Boolean = false) {
     FaceRow(face = "뒤", input = faces.back, manual = manual)
 }
 
+/**
+ * 모델이 뽑은 색 — **표시값 hex 를 그대로 칠한다**(NM-516).
+ *
+ * v0 은 열거형이라 앱이 색을 골라 칠했는데, v1 은 서버가 Lab 을 변환한 sRGB hex 를 준다.
+ * 열거형으로 되돌려 매핑하지 않는다 — 계약이 「검색에는 쓰지 않는다」고 못박았고,
+ * 되돌리면 모델이 본 색과 화면에 뜨는 색이 갈린다.
+ *
+ * 순서가 의미를 갖는다(여러 색의 배치 순서다).
+ */
 @Composable
-private fun ColorGroup(colors: List<PillColor>?, transparent: Boolean, manual: Boolean) {
+private fun ColorGroup(hexes: List<String>?, manual: Boolean) {
     AttributeGroup(label = "색상") {
-        if (colors.isNullOrEmpty() && !transparent) {
+        if (hexes.isNullOrEmpty()) {
             UnrecognizedText(manual)
             return@AttributeGroup
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-            colors?.forEach { Swatch(it) }
+            hexes.forEach { HexSwatch(it) }
         }
-        // 투명은 색이 아니라 별도 축이라 점이 아니라 태그로 붙인다(spec §PillColor).
-        if (transparent) TransparentTag()
     }
 }
 

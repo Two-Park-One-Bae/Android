@@ -39,8 +39,8 @@ import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillColor
+import app.nursemate.core.model.PillConditions
 
 /**
  * 수정 화면 맨 위의 속성 카드 — 디자인 `⑧-a` 및 펼침 상태 `⑧-b·c·d`.
@@ -50,23 +50,24 @@ import app.nursemate.core.model.PillColor
  * 그래서 정본이 라벨을 '속성' 하나로 합치고(⑤ 는 색상·모양·제형 셋), 글자를 13 으로 키우고,
  * 꺾쇠를 달았다. 열린 칩은 `primary-50` 바탕에 `primary-500` 테두리로 어디를 고치는 중인지 알린다.
  *
- * ## 투명 여부는 색상판에만 붙는다
- * 정본에서 이 줄은 ⑧-b(색상 펼침)에만 있다. 투명은 색을 고를 때 함께 판단하는 것이라
- * 늘 띄워 두면 카드만 길어진다.
+ * ## 여기서 고치는 것은 **사용자 조건**이다 (NM-516)
+ * 모델이 추정한 값([PillAttribute])은 **고치지 않는다** — 읽기 전용이고, 되돌리기의 기준이자
+ * 서버 정렬의 근거(`attributeToken`)다. 사용자가 고른 값만 [PillConditions] 에 쌓이고
+ * 그것만 후보를 자른다.
  *
+ * 투명 축은 V1 에서 사라졌다(NM-487) — 색상판의 투명 줄도 함께 없앴다.
  */
 @Composable
 fun PillEditAttributeCard(
     number: Int,
     manual: Boolean,
     crop: Bitmap?,
-    attribute: PillAttribute,
+    conditions: PillConditions,
     faces: FaceInputs,
     open: AttributePanel?,
     onToggle: (AttributePanel) -> Unit,
     onColorToggle: (PillColor) -> Unit,
-    onTransparentChange: (Boolean) -> Unit,
-    onChange: (PillAttribute) -> Unit,
+    onChange: (PillConditions) -> Unit,
     imprint: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -78,27 +79,22 @@ fun PillEditAttributeCard(
     ) {
         PillHeader(number = number, manual = manual, crop = crop)
         CardDivider()
-        AttributeRow(attribute = attribute, manual = manual, open = open, onToggle = onToggle)
+        AttributeRow(conditions = conditions, manual = manual, open = open, onToggle = onToggle)
 
         when (open) {
-            AttributePanel.Color -> ColorPanel(selected = attribute.colors.orEmpty(), onToggle = onColorToggle)
+            AttributePanel.Color -> ColorPanel(selected = conditions.colors, onToggle = onColorToggle)
 
-            AttributePanel.Shape -> ShapePanel(selected = attribute.shape) { shape ->
+            AttributePanel.Shape -> ShapePanel(selected = conditions.shape) { shape ->
                 // 같은 값을 다시 누르면 조건에서 뺀다 — 잘못 골랐을 때 되돌릴 길이 필요하다.
-                onChange(attribute.copy(shape = shape.takeIf { it != attribute.shape }))
+                onChange(conditions.copy(shape = shape.takeIf { it != conditions.shape }))
             }
 
-            AttributePanel.Formulation -> FormulationPanel(selected = attribute.formulation) { formulation ->
-                onChange(attribute.copy(formulation = formulation.takeIf { it != attribute.formulation }))
+            AttributePanel.Formulation -> FormulationPanel(selected = conditions.formulation) { formulation ->
+                onChange(conditions.copy(formulation = formulation.takeIf { it != conditions.formulation }))
             }
 
             // 각인판은 칩이 아니라 각인 줄 아래에 붙는다(정본 ⑧-e 자식 순서).
             AttributePanel.Imprint, null -> Unit
-        }
-
-        if (open == AttributePanel.Color) {
-            CardDivider()
-            TransparentRow(checked = attribute.isTransparent, onCheckedChange = onTransparentChange)
         }
 
         CardDivider()
@@ -166,7 +162,7 @@ private fun PillHeader(number: Int, manual: Boolean, crop: Bitmap?) {
  */
 @Composable
 private fun AttributeRow(
-    attribute: PillAttribute,
+    conditions: PillConditions,
     manual: Boolean,
     open: AttributePanel?,
     onToggle: (AttributePanel) -> Unit
@@ -183,24 +179,23 @@ private fun AttributeRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val selectedColors = attribute.colors.orEmpty()
             AttributeChip(
                 open = open == AttributePanel.Color,
-                label = selectedColors.chipLabel(attribute.isTransparent, manual),
+                label = conditions.colors.chipLabel(manual),
                 onClick = { onToggle(AttributePanel.Color) }
-            ) { ColorDots(colors = selectedColors, placeholder = manual) }
+            ) { ColorDots(colors = conditions.colors, placeholder = manual) }
 
             AttributeChip(
                 open = open == AttributePanel.Shape,
-                label = attribute.shape?.label ?: unset(manual, "모양"),
+                label = conditions.shape?.label ?: unset(manual, "모양"),
                 onClick = { onToggle(AttributePanel.Shape) }
-            ) { tint -> attribute.shape?.let { ShapeIcon(shape = it, tint = tint) } }
+            ) { tint -> conditions.shape?.let { ShapeIcon(shape = it, tint = tint) } }
 
             AttributeChip(
                 open = open == AttributePanel.Formulation,
-                label = attribute.formulation?.chipLabel ?: unset(manual, "제형"),
+                label = conditions.formulation?.chipLabel ?: unset(manual, "제형"),
                 onClick = { onToggle(AttributePanel.Formulation) }
-            ) { tint -> attribute.formulation?.let { FormulationIcon(formulation = it, tint = tint) } }
+            ) { tint -> conditions.formulation?.let { FormulationIcon(formulation = it, tint = tint) } }
         }
     }
 }
@@ -321,8 +316,8 @@ private fun CardDivider() {
  * 다색이면 이름을 다 늘어놓는 대신 `파랑 외 1` 로 줄인다. 그래도 칩 셋이 한 줄을 넘길 수 있는데,
  * 그때는 [AttributeRow] 의 가로 스크롤로 넘긴다 — 이름을 지우는 쪽이 더 큰 손해다.
  */
-private fun List<PillColor>.chipLabel(transparent: Boolean, manual: Boolean): String = when {
-    isEmpty() -> if (transparent) "투명" else unset(manual, "색상")
+private fun List<PillColor>.chipLabel(manual: Boolean): String = when {
+    isEmpty() -> unset(manual, "색상")
     size == 1 -> first().label
     else -> "${first().label} 외 ${size - 1}"
 }

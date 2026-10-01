@@ -2,7 +2,8 @@ package app.nursemate.core.data.pill
 
 import app.nursemate.core.model.Image
 import app.nursemate.core.model.PillAttribute
-import app.nursemate.core.model.PillCandidatePage
+import app.nursemate.core.model.PillCandidateItems
+import app.nursemate.core.model.PillCandidateResult
 import app.nursemate.core.model.PillDetail
 import app.nursemate.core.model.Usage
 import app.nursemate.core.network.api.PillApi
@@ -74,18 +75,37 @@ class PillRepository @Inject constructor(
     }
 
     /**
-     * 수정한 속성으로 후보를 조회한다.
+     * 사용자가 정한 조건으로 후보를 조회한다.
      *
-     * 속성이 바뀔 때마다 불린다 — 호출부가 이전 요청을 취소해야 타이핑 중에 응답이
+     * 조건이 바뀔 때마다 불린다 — 호출부가 이전 요청을 취소해야 타이핑 중에 응답이
      * 뒤섞이지 않는다(코루틴 취소로 처리한다).
      *
      * 조건이 좁아 후보가 0개인 것은 **오류가 아니다.** 빈 목록으로 온다.
+     *
+     * ## 토큰이 상해도 멈추지 않는다
+     * 400 `INVALID_ATTRIBUTE_TOKEN` 이면 **토큰을 빼고 한 번 더 부른다.** 후보는 그대로
+     * 나오고 정렬만 덜 맞을 뿐이라 사용자에게 알리지 않는다(NM-490 결정).
      */
-    suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidatePage> =
+    suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidateResult> =
         runCatching { pillApi.candidates(request) }
+            .recoverCatching { throwable ->
+                if ((throwable as? ApiFailure)?.code != ApiErrorCode.INVALID_ATTRIBUTE_TOKEN) throw throwable
+                pillApi.candidates(request.copy(attributeToken = null))
+            }
             // ⚠️ 실시간 조회라 이전 요청이 나가 있는 채로 취소되는 게 정상 흐름이다.
             // runCatching 이 CancellationException 까지 Result.failure 로 삼키면 코루틴
             // 취소가 "조회 실패"로 둔갑해 호출부가 failed = true 를 세운다 — 다시 던진다.
+            .onFailure { if (it is CancellationException) throw it }
+
+    /**
+     * 21번째부터의 후보 카드를 ID 로 받는다 (NM-489).
+     *
+     * ⚠️ 응답 순서가 보장되지 않는다 — 호출부가 `ids` 순서대로 다시 배치한다.
+     * `missing` 에 온 pillCode 는 목록에서 뺀다.
+     */
+    suspend fun candidateItems(pillCodes: List<String>): Result<PillCandidateItems> =
+        // 쉼표로 이어 **쿼리 파라미터**로 보낸다 — GET 이고, 중복은 한 번만 담는다(계약).
+        runCatching { pillApi.candidateItems(pillCodes.distinct().joinToString(",")) }
             .onFailure { if (it is CancellationException) throw it }
 
     /**
