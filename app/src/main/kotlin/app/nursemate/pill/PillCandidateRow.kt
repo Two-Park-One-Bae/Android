@@ -37,6 +37,11 @@ import coil3.compose.AsyncImage
  *
  * 라디오 20 · 썸네일 48×28 · 품목명 14/600 + 업체명 11 · **면 요약** · 세부정보 버튼 28.
  *
+ * ## 행은 카드가 아니다
+ * 정본에서 **목록 전체가 한 덩어리 카드**(`$surface` · r14 · 테두리)이고 행은 아래 구분선으로만
+ * 갈린다. 행마다 카드를 두르면 200개가 낱장으로 흩어져 훑기 어렵다 —
+ * 껍데기와 구분선은 [candidateSection] 이 그린다.
+ *
  * ## 둘째 줄이 면 요약이다 (NM-517)
  * 각인이 같은 약이 수두룩하고 이름도 비슷비슷하다("설트라정" · "셀트라정"). 손에 든 알약과
  * 대조할 거리는 **앞뒤에 뭐가 찍혀 있나**라, 업체명을 품목명 옆으로 올리고 아랫줄을
@@ -63,18 +68,13 @@ fun PillCandidateRow(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    val shape = RoundedCornerShape(14.dp)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.surface)
-            .border(
-                width = if (selected) 1.5.dp else 1.dp,
-                color = if (selected) NmColor.Primary.C500 else colors.border,
-                shape = shape
-            )
+            // 고른 행만 바탕으로 알린다. 테두리를 두르면 통짜 카드 안에서 그 줄만 상자가 돼
+            // 목록이 끊겨 보인다 — 카드 껍데기는 목록이 쥐고 있다.
+            .background(if (selected) NmColor.Primary.C50 else colors.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
