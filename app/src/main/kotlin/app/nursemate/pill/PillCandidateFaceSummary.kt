@@ -1,5 +1,6 @@
 package app.nursemate.pill
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,15 +13,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
@@ -40,7 +48,15 @@ import app.nursemate.core.model.PillCandidateFace
  */
 @Composable
 internal fun PillCandidateFaceSummary(front: PillCandidateFace, back: PillCandidateFace) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        // 칸이 그림투성이라 그냥 두면 읽어 줄 것이 하나도 없다. 줄 전체를 한 문장으로 묶는다.
+        modifier = Modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = "앞면 ${front.spoken()}, 뒷면 ${back.spoken()}"
+            },
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         FaceGroup(label = "앞", face = front)
         Box(modifier = Modifier.width(1.dp).height(10.dp).background(NmColor.Neutral.C300))
         FaceGroup(label = "뒤", face = back)
@@ -59,7 +75,12 @@ private fun FaceGroup(label: String, face: PillCandidateFace) {
         }
 
         face.imprint?.takeIf { it.isNotBlank() }?.let { imprint ->
-            Box(modifier = cellModifier().padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+            Box(
+                // ⚠️ 줄이 넘치면 **각인만** 줄어든다. 구분선·마크 칸은 22 고정이라 함께 밀리면
+                // 통째로 잘려 나가는데, 그 둘은 줄여서 보여 줄 수가 없는 그림이다(spec).
+                modifier = cellModifier().weight(1f, fill = false).padding(horizontal = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
                     text = imprint,
                     style = ImprintStyle,
@@ -70,30 +91,39 @@ private fun FaceGroup(label: String, face: PillCandidateFace) {
             }
         }
 
-        face.dividingLine?.takeIf { it == DividingLine.PLUS || it == DividingLine.MINUS }?.let { line ->
+        // 「없음」도 그린다 — 선 없는 원판이다. 카탈로그가 **없다고 말한 것**과 모르는 것은
+        // 다르고, 앞면만 쪼개지는 약을 가릴 때 그 차이가 쓰인다. iOS 도 같다.
+        face.dividingLine?.takeIf { it != DividingLine.UNKNOWN }?.let { line ->
             Box(modifier = cellModifier().width(22.dp), contentAlignment = Alignment.Center) {
                 DividingLineGlyph(line)
             }
         }
 
-        // 마크 **그림**은 아직 없다 — 수급 경로와 이름 규칙을 NM-506 이 정한다.
-        // 그때까지는 자리만 두어 「이 면에 마크가 있다」는 사실은 전한다.
         if (face.hasMark) {
-            Box(modifier = cellModifier().width(22.dp), contentAlignment = Alignment.Center) {
-                MarkPlaceholder()
+            Box(
+                // 마크 칸만 흰 바탕이다(정본 `$surface`) — 그림이 들어앉을 자리라 회색을 깔면
+                // 흑백 마크가 묻힌다.
+                modifier = cellModifier(fill = colors.surface).width(22.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                MarkGlyph(markCode = face.markCode)
             }
         }
     }
 }
 
-/** 각인·구분선·마크가 같은 칸을 쓴다 — 높이 22, r4, `$neutral-100` 에 `$neutral-300` 테두리. */
+/**
+ * 각인·구분선·마크가 같은 칸을 쓴다 — 높이 22, r4, `$neutral-300` 테두리.
+ *
+ * 바탕만 다르다. 각인·구분선은 `$neutral-100`, **마크는 흰색**이다(정본).
+ */
 @Composable
-private fun cellModifier(): Modifier {
+private fun cellModifier(fill: Color = NmColor.Neutral.C100): Modifier {
     val shape = RoundedCornerShape(4.dp)
     return Modifier
         .height(22.dp)
         .clip(shape)
-        .background(NmColor.Neutral.C100)
+        .background(fill)
         .border(1.dp, NmColor.Neutral.C300, shape)
 }
 
@@ -115,29 +145,45 @@ private fun DividingLineGlyph(line: DividingLine) {
 }
 
 /**
- * 마크 자리 — 그림이 들어오기 전까지의 모습.
+ * 식약처 마크 그림 — 없는 코드는 **일반 마크 아이콘**으로 「있음」만 알린다.
  *
- * 정본은 여기에 식약처 마크 그림을 넣는다. 자산이 없는 마크의 대체 화면은 두지 않기로
- * 했지만(NM-490), **그림이 하나도 없는 지금** 칸을 통째로 비우면 마크가 있는 약과 없는
- * 약이 똑같아 보인다 — 그게 더 나쁘다. 점 세 개로 「무언가 찍혀 있다」만 말한다.
+ * 데이터가 갱신되면 앱이 모르는 마크가 생긴다. 칸을 비우면 마크가 있는 약과 없는 약이
+ * 똑같아 보여, 그게 그림을 못 찾은 것보다 나쁘다(iOS 도 같은 판단이다).
  */
 @Composable
-private fun MarkPlaceholder() {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        repeat(MARK_DOTS) {
-            Box(
-                modifier = Modifier
-                    .size(3.dp)
-                    .offset(y = if (it == 1) (-2).dp else 0.dp)
-                    .background(NmColor.Neutral.C500, CircleShape)
-            )
-        }
+private fun MarkGlyph(markCode: String?) {
+    val image = PillMarkImages.of(markCode)
+    if (image != null) {
+        Image(
+            painter = painterResource(image),
+            contentDescription = null,
+            // 그림마다 여백이 이미 잘려 있어 가득 채우면 모양이 뭉개진다.
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(18.dp)
+        )
+    } else {
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_badge),
+            contentDescription = null,
+            tint = NmColor.Neutral.C700,
+            modifier = Modifier.size(13.dp)
+        )
     }
 }
-
-private const val MARK_DOTS = 3
 
 // 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
 private val SideLabel = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
 private val ImprintStyle = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold)
 private val EmptyMark = NmTypography.caption.copy(fontSize = 11.sp)
+
+/** 화면 낭독기가 읽을 말. 그림은 소리가 안 나므로 여기서 말로 옮긴다. */
+private fun PillCandidateFace.spoken(): String = buildList {
+    imprint?.takeIf { it.isNotBlank() }?.let { add("각인 $it") }
+    when (dividingLine) {
+        DividingLine.PLUS -> add("십자 구분선")
+        DividingLine.MINUS -> add("일자 구분선")
+        DividingLine.NONE -> add("구분선 없음")
+        DividingLine.UNKNOWN, null -> Unit
+    }
+    if (hasMark) add("마크 있음")
+}.ifEmpty { listOf("정보 없음") }.joinToString(" ")
