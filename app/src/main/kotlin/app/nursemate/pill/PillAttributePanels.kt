@@ -157,13 +157,15 @@ internal fun FormulationMenu(
  * 메뉴 한 장 — 정본 358 폭, `$surface`, r16, padding 10, gap 6.
  *
  * @param all 지금 「전체」인가(= 고른 것이 없다)
- * @param preview 모델이 읽은 값 그림. 없으면 비워 둔다
+ * @param preview 모델이 읽은 값 그림. **null 이면 「사진 기준」 자체를 안 그린다** — 구분선처럼
+ *   모델이 내지 않는 값은 정본도 그 줄을 비워 둔다. 그림만 빼면 라벨이 홀로 남아,
+ *   읽는 쪽은 그림이 깨진 줄 안다
  */
 @Composable
 private fun AttributeMenu(
     all: Boolean,
     onClear: () -> Unit,
-    preview: @Composable () -> Unit,
+    preview: (@Composable () -> Unit)?,
     rows: @Composable ColumnScope.() -> Unit
 ) {
     val colors = NmTheme.semanticColors
@@ -181,6 +183,9 @@ private fun AttributeMenu(
                 .fillMaxWidth()
                 .height(44.dp)
                 .clip(RoundedCornerShape(10.dp))
+                // 지금 「전체」면 그 줄에 바탕을 깐다(정본 ④·⑨) — 칸처럼 호박색을 쓰지 않는 자리라
+                // 바탕이 없으면 **어디가 현재값인지 체크 하나로만** 알아야 한다.
+                .background(if (all) NmColor.Neutral.C100 else Color.Transparent)
                 .clickable(onClick = onClear)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -197,13 +202,15 @@ private fun AttributeMenu(
                 }
             }
             Text(text = "전체", style = MenuAll, color = colors.textPrimary)
-            Spacer(modifier = Modifier.weight(1f))
-            Box(
-                modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                contentAlignment = Alignment.Center,
-                content = { preview() }
-            )
-            Text(text = "사진 기준", style = PreviewLabel, color = colors.textTertiary)
+            if (preview != null) {
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier.size(width = 40.dp, height = 28.dp),
+                    contentAlignment = Alignment.Center,
+                    content = { preview() }
+                )
+                Text(text = "사진 기준", style = PreviewLabel, color = colors.textTertiary)
+            }
         }
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
         rows()
@@ -306,7 +313,8 @@ internal fun DividingLineMenu(selected: DividingLine?, onSelect: (DividingLine) 
         all = selected == null,
         onClear = onClear,
         // 구분선은 사진에서 읽지 않는다 — 모델이 내는 값이 아니라 보여 줄 기준이 없다.
-        preview = {}
+        // 정본도 이 메뉴에만 「사진 기준」 줄을 안 둔다.
+        preview = null
     ) {
         MenuRows(items = SelectableLines) { line ->
             MenuCell(label = line.menuLabel, selected = line == selected, onClick = { onSelect(line) }) { certain ->
