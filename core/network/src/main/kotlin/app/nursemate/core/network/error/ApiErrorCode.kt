@@ -16,6 +16,14 @@ enum class ApiErrorCode {
     /** 400 — 페이지네이션 파라미터 오류 */
     INVALID_PAGINATION,
 
+    /**
+     * 400 — 속성 토큰을 해석할 수 없거나 지원하지 않는 버전이다 (NM-517).
+     *
+     * **사용자에게 알리지 않는다.** 앱이 토큰 없이 다시 조회하면 후보는 그대로 나오고
+     * 정렬만 덜 맞는다(`PillRepository.candidates`).
+     */
+    INVALID_ATTRIBUTE_TOKEN,
+
     /** 401 — Bearer 누락·검증 실패. 재로그인 유도 */
     UNAUTHORIZED,
 

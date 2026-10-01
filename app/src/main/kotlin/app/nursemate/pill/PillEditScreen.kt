@@ -46,8 +46,8 @@ import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
 import app.nursemate.ui.SystemBarIcons
 
 /**
@@ -68,8 +68,8 @@ fun PillEditScreen(
     number: Int,
     manual: Boolean,
     crop: Bitmap?,
-    attribute: PillAttribute,
-    onAttributeChange: (PillAttribute) -> Unit,
+    conditions: PillConditions,
+    onConditionsChange: (PillConditions) -> Unit,
     faces: FaceInputs,
     onFacesChange: (FaceInputs) -> Unit,
     candidates: CandidateUiState,
@@ -145,7 +145,7 @@ fun PillEditScreen(
                         number = number,
                         manual = manual,
                         crop = crop,
-                        attribute = attribute,
+                        conditions = conditions,
                         faces = faces,
                         open = open,
                         onToggle = { panel ->
@@ -153,13 +153,12 @@ fun PillEditScreen(
                             if (open != AttributePanel.Imprint) focusedSide = null
                         },
                         onColorToggle = { color ->
-                            val current = attribute.colors.orEmpty()
-                            onAttributeChange(
-                                attribute.copy(colors = if (color in current) current - color else current + color)
+                            val current = conditions.colors
+                            onConditionsChange(
+                                conditions.copy(colors = if (color in current) current - color else current + color)
                             )
                         },
-                        onTransparentChange = { onAttributeChange(attribute.copy(isTransparent = it)) },
-                        onChange = onAttributeChange,
+                        onChange = onConditionsChange,
                         imprint = {
                             ImprintPanel(
                                 faces = faces,

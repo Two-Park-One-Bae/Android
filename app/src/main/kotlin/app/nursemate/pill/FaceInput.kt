@@ -65,14 +65,14 @@ data class FaceInput(
 data class FaceInputs(val front: FaceInput = FaceInput(), val back: FaceInput = FaceInput()) {
     companion object {
         /**
-         * 서버가 뽑아 준 값에서 시작한다.
+         * 온디바이스가 읽은 값에서 시작한다.
          *
-         * MVP 는 서버가 각인을 뽑지 않아 늘 빈 값이지만(spec §로드맵 — 각인 자동은 V1),
-         * 여기서 읽어 두면 나중에 서버가 채워 보내도 화면을 고칠 게 없다.
+         * ⚠️ **서버는 각인·마크를 주지 않는다**(v1). 앱이 `ImprintReader`·`MarkReader` 로 읽은
+         * 값이 여기 들어온다 — 아직 연결 전이라 지금은 빈 값으로 시작한다.
          */
-        fun from(attribute: PillAttribute) = FaceInputs(
-            front = attribute.front.toInput(),
-            back = attribute.back.toInput()
+        fun from(front: PillFace? = null, back: PillFace? = null) = FaceInputs(
+            front = front.toInput(),
+            back = back.toInput()
         )
 
         private fun PillFace?.toInput() = FaceInput(

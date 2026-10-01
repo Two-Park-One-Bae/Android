@@ -1,7 +1,6 @@
 package app.nursemate.pill
 
 import app.nursemate.core.model.DividingLine
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillFace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -59,17 +58,18 @@ class FaceInputTest {
         assertEquals(DividingLine.MINUS, request?.dividingLine)
     }
 
+    /**
+     * 온디바이스가 읽은 값에서 시작해도 그대로 되돌아온다.
+     *
+     * ⚠️ V1 은 **서버가 각인·마크를 주지 않는다** — 앱이 읽은 값이 들어온다(NM-485 · NM-515).
+     */
     @Test
-    fun `추출값에서 시작하면 그대로 되돌아온다`() {
-        val attribute = PillAttribute(
-            pillId = "1",
-            front = PillFace(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true),
-            back = null
-        )
+    fun `읽은 값에서 시작하면 그대로 되돌아온다`() {
+        val front = PillFace(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true)
 
-        val faces = FaceInputs.from(attribute)
+        val faces = FaceInputs.from(front = front, back = null)
 
-        assertEquals(attribute.front, faces.front.toFace())
+        assertEquals(front, faces.front.toFace())
         assertNull(faces.back.toFace())
     }
 }

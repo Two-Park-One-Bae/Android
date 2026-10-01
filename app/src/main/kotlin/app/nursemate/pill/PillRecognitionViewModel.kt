@@ -11,6 +11,7 @@ import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
 import app.nursemate.core.vision.PillDetector
@@ -403,13 +404,21 @@ internal val String.isManualPill: Boolean get() = startsWith("m")
 /**
  * 수정 화면이 들고 고칠 값.
  *
- * 아직 안 건드린 알약은 서버 추출값에서 만들어 준다 — 추출까지 실패했으면 빈 값에서 시작한다
- * (spec §개별 추출 실패 — 그때도 사용자가 직접 채워 후보를 찾을 수 있어야 한다).
+ * ## 조건은 **비어서** 시작한다 (NM-516)
+ * 모델이 무엇을 읽었든 처음에는 후보를 하나도 자르지 않는다. [PillConditions] 에 실리는 것은
+ * `attributeToken` 하나뿐이고, 그건 자르는 게 아니라 **정렬**에 쓰인다.
+ *
+ * 추출까지 실패한 알약은 토큰도 없다 — 사용자가 직접 채워 후보를 찾는다
+ * (spec §개별 추출 실패).
  */
 fun PillUiState.editOf(pillId: String): PillEdit {
     edits[pillId]?.let { return it }
     val attribute = extracted(pillId) ?: PillAttribute(pillId = pillId)
-    return PillEdit(attribute = attribute, faces = FaceInputs.from(attribute))
+    return PillEdit(
+        attribute = attribute,
+        conditions = PillConditions(attributeToken = attribute.attributeToken),
+        faces = FaceInputs.from()
+    )
 }
 
 /**
