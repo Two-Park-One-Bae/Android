@@ -17,6 +17,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * 알약 식별 API.
@@ -86,11 +87,17 @@ interface PillApi {
      *
      * [candidates] 가 준 `ids` 중 아직 받지 않은 것을 묶어 부른다.
      *
+     * ⚠️ **`GET` 에 쿼리 파라미터**다 — 본문이 아니라 `pillCodes=코드1,코드2` 로 쉼표 구분해
+     * 보낸다. POST 로 보내면 405 다(실기기에서 확인). 조회 전용이라 식별 횟수와 무관하다.
+     *
+     * **1~50개**만 받는다 — 밖이면 400 `INVALID_REQUEST` 이고 잘라서 돌려주지 않는다.
+     * 중복은 한 번만 담는다.
+     *
      * ⚠️ **순서가 보장되지 않는다.** 앱이 `ids` 순서대로 다시 배치한다.
      * 그리고 `missing` 에 담겨 오는 pillCode 는 **목록에서 뺀다** — 로딩 중으로 남기지 않는다.
      */
-    @POST("api/v1/pill-candidates/items")
-    suspend fun candidateItems(@Body request: PillCandidateItemsRequest): PillCandidateItems
+    @GET("api/v1/pill-candidates/items")
+    suspend fun candidateItems(@Query("pillCodes") pillCodes: String): PillCandidateItems
 
     /**
      * 확정한 알약의 세부정보.
@@ -159,10 +166,6 @@ data class PillCandidatesRequest(
     val front: PillFaceRequest? = null,
     val back: PillFaceRequest? = null
 )
-
-/** @param pillCodes 아직 상세를 받지 않은 후보. [PillCandidateResult.ids] 에서 고른다. */
-@Serializable
-data class PillCandidateItemsRequest(val pillCodes: List<String>)
 
 @Serializable
 data class UploadUrlResponse(val uploadUrl: String, val expiresAt: String)

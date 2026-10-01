@@ -9,7 +9,6 @@ import app.nursemate.core.model.Usage
 import app.nursemate.core.network.api.PillApi
 import app.nursemate.core.network.api.PillAttributeItem
 import app.nursemate.core.network.api.PillAttributesRequest
-import app.nursemate.core.network.api.PillCandidateItemsRequest
 import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.network.api.PillErrorReader
 import app.nursemate.core.network.error.ApiErrorCode
@@ -105,7 +104,8 @@ class PillRepository @Inject constructor(
      * `missing` 에 온 pillCode 는 목록에서 뺀다.
      */
     suspend fun candidateItems(pillCodes: List<String>): Result<PillCandidateItems> =
-        runCatching { pillApi.candidateItems(PillCandidateItemsRequest(pillCodes)) }
+        // 쉼표로 이어 **쿼리 파라미터**로 보낸다 — GET 이고, 중복은 한 번만 담는다(계약).
+        runCatching { pillApi.candidateItems(pillCodes.distinct().joinToString(",")) }
             .onFailure { if (it is CancellationException) throw it }
 
     /**
