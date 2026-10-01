@@ -218,10 +218,13 @@ data class PillFaceRequest(
      * 놓친 면에 `false` 가 나가면 정답 약이 통째로 빠진다(규칙은 `MarkPresence`).
      */
     val hasMark: Boolean? = null,
-    /** 마크 임베딩 8×768 fp16 을 base64 로. 자르지 않고 **줄만 세운다**. */
-    val markEmbedding: String? = null,
-    /** [markEmbedding] 을 뽑은 모델 버전. 서버가 카탈로그 임베딩과 판을 맞춘다. */
-    val markEmbeddingModel: String? = null
+    /**
+     * 마크 임베딩 8×768 fp16 을 base64 로. 자르지 않고 **줄만 세운다**.
+     *
+     * ⚠️ 뽑은 **모델 버전은 요청 최상위**(`PillCandidatesRequest.markEmbeddingModel`)에 있다 —
+     * 면마다 다른 모델을 쓸 일이 없어 계약이 거기 뒀다.
+     */
+    val markEmbedding: String? = null
 ) {
     /** 보낼 것이 하나도 없는가. 전부 null 이면 요청에서 면 자체를 뺀다. */
     fun isEmpty(): Boolean = imprint == null && dividingLine == null && hasMark == null && markEmbedding == null

@@ -117,6 +117,7 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
         number = (index ?: 0) + 1,
         crop = state.cropOf(index),
         manual = pillId.isManualPill,
+        attribute = edit.attribute,
         conditions = edit.conditions,
         onConditionsChange = { changed ->
             // 화면은 조건을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
@@ -124,6 +125,7 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
             viewModel.corrections.updateEdit(pillId, edit.copy(conditions = changed))
         },
         faces = edit.faces,
+        reading = state.faceReadings[pillId],
         onFacesChange = {
             tracking.attrEdited("imprint")
             viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))

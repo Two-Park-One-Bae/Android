@@ -75,7 +75,7 @@
         android:name=".NurseMateApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="널스메이트"
+        android:label="@string/nm_app_name"
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
 
@@ -99,9 +99,18 @@
             android:taskAffinity=""
             android:theme="@style/Theme.NurseMate" />
 
+        <!--
+            ⚠️ `adjustResize` 를 **명시**한다.
+
+            이 앱은 edge-to-edge 라(`enableEdgeToEdge`) 키보드 높이를 `WindowInsets.ime` 로 받아
+            화면이 직접 패딩한다. 그런데 모드를 안 적어 두면 시스템이 `adjustPan` 을 고를 수 있고,
+            그러면 **창이 통째로 위로 밀린 채 패딩까지 들어가** 위가 잘리고 아래가 빈다.
+            각인 입력 줄(NM-516)을 LazyColumn 밖 하단에 두면서 실제로 그 모양이 나왔다.
+        -->
         <activity
             android:name=".MainActivity"
             android:theme="@style/Theme.NurseMate.Splash"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -163,7 +164,12 @@ fun TimerListScreen(
                 TimerListEmpty(onStart = onAdd)
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    // ⚠️ **키보드를 여기서 먹는다.** 메모 칸(`TimerCard`)이 이 목록 안에 있는데,
+                    // 앱이 edge-to-edge 라 키보드가 떠도 창이 줄지 않는다 — 아무도 ime 를
+                    // 먹지 않으면 목록은 제 높이를 유지한 채 키보드가 **그 위를 덮고**, 아래쪽
+                    // 카드의 메모 칸은 키보드 뒤로 들어가 보이지 않는다.
+                    // 여기서 먹으면 목록이 그만큼 줄어 Compose 가 칸을 스크롤로 올려 준다.
+                    modifier = Modifier.fillMaxSize().imePadding(),
                     contentPadding = ContentPadding,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

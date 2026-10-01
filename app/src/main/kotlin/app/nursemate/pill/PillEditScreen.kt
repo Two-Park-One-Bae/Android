@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +49,7 @@ import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
 import app.nursemate.ui.SystemBarIcons
@@ -68,10 +72,14 @@ fun PillEditScreen(
     number: Int,
     manual: Boolean,
     crop: Bitmap?,
+    /** 모델이 읽은 값 — **읽기 전용**이다. 칩에 회색으로 비치고 되돌리기의 기준이 된다. */
+    attribute: PillAttribute,
     conditions: PillConditions,
     onConditionsChange: (PillConditions) -> Unit,
     faces: FaceInputs,
     onFacesChange: (FaceInputs) -> Unit,
+    /** 온디바이스가 읽은 값 — 되돌리기의 기준이다. 아직 안 읽었으면 null */
+    reading: FaceReading?,
     candidates: CandidateUiState,
     selected: PillCandidate?,
     onSelect: (PillCandidate) -> Unit,
@@ -90,20 +98,24 @@ fun PillEditScreen(
 
     // 어느 선택판을 펼쳐 뒀는지는 화면만의 사정이라 뷰모델에 두지 않는다. 회전해도 남게 Saveable.
     //
-    // ⚠️ 진입하면 **각인판이 펼쳐진 채로** 시작한다. 정본 ⑧-a 는 접힌 상태를 그리지만,
-    // MVP 는 색·모양·제형만 자동이고 **각인은 사람이 직접 넣어야 한다**(spec §로드맵 —
-    // 각인 자동은 V1). 접어 두면 이 화면에서 유일하게 해야 할 일이 꺾쇠 뒤에 숨는다.
-    // iOS 도 같은 이유로 `openPanel = .imprint` 로 시작한다.
-    var open by rememberSaveable { mutableStateOf<AttributePanel?>(AttributePanel.Imprint) }
+    // 각인은 이제 모델이 읽어 채워 주므로(NM-485 · NM-515) 들어오자마자 무언가를 입력해야
+    // 하는 화면이 아니다. 면 카드는 늘 보이고, 여기서 여는 것은 색·모양·제형 메뉴뿐이다.
+    var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
+
+    // ⚠️ 들어오자마자 **펼친 채로** 시작한다. 정본 ② 는 접힌 상태를 그리지만, 이 화면에
+    // 들어온 이유가 곧 「고치러 왔다」다 — 접어 두면 한 번 더 눌러야 시작한다.
+    // 수동 추가·추출 실패 알약은 채울 것이 더 많아 더더욱 그렇다(NM-516).
+    var expanded by rememberSaveable { mutableStateOf(true) }
 
     // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
     LaunchedEffect(open) { onPanelChange(open) }
 
-    // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
-    // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
-    var frontText by remember { mutableStateOf(TextFieldValue(faces.front.imprint)) }
-    var backText by remember { mutableStateOf(TextFieldValue(faces.back.imprint)) }
-    var focusedSide by remember { mutableStateOf<FaceSide?>(null) }
+    // 각인을 치는 중인 면. null 이면 입력 줄이 안 떠 있다(정본 ⑦).
+    var editingSide by remember { mutableStateOf<FaceSide?>(null) }
+
+    // 치는 동안의 **초안**이다. 글자의 주인은 뷰모델([faces])이고, 확인을 눌러야 넘어간다 —
+    // 한 글자마다 넘기면 후보가 글자 수만큼 왕복한다. 커서 자리는 기호를 끼워 넣을 때 쓴다.
+    var draft by remember { mutableStateOf(TextFieldValue()) }
 
     // 이미지 비교 뷰어에 띄울 후보. null 이면 안 열려 있다.
     var comparing by remember { mutableStateOf<PillCandidate?>(null) }
@@ -113,11 +125,19 @@ fun PillEditScreen(
     //    (safeDrawing 을 먹은 Column 안이어도 WindowInsets.ime 는 창 원본 값을 준다.)
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
+    // 뒤로 키로 키보드를 내린 것은 「그만 친다」다. 줄만 남아 화면 아래에 떠 있으면
+    // 무엇을 하는 중인지 알 수 없다 — 쳐 둔 글자는 그대로 넘긴다.
     LaunchedEffect(imeVisible) {
-        if (!imeVisible) {
-            focusedSide = null
-            // 포커스까지 풀어야 각인 칸 테두리가 파란 채로 남지 않는다. 키보드를 내린 것은
-            // "다 적었다"는 뜻인데 칸만 열려 있으면 아직 입력 중처럼 보인다.
+        if (!imeVisible && editingSide != null) {
+            val typed = draft.text.trim()
+            onFacesChange(
+                if (editingSide == FaceSide.Front) {
+                    faces.copy(front = faces.front.typed(typed))
+                } else {
+                    faces.copy(back = faces.back.typed(typed))
+                }
+            )
+            editingSide = null
             focusManager.clearFocus()
         }
     }
@@ -127,7 +147,11 @@ fun PillEditScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                // ⚠️ 아래쪽 여백은 **하단 묶음만** 먹는다. 여기서 통째로 먹으면 키보드가
+                // 뜰 때 목록까지 키보드 높이만큼 줄어, 조건을 고치는 동안 후보가 거의 안 보인다.
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                )
         ) {
             NmNavBar(title = "수정", onBack = onCancel)
 
@@ -145,12 +169,25 @@ fun PillEditScreen(
                         number = number,
                         manual = manual,
                         crop = crop,
+                        attribute = attribute,
                         conditions = conditions,
                         faces = faces,
+                        expanded = expanded,
+                        onExpandedChange = { next ->
+                            expanded = next
+                            // 접으면 열어 둔 메뉴·입력 줄도 같이 닫는다 — 안 보이는 판이
+                            // 열린 채로 남아 다시 펼쳤을 때 뜬금없이 튀어나온다.
+                            if (!next) {
+                                open = null
+                                editingSide = null
+                            }
+                        },
                         open = open,
                         onToggle = { panel ->
                             open = panel.takeIf { it != open }
-                            if (open != AttributePanel.Imprint) focusedSide = null
+                            // 외형 메뉴를 열면 각인 줄은 내린다 — 둘이 같이 떠 있으면
+                            // 키보드가 메뉴를 가린다.
+                            if (open != null) editingSide = null
                         },
                         onColorToggle = { color ->
                             val current = conditions.colors
@@ -159,16 +196,17 @@ fun PillEditScreen(
                             )
                         },
                         onChange = onConditionsChange,
-                        imprint = {
-                            ImprintPanel(
+                        faceCard = {
+                            PillFaceCard(
                                 faces = faces,
-                                frontText = frontText,
-                                backText = backText,
+                                reading = reading,
                                 onChange = onFacesChange,
-                                onTextChange = { side, value ->
-                                    if (side == FaceSide.Front) frontText = value else backText = value
-                                },
-                                onFocus = { side -> focusedSide = side }
+                                onEditImprint = { side ->
+                                    val current = if (side == FaceSide.Front) faces.front else faces.back
+                                    val value = current.imprint.orEmpty().trim()
+                                    draft = TextFieldValue(value, selection = TextRange(value.length))
+                                    editingSide = side
+                                }
                             )
                         }
                     )
@@ -191,23 +229,34 @@ fun PillEditScreen(
                 )
             }
 
-            // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
-            EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
+            // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이
+            // 키보드와 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
+            Column(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
+                EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
 
-            val side = focusedSide
-            if (side != null && open == AttributePanel.Imprint && imeVisible) {
-                PillSymbolBar(
-                    onSymbol = { symbol ->
-                        val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
-                        if (side == FaceSide.Front) {
-                            frontText = next
-                            onFacesChange(faces.copy(front = faces.front.copy(imprint = next.text)))
+                // 각인 입력 줄 + 기호 바는 키보드 **바로 위**에 쌓인다(정본 ⑦).
+                val side = editingSide
+                if (side != null) {
+                    val commit = {
+                        val typed = draft.text.trim()
+                        val next = if (side == FaceSide.Front) {
+                            faces.copy(front = faces.front.typed(typed))
                         } else {
-                            backText = next
-                            onFacesChange(faces.copy(back = faces.back.copy(imprint = next.text)))
+                            faces.copy(back = faces.back.typed(typed))
                         }
+                        onFacesChange(next)
+                        editingSide = null
+                        focusManager.clearFocus()
                     }
-                )
+                    PillImprintInputRow(
+                        side = side,
+                        text = draft,
+                        onTextChange = { draft = it },
+                        onConfirm = commit
+                    )
+                    PillSymbolBar(onSymbol = { symbol -> draft = draft.insert(symbol) })
+                }
             }
         }
 

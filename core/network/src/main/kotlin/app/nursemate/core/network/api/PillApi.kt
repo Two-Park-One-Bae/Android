@@ -156,6 +156,15 @@ data class PillCandidatesRequest(
      * 수동 추가·추출 실패 알약은 null 이다.
      */
     val attributeToken: String? = null,
+    /**
+     * [front]·[back] 의 `markEmbedding` 을 뽑은 마크 모델 버전 — ML 레포 모델 폴더 이름이다.
+     * 어느 면이든 임베딩이 있으면 **필수**다(없으면 400 `INVALID_REQUEST`).
+     *
+     * 서버가 가진 카탈로그 버전에 없으면 **임베딩 항만 빼고** 나머지 가중치는 그대로다 —
+     * 에러가 아니다. 버전이 다른 임베딩끼리는 코사인이 성립하지 않는데, 그걸 에러로 막으면
+     * 모델을 바꿀 때마다 옛 앱의 조회가 통째로 죽는다.
+     */
+    val markEmbeddingModel: String? = null,
     // ⚠️ 이 프로젝트의 Json 은 explicitNulls=false 뿐 encodeDefaults 는 기본값(false) 이다 —
     // 기본값과 같은 값은 직렬화에서 통째로 빠진다. 계약이 colors 에 `default: []` 를 두고 있어
     // 빠져도 서버가 받아 주지만, 「색 조건 없음」을 명시적으로 보내는 편이 읽기 쉽다.

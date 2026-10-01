@@ -53,6 +53,7 @@ import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillFace
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
+import app.nursemate.pill.FaceInput
 import app.nursemate.pill.FaceInputs
 import app.nursemate.pill.PillAttributeChips
 
@@ -225,9 +226,10 @@ private fun AttributeChipStates() {
                 shape = PillShape.ROUND,
                 formulation = PillFormulation.TABLET
             ),
-            FaceInputs.from(
-                front = PillFace(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
-                back = PillFace()
+            FaceInputs(
+                front = FaceInput(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
+                // 「없음」을 전부 고른 면 — 셋 다 호박색이어야 한다.
+                back = FaceInput(imprint = "", dividingLine = DividingLine.NONE, hasMark = false)
             )
         ),
         "다색 캡슐" to Case(
@@ -238,7 +240,8 @@ private fun AttributeChipStates() {
                 shape = PillShape.OBLONG,
                 formulation = PillFormulation.HARD_CAPSULE
             ),
-            FaceInputs.from(front = PillFace(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true))
+            // 뒷면은 손대지 않은 그대로 — 셋 다 「전체」(회색)다.
+            FaceInputs(front = FaceInput(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true))
         ),
         // V1 은 속성별 부분 실패가 없다 — 모델값이 있으면 색·모양·제형이 모두 있다.
         "추출 실패 (EXTRACTION_FAILED)" to Case(PillAttribute(pillId = "4", error = "EXTRACTION_FAILED"), FaceInputs()),
