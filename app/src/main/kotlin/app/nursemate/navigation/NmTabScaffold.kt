@@ -3,12 +3,20 @@ package app.nursemate.navigation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.home.NmBottomBar
 import app.nursemate.home.NmTab
@@ -43,16 +51,31 @@ fun NmTabScaffold(
     // 밝은 bg-app 위라 시스템 바 아이콘은 어둡게.
     SystemBarIcons(darkIcons = true)
 
+    // 탭바가 차지하는 높이. 화면이 키보드를 피할 때 **이미 빠져 있는 몫**이라 빼 줘야 한다.
+    var barHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+
     Box(modifier = modifier.fillMaxSize().background(colors.bgApp)) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .windowInsetsPadding(WindowInsets.statusBars)
+                    // ⚠️ **탭바 높이를 여기서 소비한다.**
+                    //
+                    // 화면 안에서 `imePadding()` 을 쓰면 키보드 높이만큼 안쪽을 비우는데,
+                    // 그 아래에는 탭바가 또 있다. 결국 `키보드 + 탭바` 만큼 밀리고 키보드는
+                    // `키보드` 만큼만 덮으니 **차이인 탭바 높이가 빈 칸**으로 남는다.
+                    // 미리 소비해 두면 화면은 `키보드 − 탭바` 만 먹는다.
+                    .consumeWindowInsets(PaddingValues(bottom = with(density) { barHeight.toDp() }))
             ) {
                 content()
             }
-            NmBottomBar(selected = selected, onSelect = onSelect)
+            NmBottomBar(
+                selected = selected,
+                onSelect = onSelect,
+                modifier = Modifier.onSizeChanged { barHeight = it.height }
+            )
         }
         overlay?.invoke()
     }
