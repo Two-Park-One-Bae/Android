@@ -75,7 +75,7 @@
         android:name=".NurseMateApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="널스메이트"
+        android:label="@string/nm_app_name"
         android:theme="@style/Theme.NurseMate"
         android:supportsRtl="true">
 
