@@ -55,13 +55,16 @@ internal fun CandidateEmpty(state: CandidateUiState, onRetry: () -> Unit, modifi
             // 부제는 인식 실패·세부정보 실패와 **같은 문장**이다 — 같은 원인에 다른 말을 하면
             // 사용자는 다른 문제로 읽는다.
             state.failed -> EmptyBlock(
-                icon = R.drawable.nm_ic_wifi_off,
+                // 정본은 `circle-alert` 다 — 끊긴 망만이 아니라 **못 받아 온 모든 경우**를
+                // 덮는 자리라, 와이파이 그림을 두면 서버 오류에도 망 탓을 하게 된다.
+                icon = R.drawable.nm_ic_circle_alert,
                 circle = 64.dp,
                 iconSize = 30.dp,
                 gap = 14.dp,
                 padding = 24.dp,
                 title = "후보를 불러오지 못했어요",
-                subtitle = "네트워크 연결을 확인하고 다시 시도해 주세요",
+                // 정본이 줄바꿈까지 정해 뒀다 — 폭에 맡기면 기기마다 끊는 자리가 달라진다.
+                subtitle = "네트워크 연결을 확인하고\n다시 시도해 주세요",
                 // 재시도는 **식별 횟수를 쓰지 않는다** — 후보 조회는 차감 대상이 아니다.
                 action = "다시 시도" to onRetry
             )
@@ -155,16 +158,17 @@ private fun EmptyBlock(
 internal fun CandidateLoadMoreFailed(onRetry: () -> Unit, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        // 정본 padding [4,0] · gap 4 — 목록 끝에 붙는 **한 줄**이라 넉넉히 띄우지 않는다.
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = "불러오지 못했어요", style = EmptyBody, color = colors.textTertiary)
+        Text(text = "불러오지 못했어요", style = LoadMoreLabel, color = colors.textTertiary)
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onRetry)
-                .padding(horizontal = 10.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Text(text = "다시 시도", style = RetryLabel, color = NmColor.Primary.C600)
         }
@@ -186,4 +190,5 @@ private val EmptyBody = NmTypography.body.copy(
     lineBreak = LineBreak.Heading
 )
 private val EmptyHint = EmptyBody.copy(fontWeight = FontWeight.Medium)
-private val RetryLabel = EmptyBody.copy(fontWeight = FontWeight.SemiBold)
+private val LoadMoreLabel = NmTypography.caption.copy(fontSize = 12.sp)
+private val RetryLabel = LoadMoreLabel.copy(fontWeight = FontWeight.SemiBold)

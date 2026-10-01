@@ -3,9 +3,10 @@ package app.nursemate.pill
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -50,67 +51,83 @@ import app.nursemate.core.model.PillCandidateFace
 internal fun PillCandidateFaceSummary(front: PillCandidateFace, back: PillCandidateFace) {
     Row(
         // 칸이 그림투성이라 그냥 두면 읽어 줄 것이 하나도 없다. 줄 전체를 한 문장으로 묶는다.
-        modifier = Modifier
-            .semantics(mergeDescendants = true) {
-                contentDescription = "앞면 ${front.spoken()}, 뒷면 ${back.spoken()}"
-            },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = "앞면 ${front.spoken()}, 뒷면 ${back.spoken()}"
+        },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FaceGroup(label = "앞", face = front)
+        faceCells(label = "앞", face = front)
+        Spacer(modifier = Modifier.width(GROUP_GAP))
         Box(modifier = Modifier.width(1.dp).height(10.dp).background(NmColor.Neutral.C300))
-        FaceGroup(label = "뒤", face = back)
+        Spacer(modifier = Modifier.width(GROUP_GAP))
+        faceCells(label = "뒤", face = back)
     }
 }
 
+/**
+ * 한 면의 칸들을 **바깥 줄에 바로** 쏟아 넣는다.
+ *
+ * ## 왜 면마다 묶지 않나
+ * 묶으면 `weight` 가 그 묶음 안에서만 돈다 — 앞면 각인이 길 때 앞 묶음이 줄 전체를 먹고
+ * **뒷면이 통째로 밀려 나간다.** 규칙은 「구분선·마크 칸은 지키고 넘치면 **각인만** 말줄임」
+ * 이라(spec 후보 목록), 각인 둘이 **같은 줄에서** 남는 폭을 나눠야 한다.
+ *
+ * 그래서 간격도 `spacedBy` 가 아니라 [Spacer] 로 둔다 — 면 안은 3, 면 사이는 6 이다.
+ */
 @Composable
-private fun FaceGroup(label: String, face: PillCandidateFace) {
+private fun RowScope.faceCells(label: String, face: PillCandidateFace) {
     val colors = NmTheme.semanticColors
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, style = SideLabel, color = colors.textTertiary)
+    Text(text = label, style = SideLabel, color = colors.textTertiary)
 
-        if (face.isEmpty) {
-            Text(text = "—", style = EmptyMark, color = colors.textTertiary)
-            return@Row
+    if (face.isEmpty) {
+        Spacer(modifier = Modifier.width(CELL_GAP))
+        Text(text = "—", style = EmptyMark, color = colors.textTertiary)
+        return
+    }
+
+    face.imprint?.takeIf { it.isNotBlank() }?.let { imprint ->
+        Spacer(modifier = Modifier.width(CELL_GAP))
+        Box(
+            // ⚠️ 줄이 넘치면 **각인만** 줄어든다. 구분선·마크는 22 고정이라 함께 밀리면 통째로
+            // 잘려 나가는데, 그 둘은 줄여서 보여 줄 수가 없는 그림이다.
+            modifier = cellModifier().weight(1f, fill = false).padding(horizontal = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = imprint,
+                style = ImprintStyle,
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+    }
 
-        face.imprint?.takeIf { it.isNotBlank() }?.let { imprint ->
-            Box(
-                // ⚠️ 줄이 넘치면 **각인만** 줄어든다. 구분선·마크 칸은 22 고정이라 함께 밀리면
-                // 통째로 잘려 나가는데, 그 둘은 줄여서 보여 줄 수가 없는 그림이다(spec).
-                modifier = cellModifier().weight(1f, fill = false).padding(horizontal = 5.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = imprint,
-                    style = ImprintStyle,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+    // 「없음」도 그린다 — 선 없는 원판이다. 카탈로그가 **없다고 말한 것**과 모르는 것은
+    // 다르고, 앞면만 쪼개지는 약을 가릴 때 그 차이가 쓰인다. iOS 도 같다.
+    face.dividingLine?.takeIf { it != DividingLine.UNKNOWN }?.let { line ->
+        Spacer(modifier = Modifier.width(CELL_GAP))
+        Box(modifier = cellModifier().width(22.dp), contentAlignment = Alignment.Center) {
+            DividingLineGlyph(line)
         }
+    }
 
-        // 「없음」도 그린다 — 선 없는 원판이다. 카탈로그가 **없다고 말한 것**과 모르는 것은
-        // 다르고, 앞면만 쪼개지는 약을 가릴 때 그 차이가 쓰인다. iOS 도 같다.
-        face.dividingLine?.takeIf { it != DividingLine.UNKNOWN }?.let { line ->
-            Box(modifier = cellModifier().width(22.dp), contentAlignment = Alignment.Center) {
-                DividingLineGlyph(line)
-            }
-        }
-
-        if (face.hasMark) {
-            Box(
-                // 마크 칸만 흰 바탕이다(정본 `$surface`) — 그림이 들어앉을 자리라 회색을 깔면
-                // 흑백 마크가 묻힌다.
-                modifier = cellModifier(fill = colors.surface).width(22.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                MarkGlyph(markCode = face.markCode)
-            }
+    if (face.hasMark) {
+        Spacer(modifier = Modifier.width(CELL_GAP))
+        Box(
+            // 마크 칸만 흰 바탕이다(정본 `$surface`) — 그림이 들어앉을 자리라 회색을 깔면
+            // 흑백 마크가 묻힌다.
+            modifier = cellModifier(fill = colors.surface).width(22.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            MarkGlyph(markCode = face.markCode)
         }
     }
 }
+
+/** 면 안의 칸 사이 3, 면과 면 사이 6 — 정본 값이다. */
+private val CELL_GAP = 3.dp
+private val GROUP_GAP = 6.dp
 
 /**
  * 각인·구분선·마크가 같은 칸을 쓴다 — 높이 22, r4, `$neutral-300` 테두리.

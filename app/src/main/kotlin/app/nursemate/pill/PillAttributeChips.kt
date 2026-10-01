@@ -78,9 +78,7 @@ private fun ColorGroup(hexes: List<String>?, manual: Boolean) {
             UnrecognizedText(manual)
             return@AttributeGroup
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-            hexes.forEach { HexSwatch(it) }
-        }
+        HexPie(hexes = hexes)
     }
 }
 

@@ -3,15 +3,18 @@ package app.nursemate.pill
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -33,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -104,10 +109,13 @@ fun PillEditScreen(
     // 하는 화면이 아니다. 면 카드는 늘 보이고, 여기서 여는 것은 색·모양·제형 메뉴뿐이다.
     var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
 
-    // ⚠️ 들어오자마자 **펼친 채로** 시작한다. 정본 ② 는 접힌 상태를 그리지만, 이 화면에
-    // 들어온 이유가 곧 「고치러 왔다」다 — 접어 두면 한 번 더 눌러야 시작한다.
-    // 수동 추가·추출 실패 알약은 채울 것이 더 많아 더더욱 그렇다(NM-516).
-    var expanded by rememberSaveable { mutableStateOf(true) }
+    // 들어오면 **접힌 채로** 시작한다 — 정본 ② 다. 수정하러 들어왔다고 곧바로 고칠 칸을
+    // 펼치면, 사진에서 읽은 값을 **확인할 겨를 없이** 손대게 된다. 먼저 읽고 고칠 데를
+    // 고르는 순서다.
+    //
+    // ⚠️ 둘만 예외로 펼친다 — **수동 추가와 추출 실패**. 보여 줄 모델값이 없어 접어 봐야
+    // 「전체」만 늘어서고, 그 화면에서 해야 할 일은 읽기가 아니라 채우기다(NM-516).
+    var expanded by rememberSaveable { mutableStateOf(manual || attribute.failed) }
 
     // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
     LaunchedEffect(open) { onPanelChange(open) }
@@ -307,6 +315,34 @@ private fun CandidateHeader(state: CandidateUiState) {
     }
 }
 
+/**
+ * 통짜 카드의 **한 조각** — 목록은 LazyColumn 이라 카드를 통으로 두를 수 없다.
+ *
+ * 그래서 조각마다 같은 바탕·테두리를 그리고 **모서리만 첫/마지막에서 둥글린다.** 세로
+ * 테두리는 조각마다 이어져 한 줄로 보이고, 가로 테두리는 위아래 끝에만 남는다.
+ */
+@Composable
+private fun CandidateCardSlice(first: Boolean, last: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    val colors = NmTheme.semanticColors
+    val radius = 14.dp
+    val shape = RoundedCornerShape(
+        topStart = if (first) radius else 0.dp,
+        topEnd = if (first) radius else 0.dp,
+        bottomStart = if (last) radius else 0.dp,
+        bottomEnd = if (last) radius else 0.dp
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // 헤더와 목록 사이만 블록 간격(14)이다. 조각끼리는 붙는다.
+            .padding(top = if (first) BlockGap else 0.dp)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.border, shape),
+        content = content
+    )
+}
+
 /** 후보 목록 — 비었으면 왜 비었는지 알리고, 있으면 행과 다음 장 표시·선택 안내를 낸다. */
 private fun LazyListScope.candidateSection(
     state: CandidateUiState,
@@ -330,15 +366,19 @@ private fun LazyListScope.candidateSection(
         if (index == state.candidates.lastIndex && state.hasMore) {
             LaunchedEffect(candidate.pillCode) { actions.onLoadMore() }
         }
-        PillCandidateRow(
-            candidate = candidate,
-            selected = candidate.pillCode == selected?.pillCode,
-            onClick = { actions.onSelect(candidate) },
-            onDetailClick = { actions.onDetail(candidate) },
-            onThumbnailClick = { actions.onThumbnail(candidate) },
-            // 헤더와 첫 행 사이만 블록 간격(14)이고, 행끼리는 8 이다.
-            modifier = if (index == 0) Modifier.padding(top = BlockGap) else Modifier
-        )
+        CandidateCardSlice(first = index == 0, last = index == state.candidates.lastIndex) {
+            PillCandidateRow(
+                candidate = candidate,
+                selected = candidate.pillCode == selected?.pillCode,
+                onClick = { actions.onSelect(candidate) },
+                onDetailClick = { actions.onDetail(candidate) },
+                onThumbnailClick = { actions.onThumbnail(candidate) }
+            )
+            // 마지막 행 아래에는 긋지 않는다 — 카드 테두리와 겹쳐 두 줄로 보인다.
+            if (index != state.candidates.lastIndex) {
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
+            }
+        }
     }
 
     candidateListTail(state = state, selected = selected, actions = actions)
@@ -366,7 +406,7 @@ private fun LazyListScope.candidateListTail(
                 CircularProgressIndicator(
                     color = NmColor.Primary.C500,
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

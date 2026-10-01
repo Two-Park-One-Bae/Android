@@ -36,6 +36,7 @@ import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.DividingLine
 import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
@@ -71,12 +72,9 @@ internal fun ColorMenu(
 ) = AttributeMenu(
     all = selected.isEmpty(),
     onClear = onClear,
-    preview = {
-        // 정본은 여러 색을 -4 만큼 겹쳐 둔다 — 두세 개가 작은 자리에 다 들어가게.
-        Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
-            modelHexes.orEmpty().forEach { HexSwatch(it) }
-        }
-    }
+    // 「사진 기준」도 칩과 같은 조각 원이다 — 되돌리면 저 모양으로 돌아간다는 뜻이라
+    // 두 자리가 다르게 생기면 안 된다.
+    preview = { HexPie(hexes = modelHexes, size = 20.dp) }
 ) {
     MenuRows(items = SelectableColors) { color ->
         MenuCell(
@@ -292,3 +290,57 @@ private const val CELLS_PER_ROW = 4
 private val MenuAll = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
 private val PreviewLabel = NmTypography.caption.copy(fontSize = 11.sp)
 private val CellLabel = NmTypography.caption.copy(fontSize = 11.sp)
+
+/**
+ * 구분선 메뉴 — **제형처럼 알약 그림 칸**이다(정본 ④ · ⑩).
+ *
+ * 마크 메뉴는 글자 목록인데 구분선만 그림인 이유가 있다. 「(+)형」·「(−)형」은 **말보다
+ * 그림이 빠르다** — 사용자는 손에 든 알약을 보고 고르지 이름으로 떠올리지 않는다.
+ * 마크는 종류가 296가지라 그림으로 고를 수 없어 유무만 묻는다.
+ *
+ * 「없음」도 칸이다 — 선 없는 원판. 「조건 없음」과 다른 말이라 그림으로도 갈라 준다.
+ */
+@Composable
+internal fun DividingLineMenu(selected: DividingLine?, onSelect: (DividingLine) -> Unit, onClear: () -> Unit) =
+    AttributeMenu(
+        all = selected == null,
+        onClear = onClear,
+        // 구분선은 사진에서 읽지 않는다 — 모델이 내는 값이 아니라 보여 줄 기준이 없다.
+        preview = {}
+    ) {
+        MenuRows(items = SelectableLines) { line ->
+            MenuCell(label = line.menuLabel, selected = line == selected, onClick = { onSelect(line) }) { certain ->
+                DividingLineIcon(line = line, tint = iconTint(certain))
+            }
+        }
+    }
+
+/**
+ * 구분선 알약 그림 — 원판 위에 흰 선. 정본은 24 자리에 원 22, 선 14×2 다.
+ *
+ * 후보 카드의 작은 그림([PillCandidateFaceSummary])과 같은 모양이고 크기만 다르다.
+ */
+@Composable
+private fun DividingLineIcon(line: DividingLine, tint: Color) {
+    val colors = NmTheme.semanticColors
+    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(22.dp).background(tint, CircleShape))
+        if (line != DividingLine.NONE) {
+            Box(modifier = Modifier.size(width = 14.dp, height = 2.dp).background(colors.surface))
+        }
+        if (line == DividingLine.PLUS) {
+            Box(modifier = Modifier.size(width = 2.dp, height = 14.dp).background(colors.surface))
+        }
+    }
+}
+
+/** 사용자가 고를 수 있는 구분선. `UNKNOWN` 은 서버가 못 읽었다는 표시라 목록에 없다. */
+private val SelectableLines = listOf(DividingLine.NONE, DividingLine.PLUS, DividingLine.MINUS)
+
+private val DividingLine.menuLabel: String
+    get() = when (this) {
+        DividingLine.NONE -> "없음"
+        DividingLine.PLUS -> "(+)형"
+        DividingLine.MINUS -> "(−)형"
+        DividingLine.UNKNOWN -> "전체"
+    }
