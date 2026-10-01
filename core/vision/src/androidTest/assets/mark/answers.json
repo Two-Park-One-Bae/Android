@@ -1,0 +1,32 @@
+{
+  "mark_set-084_p1_back": {
+    "presence": 0.9960295557975769,
+    "species": 7,
+    "speciesProbability": 0.9575253129005432
+  },
+  "mark_set-15_p1_back": {
+    "presence": 0.9993376731872559,
+    "species": 85,
+    "speciesProbability": 0.9652464389801025
+  },
+  "mark_set-19_p2_back": {
+    "presence": 0.9679208397865295,
+    "species": 53,
+    "speciesProbability": 0.7246662974357605
+  },
+  "none_set-18_p0_back": {
+    "presence": 0.044237613677978516,
+    "species": 5,
+    "speciesProbability": 0.0006665103137493134
+  },
+  "none_set-19_p0_front": {
+    "presence": 0.042866647243499756,
+    "species": 71,
+    "speciesProbability": 0.0006879723514430225
+  },
+  "none_set-19_p3_back": {
+    "presence": 0.7227059602737427,
+    "species": 72,
+    "speciesProbability": 0.5634574890136719
+  }
+}

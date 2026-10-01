@@ -7,3 +7,4 @@
 # 절차는 docs/RELEASE.md 「검출 모델」.
 cb20efc7d45a9104226fd86a1c019885  rfdetr_seg_small.onnx
 8e574cd5f9db305414f836ccdf20ee2e  reader_ep60_s1.onnx
+b87ab569eb08dbcd7ee4823a6254b9d3  mark_species_fp16.onnx

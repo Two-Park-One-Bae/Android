@@ -37,6 +37,7 @@ ONNX 모델은 **저장소에 넣지 않는다.** 한 번 커밋하면 이후 �
 |---|---|---|
 | `rfdetr_seg_small.onnx` | 119MB | 낱알 검출·마스크 (`PillDetector`) |
 | `reader_ep60_s1.onnx` | 21MB | 각인 판독 (`ImprintReader`, NM-485) |
+| `mark_species_fp16.onnx` | 53MB | 마크 유무·종·임베딩 (`MarkReader`, NM-515) |
 
 **정본은 ML 저장소의 DVC** 다(`s3://nursemate-ml-models` · `ap-northeast-2`).
 릴리스 빌드 전에 받아 둔다:
@@ -47,9 +48,15 @@ AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
   models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx -o app/src/main/assets/
 AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
   models/imprint/20260907-crnn-ep60-s1/reader_ep60_s1.onnx -o app/src/main/assets/
+AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
+  models/mark/20260925-convnext-species/mark_species_fp16.onnx -o app/src/main/assets/
 ```
 
-`dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(125MB, 약 16초).
+⚠️ 마크는 **fp16 판**(`mark_species_fp16.onnx`, 53MB)이다. 같은 폴더의 `mark_species.onnx`
+(fp32, 106MB)는 **대조용**이라 앱에 싣지 않는다. 답은 같고(NM-526 — 종 top-1 6/6 · 임베딩
+코사인 0.999997) 크기가 절반이며, 그래프에 임베딩 차원이 768 로 박혀 있어 붙이기도 쉽다.
+
+`dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(약 193MB).
 ML 클론이 이미 있으면 `dvc pull` 후 복사하는 쪽이 더 빠르다.
 
 - **맞는 파일인지는 빌드가 본다.** `bundleRelease`·`assembleRelease` 가 `app/models.md5` 의
