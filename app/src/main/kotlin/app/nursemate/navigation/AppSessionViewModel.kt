@@ -81,6 +81,17 @@ class AppSessionViewModel @Inject constructor(
      */
     val sessionExpired: StateFlow<Boolean> = forcedSignOut.asStateFlow()
 
+    /**
+     * 동의 화면이 **개정 재동의**인가 — 안내 한 장을 앞세울지만 가른다(spec §개정 재동의).
+     *
+     * ⚠️ [entry] 와 역할이 다르다. 들여보낼지 말지는 서버가 준 `onboardingRequired` 가 쥐고
+     * (아래 [entry] 주석), 이 값은 **어느 문구를 보일지**만 정한다. 그래서 여기서만
+     * `consents` 를 본다 — 틀려도 문구가 어긋날 뿐 게이트는 흔들리지 않는다.
+     */
+    val needsReconsent: StateFlow<Boolean> = currentUser
+        .map { it?.needsReconsent == true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val entry: StateFlow<AppEntry> =
         combine(authRepository.session, currentUser, initialLoadFailed) { session, user, failed ->
             when (session) {
@@ -126,8 +137,11 @@ class AppSessionViewModel @Inject constructor(
     /**
      * 회원 정보를 다시 받는다.
      *
-     * 포그라운드 복귀마다 부른다 — 약관이 개정되면 `onboardingRequired` 가 다시 true 가 되고,
-     * 그래야 다음 진입에서 동의 화면이 뜬다(spec §약관 개정).
+     * ⚠️ **포그라운드 복귀마다 부르지 않는다**(NM-463). 재동의 판정 시점은 **앱 실행 때**다
+     * (spec §진입 라우팅: 「포그라운드 복귀에는 다시 판정하지 않는다」). 복귀마다 부르면
+     * 다른 일을 하다 돌아온 사용자가 쓰던 화면에서 동의 시트로 끌려 나온다.
+     *
+     * 지금 부르는 곳은 회원 조회에 실패해 멈춰 선 화면의 「다시 시도」뿐이다.
      */
     fun refresh() {
         if (authRepository.session.value !is AuthSession.SignedIn) return

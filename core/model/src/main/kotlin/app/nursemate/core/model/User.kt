@@ -65,7 +65,21 @@ data class User(
      * 늘렸을 때 어긋난다. 서버가 준 이 값을 그대로 믿는다(spec §동의 온보딩).
      */
     val onboardingRequired: Boolean
-)
+) {
+    /**
+     * 약관 **개정**으로 다시 묻는 것인가 — 예전 버전에 동의한 기록이 있는데 지금은 미충족.
+     *
+     * 최초 가입자와 갈라 **안내 문구만** 정하는 값이다(spec §개정 재동의). 들여보낼지 말지는
+     * 그대로 [onboardingRequired] 가 쥔다 — 위의 「클라이언트가 직접 계산하지 않는다」는
+     * **그 게이트**에 대한 말이고, 여기서 그 판단을 다시 하지 않는다. 이 값이 틀려도 문구만
+     * 어긋날 뿐, 막을 사람을 들이거나 들여보낼 사람을 막지 않는다.
+     *
+     * `agreed && !satisfied` = 「동의는 했는데 그 버전이 지금 필수 버전이 아니다」 = 개정.
+     * 한 번도 동의한 적 없는 항목은 `agreed == false` 라 걸리지 않는다.
+     */
+    val needsReconsent: Boolean
+        get() = consents.any { it.agreed && !it.satisfied }
+}
 
 /**
  * 서버가 정의한 동의 항목 — `GET /api/v0/consents` 응답.

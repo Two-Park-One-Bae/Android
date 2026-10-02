@@ -135,7 +135,9 @@ class ConsentViewModel @Inject constructor(
         const val TAG = "NM412"
         const val HTTP_BAD_REQUEST = 400
         const val UPDATE_REQUIRED = "앱을 최신 버전으로 업데이트해 주세요"
-        const val VERSION_CHANGED = "약관이 개정되어 다시 불러왔어요. 확인 후 동의해 주세요"
+
+        // 사용자에게 보이는 말은 「개정」이 아니라 「변경」으로 통일한다(spec §동의 온보딩 정본).
+        const val VERSION_CHANGED = "약관이 변경되어 다시 불러왔어요. 확인 후 동의해 주세요."
         const val RETRYABLE = "잠시 후 다시 시도해 주세요"
         const val GENERIC = "약관을 불러오지 못했어요"
     }
