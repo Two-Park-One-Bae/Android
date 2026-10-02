@@ -1,5 +1,6 @@
 package app.nursemate.pill
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -183,8 +187,11 @@ internal fun <T> ConditionMenu(
         // 안 보인다 — 칸 높이(30)에 조금 띄운 값이다.
         offset = IntOffset(0, with(LocalDensity.current) { 34.dp.roundToPx() }),
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
+        // 외형 메뉴와 같은 이유로 포커스를 주지 않는다 — 구분선 메뉴를 연 채 마크를 누르면
+        // 메뉴만 닫히고 마크는 안 열린다. 뒤로가기는 아래에서 직접 받는다.
+        properties = PopupProperties(focusable = false)
     ) {
+        BackHandler(onBack = onDismiss)
         Column(
             modifier = Modifier
                 .width(width)
@@ -270,51 +277,3 @@ internal fun Boolean?.markConditionLabel(manual: Boolean = false): String = when
 private val FieldLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
 private val DropdownValue = NmTypography.body.copy(fontSize = 12.sp)
 private val MenuLabel = NmTypography.body.copy(fontSize = 14.sp)
-
-/**
- * 외형 메뉴를 **화면 폭으로** 띄운다 — 정본은 좌우 16 을 남기고 칩 줄 바닥에서 7 아래다.
- *
- * ## 왜 카드 안에 깔지 않는가
- * 색 메뉴는 네 줄이라 351 이다. 카드 안에 깔면 카드가 그만큼 길어져 **후보 목록이 화면 밖으로
- * 밀려난다** — 조건을 고치는 내내 후보가 어떻게 바뀌는지를 못 보게 된다. 정본이 띄운 이유다.
- *
- * 앵커의 창 기준 좌표를 그대로 받아 쓰므로 카드가 어디 있든 같은 자리에 선다.
- */
-@Composable
-internal fun AttributeMenuPopup(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    val density = LocalDensity.current
-    val side = with(density) { MenuSideMargin.roundToPx() }
-    val gap = with(density) { MenuAnchorGap.roundToPx() }
-    val provider = remember(side, gap) {
-        object : PopupPositionProvider {
-            override fun calculatePosition(
-                anchorBounds: IntRect,
-                windowSize: IntSize,
-                layoutDirection: LayoutDirection,
-                popupContentSize: IntSize
-            ): IntOffset {
-                // 아래로 넘치면 위로 붙인다 — 긴 색 메뉴가 작은 기기에서 잘리지 않게.
-                val below = anchorBounds.bottom + gap
-                val y = if (below + popupContentSize.height <= windowSize.height) {
-                    below
-                } else {
-                    (windowSize.height - popupContentSize.height - gap).coerceAtLeast(0)
-                }
-                return IntOffset(x = side, y = y)
-            }
-        }
-    }
-    Popup(
-        popupPositionProvider = provider,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
-    ) {
-        Box(modifier = Modifier.width(LocalConfiguration.current.screenWidthDp.dp - MenuSideMargin * 2)) {
-            content()
-        }
-    }
-}
-
-/** 정본 메뉴는 화면 좌우 16 을 남기고 칩 줄 바닥에서 7 아래에 선다. */
-private val MenuSideMargin = 16.dp
-private val MenuAnchorGap = 7.dp
