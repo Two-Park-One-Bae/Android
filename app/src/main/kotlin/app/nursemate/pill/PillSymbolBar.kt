@@ -28,10 +28,10 @@ import app.nursemate.core.designsystem.NmTypography
 /**
  * 키보드 위 기호 바 — 디자인 `⑧-e / 기호 바`.
  *
- * 알약 각인에는 △▽○ 같은 기호가 흔한데 안드로이드 기본 키보드에서 이걸 꺼내려면 몇 단계를 들어가야
+ * 알약 각인에는 △▽∩ 같은 기호가 흔한데 안드로이드 기본 키보드에서 이걸 꺼내려면 몇 단계를 들어가야
  * 한다. 그래서 자주 쓰는 것만 한 줄로 꺼내 둔다.
  *
- * 좁은 기기에서는 11개가 한 줄에 안 들어가 가로로 흐른다 — 줄바꿈을 하면 키보드가 밀려 올라간다.
+ * 좁은 기기에서는 아홉 개가 한 줄에 안 들어가 가로로 흐른다 — 줄바꿈을 하면 키보드가 밀려 올라간다.
  */
 @Composable
 fun PillSymbolBar(onSymbol: (String) -> Unit, modifier: Modifier = Modifier) {
@@ -77,8 +77,21 @@ fun TextFieldValue.insert(symbol: String): TextFieldValue {
     )
 }
 
-/** 정본이 고른 11개. 순서도 정본 그대로다. */
-private val Symbols = listOf("△", "▽", "○", "∧", "∨", "∩", "∪", "★", "☆", "↑", "♡")
+/**
+ * 정본이 고른 아홉 개. 순서도 정본 그대로다 (NM-523).
+ *
+ * ## ○ 와 ∨ 는 뺐다
+ * `∨` 는 DB 각인에 **한 면도 없다** — 칩에 두어도 걸리는 알약이 없다. `○` 는 여섯 면뿐인데,
+ * 사용자가 둥근 자국을 보고 `○` 를 칠지 영문 `O` 나 숫자 `0` 을 칠지 갈리는 문자라 칩으로
+ * 유도해서 얻는 것이 적다.
+ *
+ * **칩에서 뺀 것이지 막은 것이 아니다.** 백엔드 허용 문자에는 `○` 가 그대로 남아 있어,
+ * 키보드로 직접 치면 전과 같이 서버로 간다.
+ *
+ * 남는 아홉 종의 DB 면 수: ∩ 112 · ▽ 28 · △ 21 · ♡ 11 · ★ 3 · ☆ 3 · ∪ 1 · ↑ 1 ·
+ * ∧ 는 백엔드가 `A` 로 접어 따로 세지 않는다.
+ */
+private val Symbols = listOf("△", "▽", "∧", "∩", "∪", "★", "☆", "↑", "♡")
 
 private val BarBackground = Color(0xFFE4E7EC)
 private val SymbolText = NmTypography.bodyLarge.copy(fontSize = 16.sp)
