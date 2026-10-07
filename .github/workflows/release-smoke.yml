@@ -43,6 +43,9 @@ jobs:
           base-url-prod: ${{ secrets.BASE_URL_PROD }}
           google-services-debug: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG }}
           google-services-release: ${{ secrets.GOOGLE_SERVICES_JSON_RELEASE }}
+          # 비면 SDK 초기화를 건너뛴다 — 그만큼 R8 경로를 덜 덮는다(카카오 키와 같은 사정).
+          airbridge-app-name: ${{ secrets.AIRBRIDGE_APP_NAME }}
+          airbridge-app-token: ${{ secrets.AIRBRIDGE_APP_TOKEN }}
 
       # ⚠️ **서명까지 해야 이 검사가 뜻이 있다.** `ReleaseSigning.kt` 는 서명 정보가 없으면
       #    release 를 조용히 미서명으로 내놓는데, 미서명 APK 는 에뮬레이터에 설치되지 않는다.

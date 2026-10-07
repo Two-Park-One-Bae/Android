@@ -3,6 +3,7 @@ package app.nursemate.consent
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nursemate.attribution.AttributionTracker
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.ConsentRepository
 import app.nursemate.core.model.ConsentDefinition
@@ -41,7 +42,8 @@ data class ConsentUiState(
 @HiltViewModel
 class ConsentViewModel @Inject constructor(
     private val consentRepository: ConsentRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val attribution: AttributionTracker
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ConsentUiState())
@@ -94,17 +96,26 @@ class ConsentViewModel @Inject constructor(
     }
 
     /**
+     * @param firstTime **최초 가입**인가 — 유입 측정의 가입 이벤트를 보낼지 가른다(NM-543).
+     *                  약관 개정 재동의는 가입이 아니다. 최초인지는 이 화면이 아니라 셸이 아는
+     *                  값이라(`User.needsReconsent`) 인자로 받는다 — 여기서 `consents` 를
+     *                  다시 세지 않는다.
      * @param onAgreed 갱신된 회원. 진입 상태를 홈으로 넘기는 건 셸이 한다 —
      *                 `onboardingRequired` 를 여기서 단정하지 않고 응답 값을 그대로 올린다.
      */
-    fun submit(onAgreed: (User) -> Unit) {
+    fun submit(firstTime: Boolean, onAgreed: (User) -> Unit) {
         val current = _state.value
         if (!current.canSubmit) return
         _state.update { it.copy(submitting = true, message = null) }
 
         viewModelScope.launch {
             consentRepository.agreeToRequired(current.definitions)
-                .onSuccess(onAgreed)
+                .onSuccess { user ->
+                    // ⚠️ **저장이 성공한 뒤에만** 보낸다. 누른 시점에 보내면 400(버전 불일치)으로
+                    //    되돌아온 사람까지 가입으로 세어, 같은 사람이 두 번 가입한 것이 된다.
+                    if (firstTime) attribution.signUp()
+                    onAgreed(user)
+                }
                 .onFailure { throwable ->
                     Log.w(TAG, "동의 저장 실패", throwable)
                     val failure = throwable as? ApiFailure

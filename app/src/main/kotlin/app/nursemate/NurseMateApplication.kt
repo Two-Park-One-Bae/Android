@@ -3,6 +3,7 @@ package app.nursemate
 import android.app.Application
 import android.util.Log
 import app.nursemate.appcheck.appCheckProviderFactory
+import app.nursemate.attribution.AirbridgeAttributionTracker
 import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
@@ -98,6 +99,12 @@ class NurseMateApplication :
         if (BuildConfig.KAKAO_APP_KEY.isNotEmpty()) {
             KakaoSdk.init(this, BuildConfig.KAKAO_APP_KEY)
         }
+
+        // 유입 경로 측정 (NM-543). **설치 유입은 앱이 처음 열리는 그 순간에 잡히므로**
+        // 늦게 부르면 놓친다 — 화면이 서기 전인 여기서 깨운다.
+        //
+        // 토큰이 비어 있으면 건너뛴다(debug · 비밀값 없는 CI). 카카오와 같은 규칙이다.
+        AirbridgeAttributionTracker.initialize(this)
 
         // 타이머 알람 채널은 **울리기 전에** 있어야 한다. 알람 시점에 만들면 늦다.
         // 이미 있으면 시스템이 무시하므로 매 실행 호출해도 된다.
