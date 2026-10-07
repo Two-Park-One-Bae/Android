@@ -23,13 +23,34 @@ sealed interface AuthSession {
     data class SignedIn(val uid: String, val providerId: String?) : AuthSession
 }
 
-/** 로그인 실패 사유 — 화면이 문구를 고르는 기준. */
+/**
+ * 로그인 실패 사유 — 화면이 문구를 고르는 기준.
+ *
+ * ⚠️ **사유를 합치면 사용자가 할 수 있는 일이 사라진다.** 예전에는 [Cancelled]·[NoCredential] 말고
+ * 전부 [Unknown] 이라 401 과 503 이 같은 칸에 떨어졌고, 화면은 늘 「잠시 후 다시 시도해 주세요」만
+ * 말했다. 카카오가 일시 장애일 때 구글·애플로는 멀쩡히 로그인되는데 그 길을 안내할 수 없었다.
+ */
 sealed interface AuthError {
     /** 사용자가 계정 선택을 닫았다. 오류 문구를 띄우지 않는다. */
     data object Cancelled : AuthError
 
     /** 기기에 쓸 수 있는 구글 계정이 없다. 계정 추가를 안내한다. */
     data object NoCredential : AuthError
+
+    /**
+     * 401 `KAKAO_TOKEN_INVALID` — 서버가 카카오 액세스 토큰을 거절했다.
+     *
+     * 만료·위조이거나 **우리 카카오 앱에서 발급된 토큰이 아니다**(앱 ID 불일치).
+     * 스펙의 클라이언트 대응이 「카카오 재로그인 후 재시도」다(`api/domains/errors.md`).
+     */
+    data object KakaoTokenInvalid : AuthError
+
+    /**
+     * 503 `SERVICE_UNAVAILABLE` — 카카오·Firebase 일시 장애.
+     *
+     * **세션 문제가 아니다.** 다른 공급자로는 로그인되므로 화면이 그 길을 함께 안내한다.
+     */
+    data object ServiceUnavailable : AuthError
 
     /** 그 밖(네트워크·Play 서비스·Firebase). @param cause 로그용, 사용자에게 그대로 보여주지 않는다. */
     data class Unknown(val cause: Throwable) : AuthError

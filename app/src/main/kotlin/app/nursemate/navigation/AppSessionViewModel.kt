@@ -14,6 +14,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -64,6 +65,33 @@ class AppSessionViewModel @Inject constructor(
     /** 회원 정보를 한 번도 못 받았는가. 받은 뒤의 실패는 화면을 흔들지 않으므로 여기 반영하지 않는다. */
     private val initialLoadFailed = MutableStateFlow(false)
 
+    private val forcedSignOut = MutableStateFlow(false)
+
+    /**
+     * 내 의사와 무관하게 세션이 끊겼는가 — 로그인 화면이 **왜 여기 와 있는지** 알리는 데 쓴다.
+     *
+     * ## 로그아웃과 만료는 결론만 같다
+     * 둘 다 로그인 화면으로 보내지만 사용자에게는 전혀 다른 사건이다. 내가 누른 로그아웃은
+     * 설명이 필요 없고, 세션 만료는 **내가 한 일이 아니라** 이유를 말해 주지 않으면 앱이
+     * 고장난 것으로 읽힌다. 예전에는 둘을 구분하지 않고 [AuthRepository.signOut] 만 불렀고,
+     * 홈에 있던 사용자가 아무 안내 없이 로그인 화면으로 돌아오는 증상이 났다.
+     *
+     * 화면이 아니라 여기서 신호하는 이유는 **만료를 아는 곳이 여기뿐**이기 때문이다 —
+     * 로그인 화면은 세션이 이미 없어진 뒤에 그려져 사유를 알 길이 없다.
+     */
+    val sessionExpired: StateFlow<Boolean> = forcedSignOut.asStateFlow()
+
+    /**
+     * 동의 화면이 **개정 재동의**인가 — 안내 한 장을 앞세울지만 가른다(spec §개정 재동의).
+     *
+     * ⚠️ [entry] 와 역할이 다르다. 들여보낼지 말지는 서버가 준 `onboardingRequired` 가 쥐고
+     * (아래 [entry] 주석), 이 값은 **어느 문구를 보일지**만 정한다. 그래서 여기서만
+     * `consents` 를 본다 — 틀려도 문구가 어긋날 뿐 게이트는 흔들리지 않는다.
+     */
+    val needsReconsent: StateFlow<Boolean> = currentUser
+        .map { it?.needsReconsent == true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val entry: StateFlow<AppEntry> =
         combine(authRepository.session, currentUser, initialLoadFailed) { session, user, failed ->
             when (session) {
@@ -97,6 +125,9 @@ class AppSessionViewModel @Inject constructor(
                         initialLoadFailed.value = false
                         usageHolder.clear()
                     } else {
+                        // 로그인에 성공했으니 지난 만료 안내는 역할을 다했다. 남겨 두면 나중에
+                        // 스스로 로그아웃하고 돌아왔을 때 엉뚱한 이유가 떠 있다.
+                        forcedSignOut.value = false
                         loadUser()
                     }
                 }
@@ -106,8 +137,11 @@ class AppSessionViewModel @Inject constructor(
     /**
      * 회원 정보를 다시 받는다.
      *
-     * 포그라운드 복귀마다 부른다 — 약관이 개정되면 `onboardingRequired` 가 다시 true 가 되고,
-     * 그래야 다음 진입에서 동의 화면이 뜬다(spec §약관 개정).
+     * ⚠️ **포그라운드 복귀마다 부르지 않는다**(NM-463). 재동의 판정 시점은 **앱 실행 때**다
+     * (spec §진입 라우팅: 「포그라운드 복귀에는 다시 판정하지 않는다」). 복귀마다 부르면
+     * 다른 일을 하다 돌아온 사용자가 쓰던 화면에서 동의 시트로 끌려 나온다.
+     *
+     * 지금 부르는 곳은 회원 조회에 실패해 멈춰 선 화면의 「다시 시도」뿐이다.
      */
     fun refresh() {
         if (authRepository.session.value !is AuthSession.SignedIn) return
@@ -144,6 +178,10 @@ class AppSessionViewModel @Inject constructor(
                     // 기기에서 탈퇴하면 서버가 리프레시 토큰을 폐기하는데, 이 기기의 Firebase
                     // 세션은 로컬에 남아 있어 SignedIn 인 채로 401 만 반복된다 — 재시도 화면에
                     // 머무르게 두지 않고 로그아웃해 로그인으로 돌려보낸다.
+                    // 화면을 갈아끼우기 **전에** 세운다. signOut 이 세션을 SignedOut 으로 바꾸면
+                    // 그 즉시 로그인 화면이 그려지는데, 그때 이미 이유가 있어야 한 박자 늦게
+                    // 안내가 튀어나오지 않는다.
+                    forcedSignOut.value = true
                     authRepository.signOut()
                     return@onFailure
                 }

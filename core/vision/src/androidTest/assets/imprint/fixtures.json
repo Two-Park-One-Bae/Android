@@ -1,0 +1,1171 @@
+{
+  "source": "sample_crop.png",
+  "opencv": "4.11.0",
+  "input": {
+    "rows": 128,
+    "cols": 128,
+    "sha256_16": "9a868d7b4473f2af"
+  },
+  "zooms": {
+    "1.0": "9a868d7b4473f2af",
+    "1.2": "4e89df0f548b7776",
+    "1.4": "c2e27bf203ba9ea7",
+    "1.7": "1a1607a25ff95950",
+    "2.0": "051cc6715a3c8da6",
+    "2.4": "3a00d1b0125d50ff"
+  },
+  "samples": [
+    {
+      "zoom": 1.0,
+      "rot": 0.0,
+      "clahe_sha256_16": "8630215fc251afd8",
+      "tensor_mean": 0.485254,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 15.0,
+      "clahe_sha256_16": "43a3f01dd87fc757",
+      "tensor_mean": 0.478688,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 30.0,
+      "clahe_sha256_16": "49c3857760d3f885",
+      "tensor_mean": 0.482439,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 45.0,
+      "clahe_sha256_16": "52b7b3a94e4fd256",
+      "tensor_mean": 0.475261,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 60.0,
+      "clahe_sha256_16": "a03b46f1d9037b4b",
+      "tensor_mean": 0.474616,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 75.0,
+      "clahe_sha256_16": "356c722ff1ee0008",
+      "tensor_mean": 0.479293,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 90.0,
+      "clahe_sha256_16": "6f2e2e18a2542e89",
+      "tensor_mean": 0.480896,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 105.0,
+      "clahe_sha256_16": "dc864b8bdf315336",
+      "tensor_mean": 0.473176,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 120.0,
+      "clahe_sha256_16": "84f9d5955e8f81d2",
+      "tensor_mean": 0.478318,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 135.0,
+      "clahe_sha256_16": "ea60188a92cd55b2",
+      "tensor_mean": 0.471074,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 150.0,
+      "clahe_sha256_16": "a91e0716ddee828a",
+      "tensor_mean": 0.472662,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 165.0,
+      "clahe_sha256_16": "bdf643f1c78e0a4e",
+      "tensor_mean": 0.475486,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 180.0,
+      "clahe_sha256_16": "692cc04ed0636068",
+      "tensor_mean": 0.482252,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 195.0,
+      "clahe_sha256_16": "e801a4ee160ef1a2",
+      "tensor_mean": 0.47735,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 210.0,
+      "clahe_sha256_16": "184e5efe73c8eb5a",
+      "tensor_mean": 0.481132,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 225.0,
+      "clahe_sha256_16": "9ff7d29a7a4b16d3",
+      "tensor_mean": 0.475457,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 240.0,
+      "clahe_sha256_16": "483744ab0e4e14d2",
+      "tensor_mean": 0.479911,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 255.0,
+      "clahe_sha256_16": "981549819357d49c",
+      "tensor_mean": 0.483931,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 270.0,
+      "clahe_sha256_16": "b9e4aecac5f30894",
+      "tensor_mean": 0.486669,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 285.0,
+      "clahe_sha256_16": "f582f08341d6cec8",
+      "tensor_mean": 0.482871,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 300.0,
+      "clahe_sha256_16": "65f2a122ef766ed8",
+      "tensor_mean": 0.484904,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 315.0,
+      "clahe_sha256_16": "f312ca1967e5e995",
+      "tensor_mean": 0.479214,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 330.0,
+      "clahe_sha256_16": "33624b5c6ec71eef",
+      "tensor_mean": 0.481402,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.0,
+      "rot": 345.0,
+      "clahe_sha256_16": "3bed7644f931db21",
+      "tensor_mean": 0.484569,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 0.0,
+      "clahe_sha256_16": "1b650c5c4b4d24cd",
+      "tensor_mean": 0.287952,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 15.0,
+      "clahe_sha256_16": "260f1ad52a3e8294",
+      "tensor_mean": 0.299273,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 30.0,
+      "clahe_sha256_16": "0b2c0061334fb8de",
+      "tensor_mean": 0.293594,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 45.0,
+      "clahe_sha256_16": "4d967828c5ba7531",
+      "tensor_mean": 0.298452,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 60.0,
+      "clahe_sha256_16": "8e2d0f0832d267ee",
+      "tensor_mean": 0.309529,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 75.0,
+      "clahe_sha256_16": "a094193680ace91b",
+      "tensor_mean": 0.304641,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 90.0,
+      "clahe_sha256_16": "a932641f10962928",
+      "tensor_mean": 0.282436,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 105.0,
+      "clahe_sha256_16": "172ec0be368de62e",
+      "tensor_mean": 0.294751,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 120.0,
+      "clahe_sha256_16": "653f342700cdaba1",
+      "tensor_mean": 0.289254,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 135.0,
+      "clahe_sha256_16": "45413e79fe129bf9",
+      "tensor_mean": 0.295427,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 150.0,
+      "clahe_sha256_16": "a1f10d170e595b42",
+      "tensor_mean": 0.308144,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 165.0,
+      "clahe_sha256_16": "9e348df838ecf086",
+      "tensor_mean": 0.302457,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 180.0,
+      "clahe_sha256_16": "383ea88730ea3bae",
+      "tensor_mean": 0.286608,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 195.0,
+      "clahe_sha256_16": "64a182ac86520e54",
+      "tensor_mean": 0.296576,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 210.0,
+      "clahe_sha256_16": "3a765d393072b887",
+      "tensor_mean": 0.291813,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 225.0,
+      "clahe_sha256_16": "eb027a95618ab234",
+      "tensor_mean": 0.298611,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 240.0,
+      "clahe_sha256_16": "7656dca89e783886",
+      "tensor_mean": 0.313835,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 255.0,
+      "clahe_sha256_16": "eee4af754a083cc3",
+      "tensor_mean": 0.307486,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 270.0,
+      "clahe_sha256_16": "c65e410383f836bc",
+      "tensor_mean": 0.292155,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 285.0,
+      "clahe_sha256_16": "584e908cd09b0fcc",
+      "tensor_mean": 0.301371,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 300.0,
+      "clahe_sha256_16": "958b4a42a660a1a2",
+      "tensor_mean": 0.298298,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 315.0,
+      "clahe_sha256_16": "f6e2af97366a6aa5",
+      "tensor_mean": 0.301648,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 330.0,
+      "clahe_sha256_16": "5807fd5a11045466",
+      "tensor_mean": 0.315423,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.2,
+      "rot": 345.0,
+      "clahe_sha256_16": "012aa1d4a35043bf",
+      "tensor_mean": 0.309645,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 0.0,
+      "clahe_sha256_16": "28287eca3f4d7cb3",
+      "tensor_mean": 0.118502,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 15.0,
+      "clahe_sha256_16": "b8e019fd904ad095",
+      "tensor_mean": 0.12916,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 30.0,
+      "clahe_sha256_16": "d89d0baff2e6228f",
+      "tensor_mean": 0.157182,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 45.0,
+      "clahe_sha256_16": "35d15ac92014c25a",
+      "tensor_mean": 0.163645,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 60.0,
+      "clahe_sha256_16": "1a73853fb3be92ec",
+      "tensor_mean": 0.166543,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 75.0,
+      "clahe_sha256_16": "dda70dcdbd3aca86",
+      "tensor_mean": 0.147247,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 90.0,
+      "clahe_sha256_16": "a40c9dec4b7d24f0",
+      "tensor_mean": 0.115873,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 105.0,
+      "clahe_sha256_16": "f0438c6fd283c6bb",
+      "tensor_mean": 0.127512,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 120.0,
+      "clahe_sha256_16": "a5d0dc8cd7d27b4a",
+      "tensor_mean": 0.15348,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 135.0,
+      "clahe_sha256_16": "fa9cac27863717ef",
+      "tensor_mean": 0.159477,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 150.0,
+      "clahe_sha256_16": "c0d7ceaa447ea847",
+      "tensor_mean": 0.166828,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 165.0,
+      "clahe_sha256_16": "b60d404a7e1d12df",
+      "tensor_mean": 0.145613,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 180.0,
+      "clahe_sha256_16": "6ce4c5dd0d05c8d1",
+      "tensor_mean": 0.119898,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 195.0,
+      "clahe_sha256_16": "28f022a020a5490d",
+      "tensor_mean": 0.124284,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 210.0,
+      "clahe_sha256_16": "0a78ead6dbbc2784",
+      "tensor_mean": 0.155489,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 225.0,
+      "clahe_sha256_16": "35fcbac21d3c5e56",
+      "tensor_mean": 0.164023,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 240.0,
+      "clahe_sha256_16": "56477e08cf2c19b5",
+      "tensor_mean": 0.169688,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 255.0,
+      "clahe_sha256_16": "1d7f08f91d1964dc",
+      "tensor_mean": 0.152408,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 270.0,
+      "clahe_sha256_16": "e70708cce24eb87a",
+      "tensor_mean": 0.123307,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 285.0,
+      "clahe_sha256_16": "21bb0c9156ed0d59",
+      "tensor_mean": 0.132179,
+      "tensor_min": -0.654902,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 300.0,
+      "clahe_sha256_16": "226f422eb4f7c9a6",
+      "tensor_mean": 0.15988,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 315.0,
+      "clahe_sha256_16": "e2e4e66127f93c72",
+      "tensor_mean": 0.170054,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 330.0,
+      "clahe_sha256_16": "59009a6f42531750",
+      "tensor_mean": 0.169201,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.4,
+      "rot": 345.0,
+      "clahe_sha256_16": "3b9bcf8478c6ae4e",
+      "tensor_mean": 0.151825,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 0.0,
+      "clahe_sha256_16": "8c45085b3a249595",
+      "tensor_mean": -0.109175,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 15.0,
+      "clahe_sha256_16": "ed0540212fec7745",
+      "tensor_mean": -0.0241,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 30.0,
+      "clahe_sha256_16": "a3bca7cd9de7d161",
+      "tensor_mean": 0.019871,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 45.0,
+      "clahe_sha256_16": "60b96428fd178b43",
+      "tensor_mean": 0.03243,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 60.0,
+      "clahe_sha256_16": "1d25fc34a520c85b",
+      "tensor_mean": -0.003132,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 75.0,
+      "clahe_sha256_16": "ddf3c06343051be8",
+      "tensor_mean": -0.049019,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 90.0,
+      "clahe_sha256_16": "e5cdc1c03a730251",
+      "tensor_mean": -0.113003,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 105.0,
+      "clahe_sha256_16": "f8b8224584a53833",
+      "tensor_mean": -0.023568,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 120.0,
+      "clahe_sha256_16": "8e84b612815f949d",
+      "tensor_mean": 0.018096,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 135.0,
+      "clahe_sha256_16": "d08a72553381d2b9",
+      "tensor_mean": 0.030176,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 150.0,
+      "clahe_sha256_16": "5bfcd5e8b9357d57",
+      "tensor_mean": -0.004661,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 165.0,
+      "clahe_sha256_16": "5567e642f455770f",
+      "tensor_mean": -0.054936,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 180.0,
+      "clahe_sha256_16": "bed95376db32ae7f",
+      "tensor_mean": -0.106992,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 195.0,
+      "clahe_sha256_16": "c8014b65eca2a1f2",
+      "tensor_mean": -0.024256,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 210.0,
+      "clahe_sha256_16": "109d66c4b16d2e37",
+      "tensor_mean": 0.020664,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 225.0,
+      "clahe_sha256_16": "55f6ff638f7a7d4e",
+      "tensor_mean": 0.033212,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 240.0,
+      "clahe_sha256_16": "b054a770ac34a2f6",
+      "tensor_mean": 0.000362,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 255.0,
+      "clahe_sha256_16": "a5bc185635c9a82b",
+      "tensor_mean": -0.044819,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 270.0,
+      "clahe_sha256_16": "9db3e6c9d9450779",
+      "tensor_mean": -0.101339,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 285.0,
+      "clahe_sha256_16": "ea47c8992e1f9d67",
+      "tensor_mean": -0.019977,
+      "tensor_min": -0.678431,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 300.0,
+      "clahe_sha256_16": "36140171ea0094f7",
+      "tensor_mean": 0.023465,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 315.0,
+      "clahe_sha256_16": "143af3c8407d631f",
+      "tensor_mean": 0.035061,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 330.0,
+      "clahe_sha256_16": "0faa977cd6197de5",
+      "tensor_mean": 0.002157,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 1.7,
+      "rot": 345.0,
+      "clahe_sha256_16": "7325c3dfe25f6180",
+      "tensor_mean": -0.044305,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 0.0,
+      "clahe_sha256_16": "a0f8ae9b7f61a719",
+      "tensor_mean": -0.198539,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 15.0,
+      "clahe_sha256_16": "72788207e19f548d",
+      "tensor_mean": -0.0741,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 30.0,
+      "clahe_sha256_16": "6da770804c383141",
+      "tensor_mean": -0.013738,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 45.0,
+      "clahe_sha256_16": "d2dfd95be9ea644f",
+      "tensor_mean": 0.010154,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 60.0,
+      "clahe_sha256_16": "2e7a85abecab874d",
+      "tensor_mean": -0.010165,
+      "tensor_min": -0.639216,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 75.0,
+      "clahe_sha256_16": "0a5f487a83b0e086",
+      "tensor_mean": -0.078518,
+      "tensor_min": -0.647059,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 90.0,
+      "clahe_sha256_16": "51872ee7c8b41c50",
+      "tensor_mean": -0.186676,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 105.0,
+      "clahe_sha256_16": "5e8b4db28aebe30f",
+      "tensor_mean": -0.077476,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 120.0,
+      "clahe_sha256_16": "1aee3642589ea729",
+      "tensor_mean": -0.016066,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 135.0,
+      "clahe_sha256_16": "fa8ba5af509c8974",
+      "tensor_mean": 0.006821,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 150.0,
+      "clahe_sha256_16": "b52805d98ed26318",
+      "tensor_mean": -0.013908,
+      "tensor_min": -0.639216,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 165.0,
+      "clahe_sha256_16": "4014d8193331cdc1",
+      "tensor_mean": -0.077515,
+      "tensor_min": -0.647059,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 180.0,
+      "clahe_sha256_16": "49bf7a2b48be2e66",
+      "tensor_mean": -0.176484,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 195.0,
+      "clahe_sha256_16": "af014019488f77ff",
+      "tensor_mean": -0.077292,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 210.0,
+      "clahe_sha256_16": "bda51d0ddc29dd6c",
+      "tensor_mean": -0.014579,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 225.0,
+      "clahe_sha256_16": "5211e723814dc05e",
+      "tensor_mean": 0.009079,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 240.0,
+      "clahe_sha256_16": "b27a1c284d2bca65",
+      "tensor_mean": -0.00827,
+      "tensor_min": -0.647059,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 255.0,
+      "clahe_sha256_16": "373ef2c53baf3169",
+      "tensor_mean": -0.076168,
+      "tensor_min": -0.639216,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 270.0,
+      "clahe_sha256_16": "95bf7d1489a9dc60",
+      "tensor_mean": -0.187743,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 285.0,
+      "clahe_sha256_16": "77fe7fb23e462b3b",
+      "tensor_mean": -0.073211,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 300.0,
+      "clahe_sha256_16": "26b87b5049e784e0",
+      "tensor_mean": -0.011213,
+      "tensor_min": -0.670588,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 315.0,
+      "clahe_sha256_16": "0f04cd14ea1d915f",
+      "tensor_mean": 0.012573,
+      "tensor_min": -0.662745,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 330.0,
+      "clahe_sha256_16": "90a4a4b84d83b119",
+      "tensor_mean": -0.004317,
+      "tensor_min": -0.647059,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.0,
+      "rot": 345.0,
+      "clahe_sha256_16": "232213dbe6717681",
+      "tensor_mean": -0.075914,
+      "tensor_min": -0.639216,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 0.0,
+      "clahe_sha256_16": "55e47340ac86c698",
+      "tensor_mean": -0.226511,
+      "tensor_min": -0.615686,
+      "tensor_max": 0.341177
+    },
+    {
+      "zoom": 2.4,
+      "rot": 15.0,
+      "clahe_sha256_16": "3ad1b55b97afd322",
+      "tensor_mean": -0.096367,
+      "tensor_min": -0.6,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 30.0,
+      "clahe_sha256_16": "1dcb1cc0e156ae91",
+      "tensor_mean": -0.040329,
+      "tensor_min": -0.568627,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 45.0,
+      "clahe_sha256_16": "24d1cd803210fac5",
+      "tensor_mean": -0.025808,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 60.0,
+      "clahe_sha256_16": "3b143954c183e892",
+      "tensor_mean": -0.041303,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 75.0,
+      "clahe_sha256_16": "d5f4c5d8ddb8aed3",
+      "tensor_mean": -0.100337,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 90.0,
+      "clahe_sha256_16": "c8b686bdc045743b",
+      "tensor_mean": -0.220979,
+      "tensor_min": -0.615686,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 105.0,
+      "clahe_sha256_16": "a4fbfa5d329fa547",
+      "tensor_mean": -0.095911,
+      "tensor_min": -0.6,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 120.0,
+      "clahe_sha256_16": "bb702637c46d3526",
+      "tensor_mean": -0.039033,
+      "tensor_min": -0.568627,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 135.0,
+      "clahe_sha256_16": "42a0aea6c5c6b7dc",
+      "tensor_mean": -0.024281,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 150.0,
+      "clahe_sha256_16": "15294bf4cd3e1e2a",
+      "tensor_mean": -0.041106,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 165.0,
+      "clahe_sha256_16": "7181fc08ff15fa4a",
+      "tensor_mean": -0.099934,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 180.0,
+      "clahe_sha256_16": "320e698d353c75cb",
+      "tensor_mean": -0.211623,
+      "tensor_min": -0.615686,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 195.0,
+      "clahe_sha256_16": "e5204f26f8ed2146",
+      "tensor_mean": -0.095299,
+      "tensor_min": -0.607843,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 210.0,
+      "clahe_sha256_16": "825f13b75231a1f6",
+      "tensor_mean": -0.038072,
+      "tensor_min": -0.584314,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 225.0,
+      "clahe_sha256_16": "b0b9e0f8d44aa51a",
+      "tensor_mean": -0.023241,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 240.0,
+      "clahe_sha256_16": "fa2ce071b2dc398b",
+      "tensor_mean": -0.039091,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 255.0,
+      "clahe_sha256_16": "1fd6400d0d7cfa3d",
+      "tensor_mean": -0.099102,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 270.0,
+      "clahe_sha256_16": "e9862467907741b3",
+      "tensor_mean": -0.217473,
+      "tensor_min": -0.615686,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 285.0,
+      "clahe_sha256_16": "b8049277d306d915",
+      "tensor_mean": -0.094311,
+      "tensor_min": -0.607843,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 300.0,
+      "clahe_sha256_16": "5dbb55a122847d7a",
+      "tensor_mean": -0.038031,
+      "tensor_min": -0.584314,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 315.0,
+      "clahe_sha256_16": "59d346e791a04dfc",
+      "tensor_mean": -0.024044,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 330.0,
+      "clahe_sha256_16": "190dd00d99768a57",
+      "tensor_mean": -0.038586,
+      "tensor_min": -0.537255,
+      "tensor_max": 1.0
+    },
+    {
+      "zoom": 2.4,
+      "rot": 345.0,
+      "clahe_sha256_16": "cbed77f7aa67abcb",
+      "tensor_mean": -0.100067,
+      "tensor_min": -0.545098,
+      "tensor_max": 1.0
+    }
+  ]
+}

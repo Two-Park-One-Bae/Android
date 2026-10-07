@@ -29,6 +29,10 @@ dependencyResolutionManagement {
         maven("https://devrepo.kakao.com/nexus/content/groups/public") {
             content { includeGroup("com.kakao.sdk") }
         }
+        // Airbridge SDK 도 Maven Central 에 없다 (NM-543). 카카오와 같은 이유로 범위를 좁힌다.
+        maven("https://sdk-download.airbridge.io/maven") {
+            content { includeGroup("io.airbridge") }
+        }
     }
 }
 

@@ -35,7 +35,17 @@ import coil3.compose.AsyncImage
 /**
  * 후보 한 줄 — 디자인 `⑧ 후보 리스트 / Row`.
  *
- * 라디오 20 · 썸네일 72×38 · 품목명 14/600 + 업체명 12 · 세부정보 버튼 28.
+ * 라디오 20 · 썸네일 48×28 · 품목명 14/600 + 업체명 11 · **면 요약** · 세부정보 버튼 28.
+ *
+ * ## 행은 카드가 아니다
+ * 정본에서 **목록 전체가 한 덩어리 카드**(`$surface` · r14 · 테두리)이고 행은 아래 구분선으로만
+ * 갈린다. 행마다 카드를 두르면 200개가 낱장으로 흩어져 훑기 어렵다 —
+ * 껍데기와 구분선은 [candidateSection] 이 그린다.
+ *
+ * ## 둘째 줄이 면 요약이다 (NM-517)
+ * 각인이 같은 약이 수두룩하고 이름도 비슷비슷하다("설트라정" · "셀트라정"). 손에 든 알약과
+ * 대조할 거리는 **앞뒤에 뭐가 찍혀 있나**라, 업체명을 품목명 옆으로 올리고 아랫줄을
+ * [PillCandidateFaceSummary] 에 내줬다.
  *
  * 과녁이 셋이다 — **카드**는 선택, **썸네일**은 이미지 비교, **ⓘ**는 세부정보.
  *
@@ -58,42 +68,37 @@ fun PillCandidateRow(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    val shape = RoundedCornerShape(14.dp)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.surface)
-            .border(
-                width = if (selected) 1.5.dp else 1.dp,
-                color = if (selected) NmColor.Primary.C500 else colors.border,
-                shape = shape
-            )
+            // 고른 행만 바탕으로 알린다. 테두리를 두르면 통짜 카드 안에서 그 줄만 상자가 돼
+            // 목록이 끊겨 보인다 — 카드 껍데기는 목록이 쥐고 있다.
+            .background(if (selected) NmColor.Primary.C50 else colors.surface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Radio(selected = selected)
 
         AsyncImage(
             model = candidate.pillThumbnailUrl,
             contentDescription = null,
-            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 72×38(1.89)이라 잘려 나가는 게 거의 없다.
+            // 정본이 fill 이다. CDN 낱알은 256×140(1.83), 자리는 48×28(1.71)이라 잘려 나가는 게 적다.
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(width = 72.dp, height = 38.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(width = 48.dp, height = 28.dp)
+                .clip(RoundedCornerShape(6.dp))
                 .background(NmColor.Neutral.C100)
                 // 썸네일만 비교 뷰어를 연다 — 카드 탭(선택)·세부정보는 그대로다(spec NM-354).
                 .clickable(onClick = onThumbnailClick)
         )
 
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = candidate.pillName ?: candidate.pillCode,
+                    text = candidate.pillName,
                     style = NameStyle,
                     color = colors.textPrimary,
                     // 품목명은 길다("○○정 100밀리그램(염산○○○)"). 줄바꿈을 허용하면 카드마다
@@ -103,17 +108,12 @@ fun PillCandidateRow(
                     // 배지가 먼저 잘리지 않게 이름 쪽이 줄어든다.
                     modifier = Modifier.weight(1f, fill = false)
                 )
+                // 업체명은 **같은 줄**이다(정본 ②) — 동명이약을 가르는 값이라 품목명 옆에 붙어야
+                // 한눈에 비교된다. 아랫줄은 면 요약이 가져갔다.
+                Text(text = candidate.companyName.short(), style = SubStyle, color = colors.textTertiary)
                 if (candidate.licenseStatus == LicenseStatus.REVOKED) RevokedBadge()
             }
-            candidate.companyName?.let {
-                Text(
-                    text = it,
-                    style = SubStyle,
-                    color = colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            PillCandidateFaceSummary(front = candidate.front, back = candidate.back)
         }
 
         // 선택과 독립이다 — 고르기 전에 상세를 먼저 확인할 수 있어야 한다(spec §세부정보 조회).
@@ -159,5 +159,18 @@ private fun RevokedBadge() {
 }
 
 private val NameStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-private val SubStyle = NmTypography.caption
+private val SubStyle = NmTypography.caption.copy(fontSize = 11.sp)
 private val BadgeStyle = NmTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium)
+
+/**
+ * 업체명은 **4자를 넘으면 말줄임** — 품목명에 자리를 내준다(spec 후보 목록 · iOS 와 같다).
+ *
+ * 폭이 아니라 **글자 수**로 자른다. 폭으로 두면 기기·글꼴 크기에 따라 어디서 끊길지 달라져
+ * 품목명이 먹는 자리도 함께 흔들린다 — 목록을 훑는 동안 줄마다 길이가 들쭉날쭉해진다.
+ *
+ * ⚠️ `(주)` 도 글자로 센다. 「(주)한국로슈」가 「(주)한…」이 되어 읽히지 않는데, 정본이
+ * 접두·접미 처리를 적지 않았고 iOS 도 같다 — 바꾸려면 스펙부터다.
+ */
+private fun String.short(): String = if (length > COMPANY_MAX) take(COMPANY_MAX) + "…" else this
+
+private const val COMPANY_MAX = 4

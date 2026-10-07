@@ -11,6 +11,7 @@ import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
 import app.nursemate.core.vision.PillDetector
@@ -72,8 +73,11 @@ class PillRecognitionViewModel @Inject constructor(
     /** ONNX 세션은 로드에 수백 ms가 걸린다. 한 번 만들고 플로우 내내 재사용한다. */
     private var detector: PillDetector? = null
 
-    /** 학습데이터 축적용 **원본** 파일. 화면이 쓰는 비트맵은 축소·크롭된 것이라 원본이 아니다. */
-    private var sourceUri: Uri? = null
+    /**
+     * 각인·마크 세션도 같은 수명을 갖는다. Hilt 로 주입하지 않고 여기서 만든다 —
+     * 의존이 [modelFile] 하나뿐이고, 주입하면 생성자만 길어진다.
+     */
+    private val faceReader = PillFaceReader(modelFile)
 
     /**
      * 촬영·선택한 사진을 읽는다.
@@ -82,7 +86,6 @@ class PillRecognitionViewModel @Inject constructor(
      * 4000×3000 원본 기준 500 ms 안팎이 걸리므로 미리보기에 로딩 표시가 필요하다.
      */
     fun selectPhoto(uri: Uri) {
-        sourceUri = uri
         _state.update { PillUiState(isLoadingPhoto = true) }
         viewModelScope.launch {
             runCatching {
@@ -103,7 +106,6 @@ class PillRecognitionViewModel @Inject constructor(
 
     /** 재촬영 — 고른 사진과 검출 결과를 버린다. */
     fun discardPhoto() {
-        sourceUri = null
         // 새 사진은 새 세션이다. 안 비우면 앞 사진의 수정 횟수·체류시간이 그대로 얹힌다.
         analyticsSession.reset()
         // 비트맵을 recycle()하지 않는다. 화면 전환 애니메이션이 아직 그리고 있을 수 있어
@@ -151,6 +153,9 @@ class PillRecognitionViewModel @Inject constructor(
                         return@onSuccess
                     }
                     _state.update { it.copy(detection = DetectionPhase.Success(result)) }
+                    // 온디바이스 각인·마크는 **서버 왕복과 나란히** 돈다. 결과 화면은
+                    // 속성만 기다리고, 읽은 각인은 늦게 와서 수정 화면에 얹힌다.
+                    readFaces(result)
                     extractAttributes(result)
                 }
                 .onFailure { throwable ->
@@ -201,19 +206,19 @@ class PillRecognitionViewModel @Inject constructor(
     private suspend fun extractAttributes(result: DetectionResult) {
         _state.update { it.copy(attributes = AttributePhase.Running) }
 
-        // 원본 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
+        // 학습데이터 업로드는 **기다리지 않는다.** 식별과 분리된 베스트 에포트라 결과도 보지 않는다.
         //
-        // JPEG 일 때만 보낸다 — presigned 서명에 image/jpeg 가 박혀 있어 갤러리에서 고른
-        // HEIC·PNG 를 그 타입으로 올리면 깨진 파일이 쌓인다. 촬영 결과는 항상 JPEG 다.
-        // **화면이 쓰는 비트맵이 아니라 원본 URI 에서 읽는다** — 그 비트맵은 축소·크롭됐다.
-        sourceUri?.let { uri ->
+        // **화면이 쓰는 그 비트맵을 보낸다**(NM-440). 예전에는 원본 URI 의 바이트를 그대로
+        // 올렸는데, 스펙이 「학습데이터 업로드본도 이 가공본이다 — 정사각 1:1 · 최장변 2048px ·
+        // JPEG 재압축」으로 정했다. 학습 데이터는 **모델이 실제로 보는 그림과 같아야** 하고,
+        // 12MP 원본은 전송량만 키운다.
+        //
+        // 가공본을 보내므로 「JPEG 일 때만」 가드도 사라졌다 — 갤러리에서 고른 HEIC·PNG 도
+        // 여기서 JPEG 로 다시 압축되어 나가므로 presigned 서명의 image/jpeg 와 어긋나지 않는다.
+        _state.value.photo?.let { processed ->
             viewModelScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        if (context.contentResolver.getType(uri) != JPEG_MIME) return@withContext null
-                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    }
-                }.getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
+                runCatching { withContext(Dispatchers.IO) { processed.toJpegBytes() } }
+                    .getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
             }
         }
 
@@ -235,6 +240,16 @@ class PillRecognitionViewModel @Inject constructor(
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
                 analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = extracted.items.size)
+                // 서버가 무엇을 읽었는지 한 줄로 남긴다. 검출·각인·마크와 나란히 봐야
+                // 「왜 이 후보가 나왔나」를 되짚을 수 있다.
+                extracted.items.forEach {
+                    Log.i(
+                        TAG,
+                        "${it.pillId} 속성 ${it.error ?: "ok"} | 색 ${it.colorHexes ?: "—"} " +
+                            "모양 ${it.shape ?: "—"} 제형 ${it.formulation ?: "—"} " +
+                            "토큰 ${if (it.attributeToken != null) "있음" else "없음"}"
+                    )
+                }
                 // 한도 **소진**은 마지막 1회를 쓴 이 응답에서만 잡힌다 — 막힌 시도가 아니라.
                 if (extracted.usage.exhausted) analyticsSession.limitReached()
                 attributeCache.save(extracted.items)
@@ -277,6 +292,53 @@ class PillRecognitionViewModel @Inject constructor(
      */
     val corrections = PillCorrections(_state)
 
+    /**
+     * 찍힌 면의 각인·마크를 읽어 [PillUiState.faceReadings] 에 쌓는다 — NM-485 · NM-515.
+     *
+     * ## 결과 화면을 막지 않는다
+     * 알약 하나에 2초다(각인 144장 1796 ms + 마크 8장 178 ms, S24 · WebGPU). 셋이면 6초인데,
+     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 두 배 넘게 는다.**
+     * 그래서 별도 코루틴으로 띄우고 한 장씩 들어오는 대로 상태에 넣는다.
+     *
+     * ## 하나씩 넣는다
+     * 다 끝나고 한꺼번에 넣으면 첫 알약을 이미 읽어 놓고도 마지막 알약 때문에 기다린다.
+     *
+     * ## 이미 손댄 알약은 건드리지 않는다
+     * 읽는 동안 사용자가 수정 화면에서 무언가 고쳤으면 [PillUiState.edits] 에 항목이 생긴다.
+     * 그건 사용자값이라 모델값으로 덮지 않는다 — 다만 **아직 면을 손대지 않았으면**
+     * (=[FaceInputs] 가 기본값 그대로) 그 자리에 채워 준다. 조건만 고치고 각인은 그대로 둔
+     * 사람이 읽은 각인을 못 보게 되는 것을 막는다.
+     *
+     * 실패해도 흐름을 세우지 않는다. 각인은 사용자가 직접 칠 수 있고, 못 읽은 면은
+     * 「전체」로 남아 후보를 자르지 않는다.
+     */
+    private fun readFaces(result: DetectionResult) {
+        viewModelScope.launch {
+            result.pills.forEachIndexed { index, pill ->
+                val id = pillId(index)
+                runCatching { faceReader.read(pill.crop) }
+                    .onSuccess { reading -> applyReading(id, reading) }
+                    .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+            }
+        }
+    }
+
+    private fun applyReading(id: String, reading: FaceReading) {
+        _state.update { state ->
+            val edit = state.edits[id]
+            state.copy(
+                faceReadings = state.faceReadings + (id to reading),
+                // 손대지 않은 면만 채운다. `edits` 에 항목이 없으면 `editOf` 가 읽기값에서
+                // 만들어 쓰므로 여기서 할 일이 없다.
+                edits = if (edit != null && edit.faces == FaceInputs()) {
+                    state.edits + (id to edit.copy(faces = reading.toInputs()))
+                } else {
+                    state.edits
+                }
+            )
+        }
+    }
+
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
         PillDetector(modelFile.prepare()).also { detector = it }
     }
@@ -284,11 +346,11 @@ class PillRecognitionViewModel @Inject constructor(
     override fun onCleared() {
         detector?.close()
         detector = null
+        faceReader.close()
     }
 
     private companion object {
         const val TAG = "NM394"
-        const val JPEG_MIME = "image/jpeg"
 
         // `pill_identify_result.outcome` — iOS 와 같은 값을 쓴다.
         const val OUTCOME_SUCCESS = "success"
@@ -326,7 +388,17 @@ data class PillUiState(
      */
     val manualPillIds: List<String> = emptyList(),
     /** 확정한 후보. 카드 제목이 '알약을 선택해주세요'에서 품목명으로 바뀐다. */
-    val selections: Map<String, PillCandidate> = emptyMap()
+    val selections: Map<String, PillCandidate> = emptyMap(),
+    /**
+     * 온디바이스가 찍힌 면에서 읽은 각인·마크 — 알약이 읽히는 대로 하나씩 채워진다.
+     *
+     * **되돌리기의 기준이기도 하다.** 계약이 「초기 상태와 명시적 원복일 때만 모델값」으로
+     * 정했으므로 사용자가 고친 뒤에도 원본이 남아 있어야 한다 — [edits] 를 덮어쓰지 않고
+     * 따로 든다.
+     *
+     * 아직 안 읽은 알약은 항목이 없다. 검출 직후에는 비어 있고 2초쯤 뒤부터 찬다.
+     */
+    val faceReadings: Map<String, FaceReading> = emptyMap()
 )
 
 /**
@@ -374,6 +446,21 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
 }
 
 /**
+ * 학습데이터로 올릴 JPEG.
+ *
+ * 품질 90 은 iOS `jpegData(compressionQuality: 0.9)` 와 맞춘 값이다 — 두 앱이 같은 형태를
+ * 쌓아야 학습 데이터가 한 벌이 된다. 크롭은 PNG 로 보낸다([toPngBytes]): 그쪽은 서버가
+ * 속성을 뽑는 입력이라 손실 압축을 끼워 넣지 않는다.
+ */
+private fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+    compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, out)
+    out.toByteArray()
+}
+
+/** iOS `compressionQuality: 0.9` 와 같은 값. */
+private const val UPLOAD_JPEG_QUALITY = 90
+
+/**
  * 검출 순서(0부터)로 정하는 세션 로컬 키.
  *
  * 서버 요청에 실어 보낸 값이라 **삭제로 번호가 바뀌어도 이 키는 그대로다** —
@@ -394,13 +481,22 @@ internal val String.isManualPill: Boolean get() = startsWith("m")
 /**
  * 수정 화면이 들고 고칠 값.
  *
- * 아직 안 건드린 알약은 서버 추출값에서 만들어 준다 — 추출까지 실패했으면 빈 값에서 시작한다
- * (spec §개별 추출 실패 — 그때도 사용자가 직접 채워 후보를 찾을 수 있어야 한다).
+ * ## 조건은 **비어서** 시작한다 (NM-516)
+ * 모델이 무엇을 읽었든 처음에는 후보를 하나도 자르지 않는다. [PillConditions] 에 실리는 것은
+ * `attributeToken` 하나뿐이고, 그건 자르는 게 아니라 **정렬**에 쓰인다.
+ *
+ * 추출까지 실패한 알약은 토큰도 없다 — 사용자가 직접 채워 후보를 찾는다
+ * (spec §개별 추출 실패).
  */
 fun PillUiState.editOf(pillId: String): PillEdit {
     edits[pillId]?.let { return it }
     val attribute = extracted(pillId) ?: PillAttribute(pillId = pillId)
-    return PillEdit(attribute = attribute, faces = FaceInputs.from(attribute))
+    return PillEdit(
+        attribute = attribute,
+        conditions = PillConditions(attributeToken = attribute.attributeToken),
+        // 아직 안 읽었으면 빈 값이다 — 읽히는 대로 여기 들어온다(NM-485 · NM-515).
+        faces = faceReadings[pillId]?.toInputs() ?: FaceInputs()
+    )
 }
 
 /**

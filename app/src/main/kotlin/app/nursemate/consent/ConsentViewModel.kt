@@ -3,6 +3,7 @@ package app.nursemate.consent
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nursemate.attribution.AttributionTracker
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.ConsentRepository
 import app.nursemate.core.model.ConsentDefinition
@@ -41,7 +42,8 @@ data class ConsentUiState(
 @HiltViewModel
 class ConsentViewModel @Inject constructor(
     private val consentRepository: ConsentRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val attribution: AttributionTracker
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ConsentUiState())
@@ -94,17 +96,26 @@ class ConsentViewModel @Inject constructor(
     }
 
     /**
+     * @param firstTime **최초 가입**인가 — 유입 측정의 가입 이벤트를 보낼지 가른다(NM-543).
+     *                  약관 개정 재동의는 가입이 아니다. 최초인지는 이 화면이 아니라 셸이 아는
+     *                  값이라(`User.needsReconsent`) 인자로 받는다 — 여기서 `consents` 를
+     *                  다시 세지 않는다.
      * @param onAgreed 갱신된 회원. 진입 상태를 홈으로 넘기는 건 셸이 한다 —
      *                 `onboardingRequired` 를 여기서 단정하지 않고 응답 값을 그대로 올린다.
      */
-    fun submit(onAgreed: (User) -> Unit) {
+    fun submit(firstTime: Boolean, onAgreed: (User) -> Unit) {
         val current = _state.value
         if (!current.canSubmit) return
         _state.update { it.copy(submitting = true, message = null) }
 
         viewModelScope.launch {
             consentRepository.agreeToRequired(current.definitions)
-                .onSuccess(onAgreed)
+                .onSuccess { user ->
+                    // ⚠️ **저장이 성공한 뒤에만** 보낸다. 누른 시점에 보내면 400(버전 불일치)으로
+                    //    되돌아온 사람까지 가입으로 세어, 같은 사람이 두 번 가입한 것이 된다.
+                    if (firstTime) attribution.signUp()
+                    onAgreed(user)
+                }
                 .onFailure { throwable ->
                     Log.w(TAG, "동의 저장 실패", throwable)
                     val failure = throwable as? ApiFailure
@@ -135,7 +146,9 @@ class ConsentViewModel @Inject constructor(
         const val TAG = "NM412"
         const val HTTP_BAD_REQUEST = 400
         const val UPDATE_REQUIRED = "앱을 최신 버전으로 업데이트해 주세요"
-        const val VERSION_CHANGED = "약관이 개정되어 다시 불러왔어요. 확인 후 동의해 주세요"
+
+        // 사용자에게 보이는 말은 「개정」이 아니라 「변경」으로 통일한다(spec §동의 온보딩 정본).
+        const val VERSION_CHANGED = "약관이 변경되어 다시 불러왔어요. 확인 후 동의해 주세요."
         const val RETRYABLE = "잠시 후 다시 시도해 주세요"
         const val GENERIC = "약관을 불러오지 못했어요"
     }

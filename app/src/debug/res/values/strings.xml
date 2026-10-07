@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 릴리스와 나란히 깔리므로 런처에서 구분되게 둔다. -->
+    <string name="nm_app_name">널스메이트 (dev)</string>
+</resources>

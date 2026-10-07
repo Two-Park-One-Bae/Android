@@ -48,7 +48,8 @@ class AppCheckInterceptorTest {
 
         listOf(
             "/api/v0/pill-images/upload-url",
-            "/api/v0/pill-attributes",
+            // 속성 추출만 v1 으로 옮겼다(NM-516). 잔여 횟수 조회는 그대로 v0 이다.
+            "/api/v1/pill-attributes",
             "/api/v0/pill-attributes/usage"
         ).forEach { path ->
             server.enqueue(MockResponse().setResponseCode(HTTP_OK).setBody("{}"))

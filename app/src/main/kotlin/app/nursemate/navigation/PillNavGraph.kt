@@ -19,6 +19,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import app.nursemate.core.model.LicenseStatus
+import app.nursemate.core.model.PillCandidate
 import app.nursemate.detail.PillDetailScreen
 import app.nursemate.detail.PillDetailViewModel
 import app.nursemate.home.NmTab
@@ -106,8 +107,14 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     val original = rememberOriginalEdit(state, pillId)
     var pending by remember(pillId) { mutableStateOf(state.selections[pillId]) }
 
-    // 속성·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
-    LaunchedEffect(edit) { candidateViewModel.search(edit.attribute, edit.faces) }
+    val search = { candidateViewModel.search(edit.conditions, edit.faces) }
+    // 조건·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
+    // 조회 실패의 「다시 시도」도 같은 것을 부른다 — 재추출이 아니라 조회라 식별 횟수를
+    // 쓰지 않는다(NM-529).
+    //
+    // ⚠️ **모델값이 아니라 조건을 보낸다** — 모델이 추정한 모양을 보내면 하드 필터가 되어
+    //    정답 약이 떨어진다(NM-516). 모델값은 `attributeToken` 으로 정렬에만 쓰인다.
+    LaunchedEffect(edit) { search() }
 
     val index = state.detectedIndexOf(pillId)
 
@@ -116,12 +123,14 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
         crop = state.cropOf(index),
         manual = pillId.isManualPill,
         attribute = edit.attribute,
-        onAttributeChange = { changed ->
-            // 화면은 속성 넷을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
-            changed.changesFrom(edit.attribute).forEach(tracking::attrEdited)
-            viewModel.corrections.updateEdit(pillId, edit.copy(attribute = changed))
+        conditions = edit.conditions,
+        onConditionsChange = { changed ->
+            // 화면은 조건을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
+            changed.changesFrom(edit.conditions).forEach(tracking::attrEdited)
+            viewModel.corrections.updateEdit(pillId, edit.copy(conditions = changed))
         },
         faces = edit.faces,
+        reading = state.faceReadings[pillId],
         onFacesChange = {
             tracking.attrEdited("imprint")
             viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))
@@ -137,13 +146,10 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
             viewModel.corrections.updateEdit(pillId, original)
             leave()
         },
-        onDetail = { candidate ->
-            tracking.buttonTapped("pill_detail")
-            navController.navigate(
-                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
-            )
-        },
+        onDetail = { openDetail(navController, tracking, it) },
         onLoadMore = candidateViewModel::loadMore,
+        onRetry = search,
+        onRetryLoadMore = candidateViewModel::retryLoadMore,
         onPanelChange = { tracking.openPanel = it },
         onCompare = { tracking.buttonTapped("compare") }
     )

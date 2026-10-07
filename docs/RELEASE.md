@@ -26,23 +26,54 @@
 - 주입 경로: `secrets.properties`(gitignored) > 환경변수 — `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` (`secrets.properties.sample` 참고).
 - 서명 정보가 없으면 release 빌드는 **미서명**으로 산출된다 (PR CI가 여기 해당 — 빌드는 성공하되 Play 업로드 불가).
 
-## 검출 모델 (필수 · 저장소에 없음)
+## 온디바이스 모델 (필수 · 저장소에 없음)
 
-알약 식별용 ONNX 모델은 **저장소에 넣지 않는다.** 119MB 바이너리라 한 번 커밋하면 이후 모든
-clone 이 영구히 그 비용을 낸다(git 은 큰 파일을 되돌려 지우지 못한다).
+ONNX 모델은 **저장소에 넣지 않는다.** 한 번 커밋하면 이후 모든 clone 이 영구히 그 비용을
+낸다(git 은 큰 파일을 되돌려 지우지 못한다).
 
-릴리스 빌드 전에 직접 둔다:
+**목록과 해시는 `app/models.md5` 한 곳이다.**
+
+| 모델 | 크기 | 쓰는 곳 |
+|---|---|---|
+| `rfdetr_seg_small.onnx` | 119MB | 낱알 검출·마스크 (`PillDetector`) |
+| `reader_ep60_s1.onnx` | 21MB | 각인 판독 (`ImprintReader`, NM-485) |
+| `mark_species_fp16.onnx` | 53MB | 마크 유무·종·임베딩 (`MarkReader`, NM-515) |
+
+**정본은 ML 저장소의 DVC** 다(`s3://nursemate-ml-models` · `ap-northeast-2`).
+릴리스 빌드 전에 받아 둔다:
 
 ```bash
-cp <모델 보관처>/rfdetr_seg_small.onnx app/src/main/assets/
+# 사전: dvc(brew install dvc) · ML 저장소 SSH 접근 · 버킷 읽기 권한이 있는 AWS 프로필
+AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
+  models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx -o app/src/main/assets/
+AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
+  models/imprint/20260907-crnn-ep60-s1/reader_ep60_s1.onnx -o app/src/main/assets/
+AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
+  models/mark/20260925-convnext-species/mark_species_fp16.onnx -o app/src/main/assets/
 ```
 
-- 파일이 없으면 `bundleRelease`·`assembleRelease` 가 **실패한다**(`app/build.gradle.kts` 의 가드).
-  조용히 모델 없는 AAB 가 나가면 사용자는 식별할 때마다 '분석 실패'만 본다.
-- ⚠️ **그래서 릴리스 AAB 는 CI 가 아니라 로컬에서만 만든다.** CI 러너에는 이 파일이 없어
-  릴리스 빌드가 위 가드에서 반드시 실패한다. 이것 때문에 `release.yml` 을 삭제했다(아래 참고).
-- 앱은 첫 식별 때 asset 을 앱 전용 저장소로 꺼내 쓴다(`PillModelFile`). 저장소를 두 배 쓰므로,
-  Play Asset Delivery 나 원격 다운로드로 옮기는 건 NM-396 ADR 에서 정한다.
+⚠️ 마크는 **fp16 판**(`mark_species_fp16.onnx`, 53MB)이다. 같은 폴더의 `mark_species.onnx`
+(fp32, 106MB)는 **대조용**이라 앱에 싣지 않는다. 답은 같고(NM-526 — 종 top-1 6/6 · 임베딩
+코사인 0.999997) 크기가 절반이며, 그래프에 임베딩 차원이 768 로 박혀 있어 붙이기도 쉽다.
+
+`dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(약 193MB).
+ML 클론이 이미 있으면 `dvc pull` 후 복사하는 쪽이 더 빠르다.
+
+- **맞는 파일인지는 빌드가 본다.** `bundleRelease`·`assembleRelease` 가 `app/models.md5` 의
+  모든 항목을 대조한다. 파일이 없거나 해시가 다르면 그 자리에서 **실패한다**
+  (`app/build.gradle.kts` 의 가드). 조용히 모델 없는 AAB 가 나가면 사용자는 식별할 때마다
+  '분석 실패'만 본다.
+- ⚠️ **해시를 보는 이유.** 2026-09-29 까지 `assets` 에 있던 사본은 md5 가 `10ff2d39…` 로
+  정본(`cb20efc7…`)과 달랐다. 뜯어 보니 그래프 1005 노드와 가중치 450 개가 전부 같고 INT64
+  상수 16 개의 protobuf 필드(`raw_data` ↔ `int64_data`)와 producer 문자열만 달라 **내용은 같은
+  모델**이었지만, 그걸 확인하려고 두 파일을 통째로 비교해야 했다. 이제 해시 하나로 끝난다.
+- CI 도 **같은 파일**을 읽어 받는다(`release-smoke.yml`). DVC 원격은 내용주소 저장소라
+  객체 키가 곧 md5 여서, 러너는 `dvc` 도 ML 저장소 접근 권한도 필요하지 않다 —
+  `aws s3 cp s3://nursemate-ml-models/files/md5/<앞2>/<나머지>` 를 항목마다 돌린다.
+  **받는 경로와 검사가 같은 값을 쓰므로 갈라질 수 없다.**
+- 앱은 첫 식별 때 asset 을 앱 전용 저장소로 꺼내 쓴다(`PillModelFile`). 저장소를 두 배 쓰므로
+  Play Asset Delivery 나 원격 다운로드로 옮기는 건 따로 정해야 한다 — **NM-396 은 그 티켓이
+  아니다**(「RF-DETR-seg Android 변환 스파이크」로 2026-09-01 완료). 아직 티켓이 없다.
 - 디버그 빌드는 `getExternalFilesDir()` 에 파일이 있으면 그쪽을 먼저 쓴다(양자화 비교용).
 
 ## 로컬 릴리스 빌드
@@ -62,26 +93,62 @@ R8 적용(코드·리소스 축소) 상태이므로, 업로드 전 실기기 스
 ./gradlew :app:assembleRelease && adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-## 릴리스 CI 는 없다 (`release.yml` 삭제, 2026-09-04)
+## 릴리스 스모크 CI (`release-smoke.yml`, NM-483)
 
-AAB 를 만들어 주는 워크플로가 있었으나 삭제했다. 두 가지 이유다.
+`main` 으로 가는 PR 에서 **릴리스 빌드를 만들어 에뮬레이터에 올려 켜 본다.** `release/*` → `main`
+이 릴리스가 나가는 유일한 경로라 여기가 마지막 관문이다.
 
-1. **성공할 수 없다.** 검출 모델이 저장소에 없어(위 참고) 러너에서 `bundleRelease` 가 가드에
-   걸려 반드시 실패한다. NM-394 에서 가드가 들어온 뒤로 계속 빨간불이었다.
-2. **성공해도 쓰면 안 되는 산출물이다.** 모델 없는 AAB 를 `app-release-aab` 라는 이름으로
-   내놓으니, 사정을 모르는 사람이 그걸 Play 에 올릴 위험이 있었다. 올라가면 사용자는 알약을
-   찍을 때마다 '분석 실패'만 본다.
+2026-09-04 에 `release.yml` 을 지웠던 사유 둘은 해소됐다. ① 모델을 러너로 가져올 방법이 없었던
+것 — DVC 원격(S3)에서 해시로 받는다(NM-480·481). ② 모델 없는 AAB 를 내놓아 누가 그걸 Play 에
+올릴 위험 — **이 잡은 산출물을 아예 내놓지 않는다.**
 
-되살리려면 모델을 러너로 가져올 방법(별도 저장소·Play Asset Delivery·원격 다운로드)이 먼저
-정해져야 한다 — NM-396 ADR 사항이다.
+**목적이 AAB 가 아니라 검사다.** Play 에 올릴 산출물은 여전히 태그 커밋에서 로컬로 만든다.
+CI 는 실패했을 때의 테스트 리포트만 남긴다.
 
-> PR CI(`ci.yml`)는 그대로 돈다. 다만 **debug 만 빌드하므로 R8 이 걸린 release 전용 문제는
-> 잡지 못한다** — 그래서 아래 절차의 스모크 테스트를 건너뛰면 안 된다.
-> 이 테스트로만 잡힌 것이 지금까지 둘이다. 둘 다 **앱 시작 즉시 전 사용자 크래시**였다.
-> - 카카오 SDK 가 enum 상수를 리플렉션으로 찾는데 R8 이 필드명을 바꿨다 (PR #14).
-> - `glance-appwidget` 이 딸려 온 `WorkManagerInitializer` 가 `androidx.startup` 으로
->   자동 실행되다가 R8 을 거친 `WorkDatabase` 생성에 실패했다 (PR #21).
->   Glance 는 쓰지 않는데 의존성만 남아 있었다 — 지금은 빠졌다.
+### 왜 빌드에서 멈추지 않고 켜 보는가
+
+릴리스에서만 겪은 결함을 늘어놓고 무엇이 잡히는지 세어 보면 이렇다. 「빌드만」은 로컬
+릴리스 빌드에서도 그대로 걸린다 — 가드가 Gradle 에 있지 CI 에 있지 않다.
+
+| 결함 | 증상 시점 | 빌드만 | 켜 보면 |
+|---|---|---|---|
+| 카카오 `*ErrorCause` enum 을 R8 이 리네임 (PR #14) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ ¹ |
+| `glance-appwidget` 이 끌고 온 `WorkManagerInitializer` (PR #21) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ |
+| 워치 릴리스가 미서명 (PR #21, 같은 날) | 설치 불가 · Data Layer 단절 | **○** | ○ |
+| R8 이 `ai.onnxruntime.**` 리네임 (⑩ · NM-466) | 「알약 식별」 100% | **○** ² | ○ |
+| ONNX Runtime 1.29.0 의 SME 명령 (⑧) | 「이 사진 사용」 직후 | ✗ | ✗ ³ |
+| App Check 에 SHA-256 미등록 (⑦) | Play 설치본만 | ✗ | ✗ ⁴ |
+
+1. **`KAKAO_APP_KEY_RELEASE` 시크릿이 있어야 이 줄이 ○ 다** — 2026-09-29 등록했다.
+   키가 비면 앱이 `KakaoSdk.init` 을 **조용히 건너뛰는데**(`NurseMateApplication`) 기동 검사는
+   그대로 통과한다. 덮지 못한 채 초록불이 되는 것이 가장 나쁘므로, 잡이 키 주입 여부를 따로
+   확인한다 — `kakaoAppKey()` 가 키가 비면 매니페스트 스킴을 `kakao-unset` 으로 박으므로
+   빌드된 APK 에서 그 값을 aapt2 로 꺼내 대조한다(`kakao` + 32자리 = 37자).
+   키 해시는 필요 없다. 그건 **로그인 요청 때** 카카오 서버가 검증하는 값이고 이 잡은
+   로그인을 하지 않는다 — 릴리스는 App Check 가 Play Integrity 라 에뮬레이터에서 어차피 막힌다.
+2. **에뮬레이터가 필요 없다 — 매핑 파일이 답을 갖고 있다.** ⑩ 은 `-keep class
+   ai.onnxruntime.** { *; }` 가 사라지면 재발하는데, 그러면 매핑에 그대로 찍힌다:
+   `ai.onnxruntime.TensorInfo -> at4:`. `app/build.gradle.kts` 의 가드가
+   `minifyReleaseWithR8` 뒤에 매핑을 읽어 JNI 가 이름으로 찾는 클래스 다섯이 리네임되지
+   않았는지 대조하고, 하나라도 바뀌었으면 빌드를 세운다. **로컬 릴리스 빌드도 같이 막는다.**
+
+   에뮬레이터로 실제 추론을 돌리는 길도 시도했으나 접었다. 계측 테스트를 minify 된 앱에
+   붙이려면 `testBuildType = "release"` 가 필요하고, 그러면 테스트 APK 도 R8 을 타면서
+   하네스가 요구하는 것들(`androidx.tracing.Trace`·`kotlin.LazyKt` …)을 **운영 R8 규칙에**
+   계속 남겨야 한다 — 검사 하나 때문에 출시 산출물을 건드리는 맞바꿈이다.
+3. Exynos 2400 에 SME 가 없어서 나는 것이라 에뮬레이터 CPU 로는 원리상 재현되지 않는다.
+   debug 에서도 났으니 릴리스 전용도 아니다.
+4. Play 앱 서명과 Play Integrity 가 필요하다 — Play 내부 테스트에서 본다.
+
+### 이 잡이 덮지 못하는 것 — 실기기 스모크를 그대로 한다
+
+덮는 것은 **R8 과 서명**이다. 위 표의 아래 두 줄, 워치 실물 동작(만료 팝업의 `off-body`),
+카메라, 실제 약포 검출 정확도는 여전히 사람이 본다. 아래 「Play 업로드 절차」의 스모크 항목은
+그대로 유효하다. 원격 게이트에 막히면 크래시가 아니므로 이 잡은 통과시키고 `NM467` 로그만
+남긴다.
+
+> PR CI(`ci.yml`)는 모든 PR 에서 그대로 돈다. debug 만 빌드하므로 **R8 이 걸린 release 전용
+> 문제는 잡지 못한다** — 그것이 이 워크플로가 생긴 이유다.
 
 ## ⚠️ 폰·워치가 `specialUse` 포그라운드 서비스를 쓴다
 
@@ -191,7 +258,8 @@ adb logcat | grep NM467
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
    ```bash
    git checkout v<versionName>
-   ls app/src/main/assets/rfdetr_seg_small.onnx   # 없으면 위 "검출 모델" 절 참고
+   (cd app/src/main && md5 -r assets/*.onnx | sed 's|assets/||')   # app/models.md5 와 같아야 한다
+   #                                                               다르면 위 "온디바이스 모델" 절 참고
    ./gradlew :app:bundleRelease :wear:bundleRelease
    jarsigner -verify app/build/outputs/bundle/release/app-release.aab    # "jar verified."
    jarsigner -verify wear/build/outputs/bundle/release/wear-release.aab  # "jar verified."

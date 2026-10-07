@@ -68,13 +68,13 @@ fun NurseMateApp(
     val colors = NmTheme.semanticColors
     val sessionViewModel: AppSessionViewModel = hiltViewModel()
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
+    val sessionExpired by sessionViewModel.sessionExpired.collectAsStateWithLifecycle()
+    val needsReconsent by sessionViewModel.needsReconsent.collectAsStateWithLifecycle()
 
-    // 포그라운드 복귀마다 회원 정보를 다시 받는다 — 약관이 개정되면 서버가
-    // onboardingRequired 를 다시 true 로 주고, 그래야 동의 화면이 뜬다(spec §약관 개정).
-    LifecycleResumeEffect(Unit) {
-        sessionViewModel.refresh()
-        onPauseOrDispose {}
-    }
+    // ⚠️ 여기서 포그라운드 복귀마다 회원 정보를 다시 받던 것을 걷어냈다(NM-463).
+    //    재동의 판정 시점은 **앱 실행 때**다(spec §진입 라우팅 「포그라운드 복귀에는 다시
+    //    판정하지 않는다」). 복귀마다 받으면 잠깐 다른 앱을 보고 돌아온 사용자가 쓰던 화면에서
+    //    동의 시트로 끌려 나온다. 세션 복원이 끝나면 init 의 session collect 가 한 번 받는다.
 
     Box(
         modifier = modifier
@@ -90,11 +90,13 @@ fun NurseMateApp(
 
             else -> NmNavHost(
                 entry = entry,
+                sessionExpired = sessionExpired,
                 openTimerTab = openTimerTab,
                 onTimerTabOpened = onTimerTabOpened,
                 startPresetId = startPresetId,
                 onStartPresetHandled = onStartPresetHandled,
-                onUserUpdated = sessionViewModel::onUserUpdated
+                onUserUpdated = sessionViewModel::onUserUpdated,
+                needsReconsent = needsReconsent
             )
         }
     }
@@ -127,11 +129,13 @@ private fun ServiceUnavailable(onRetry: () -> Unit) {
 @Composable
 private fun NmNavHost(
     entry: AppEntry,
+    sessionExpired: Boolean,
     openTimerTab: Boolean,
     onTimerTabOpened: () -> Unit,
     startPresetId: String?,
     onStartPresetHandled: () -> Unit,
-    onUserUpdated: (User) -> Unit
+    onUserUpdated: (User) -> Unit,
+    needsReconsent: Boolean
 ) {
     val navController = rememberNavController()
 
@@ -204,7 +208,10 @@ private fun NmNavHost(
                 // 직접 띄우기 때문이다. Compose 밖(프리뷰 등)에서는 null 이라 그때는 아무 일도
                 // 하지 않는다. 실기기에서는 항상 있다.
                 onAppleClick = { activity?.let(viewModel::signInWithApple) },
-                onKakaoClick = { viewModel.signInWithKakao(context) }
+                onKakaoClick = { viewModel.signInWithKakao(context) },
+                // 내 의사와 무관하게 끊겨 돌아온 것이면 이유를 알린다. 스스로 누른
+                // 로그아웃에는 뜨지 않는다 — 가르는 일은 AppSessionViewModel 이 한다.
+                sessionExpired = sessionExpired
             )
         }
 
@@ -218,10 +225,13 @@ private fun NmNavHost(
                 onToggleAll = viewModel::toggleAll,
                 // 저장 응답의 회원 정보를 셸로 올린다. onboardingRequired 가 false 로 바뀌면서
                 // 진입 상태가 홈으로 넘어간다 — 화면이 스스로 이동하지 않는다.
-                onSubmit = { viewModel.submit(onUserUpdated) },
+                // 개정 재동의는 가입이 아니다 — 최초 동의일 때만 유입 지표로 올린다(NM-543).
+                onSubmit = { viewModel.submit(firstTime = !needsReconsent, onAgreed = onUserUpdated) },
                 onCancel = viewModel::cancel,
                 onOpenPolicy = { context.openPolicy(it.policyUrl) },
-                onRetry = viewModel::load
+                onRetry = viewModel::load,
+                // 개정 재동의면 시트 앞에 안내를 한 장 세운다 — 최초 가입자에게는 띄우지 않는다.
+                needsReconsent = needsReconsent
             )
         }
 

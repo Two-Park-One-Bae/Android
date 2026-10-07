@@ -60,15 +60,17 @@ import app.nursemate.ui.SystemBarIcons
 import coil3.compose.AsyncImage
 
 /**
- * 인식 결과 — 디자인 `⑤ 인식 결과`.
+ * 인식 결과 — 정본 `① 인식 결과` (NM-490 · NM-516).
  *
  * 사진 카드 위에 번호 배지가 달린 BBOX를 얹고, 아래에 알약별 카드를 세운다.
  *
- * ## 아직 서버가 없어 비어 있는 부분
- * 정본 카드에는 **색·모양·제형 칩과 앞/뒤 각인 표기**가 붙는다. 그 값은 전부
- * `POST /pill-attributes` 가 주는 것이라 인증(NM-407)이 붙어야 채울 수 있다.
- * 지금은 카드 머리(번호·크롭 썸네일·제목·이동 표시)까지만 만든다.
- * ⋮ 메뉴(수정·삭제)와 '+ 알약 추가'도 후보 선택이 가능해진 뒤에 붙인다.
+ * ## 카드는 상태만 말한다
+ * v0 카드에는 색·모양·제형 칩과 앞뒤 각인이 함께 붙어 높이가 두 배였다. V1 은 그걸 전부
+ * **수정 화면으로 옮기고**, 여기엔 「이 알약이 지금 어느 단계인가」만 남긴다
+ * ([PillResultStatus]). 결과 화면에서 고를 것은 없고, 어디를 더 손봐야 하는지만 보면 된다.
+ *
+ * 사진 위 테두리·번호 태그는 카드와 **같은 색**을 쓴다 — 그래야 셋째 카드가 사진 어느
+ * 알약인지 눈으로 이어진다.
  */
 @Composable
 fun PillResultScreen(
@@ -130,7 +132,16 @@ fun PillResultScreen(
                 ) {
                     PillPhotoCard(photo = state.photo) {
                         pills.forEachIndexed { index, item ->
-                            item.detected?.let { DetectionMarker(pill = it, number = index + 1) }
+                            item.detected?.let {
+                                DetectionMarker(
+                                    pill = it,
+                                    number = index + 1,
+                                    // 카드와 **같은 색**이어야 어느 카드가 어느 알약인지 눈으로 이어진다(정본 ①).
+                                    tone = PillResultStatus
+                                        .of(state.editOf(item.id), state.selections[item.id])
+                                        .colors()
+                                )
+                            }
                         }
                     }
                 }
@@ -150,11 +161,11 @@ fun PillResultScreen(
                             )
                             pills.forEachIndexed { index, item ->
                                 PillRow(
-                                    manual = item.id.isManualPill,
                                     crop = item.detected?.crop,
                                     number = index + 1,
                                     edit = state.editOf(item.id),
                                     selected = state.selections[item.id],
+                                    onClick = { onEditPill(item.id) },
                                     onMenuClick = { topEnd ->
                                         menuTopEnd = topEnd
                                         menuFor = item.id
@@ -241,9 +252,12 @@ fun PillResultScreen(
  *
  * 검출 좌표는 0~1 정규화라 [PhotoSize] 를 곱해 배치한다.
  * 배지는 박스 **왼쪽 위에 얹히며**, 화면 밖으로 밀리지 않게 0 이상으로 잘라 둔다.
+ *
+ * ⚠️ **색은 카드가 정한다**([tone]). 정본이 「사진 박스 · 태그도 같은 색」으로 못박았다 —
+ * 여기만 따로 칠하면 확정한 알약이 사진에서는 파란 채로 남아 어느 카드인지 못 잇는다.
  */
 @Composable
-private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
+private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int, tone: PillStatusColors) {
     val box = pill.detection
     val left = PhotoSize * box.x
     val top = PhotoSize * box.y
@@ -252,7 +266,7 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
         modifier = Modifier
             .offset(x = left, y = top)
             .size(width = PhotoSize * box.width, height = PhotoSize * box.height)
-            .border(2.dp, NmColor.Primary.C500, RoundedCornerShape(4.dp))
+            .border(2.dp, tone.marker, RoundedCornerShape(4.dp))
     )
     Box(
         modifier = Modifier
@@ -262,7 +276,7 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
                 y = (top - BadgeHeight).coerceAtLeast(0.dp)
             )
             .background(
-                color = NmColor.Primary.C500,
+                color = tone.marker,
                 // 박스 왼쪽 위와 맞물리도록 왼쪽 아래만 각지게 둔다(정본 cornerRadius [4,4,4,0]).
                 shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomEnd = 4.dp, bottomStart = 0.dp)
             )
@@ -273,114 +287,128 @@ private fun BoxScope.DetectionMarker(pill: DetectedPill, number: Int) {
 }
 
 /**
- * 알약 카드 — 번호 · 크롭 썸네일 · 제목 · 속성 칩.
+ * 인식 결과 **한 줄 상태 카드** — 정본 ①·⑭ (NM-490 · NM-516).
  *
- * @param attribute 서버가 뽑은 속성. null 이면 아직 못 받은 것이고, `failed` 면 이 알약만
- *                  추출에 실패한 것이라 **그 카드만** 직접 입력을 유도한다(spec §개별 추출 실패).
+ * ## 속성·조건·후보 수를 보여 주지 않는다
+ * v0 카드는 색·모양·제형 칩과 앞뒤 각인 두 줄을 함께 그려 높이가 두 배였다. V1 에서 그건
+ * **수정 화면의 일**이다 — 결과 화면은 「이 알약이 지금 어느 단계인가」만 말한다.
+ *
+ * 상태는 [PillResultStatus] 가 정하고, 배경 톤과 번호 색으로 드러난다. 사진 위 테두리·번호
+ * 태그도 **같은 색**을 쓴다([DetectionMarker]) — 어느 카드가 어느 알약인지 눈으로 잇는 길이다.
+ *
+ * 카드 전체가 누를 영역이다(= 수정). ⋮ 는 수정·삭제 둘 다 연다.
  */
 @Composable
 private fun PillRow(
-    manual: Boolean,
     crop: Bitmap?,
     number: Int,
     edit: PillEdit,
     selected: PillCandidate?,
+    onClick: () -> Unit,
     onMenuClick: (IntOffset) -> Unit
 ) {
     val colors = NmTheme.semanticColors
-
-    // 추출에 실패한 알약은 이 카드만 그렇게 알린다. 나머지는 정상이다(spec §개별 추출 실패).
-    // 사용자가 직접 채워 넣기 시작하면 안내를 거두고 평소처럼 칩을 보여준다 — 다 채운 카드에
-    // "인식하지 못했어요"가 남아 있으면 아직 할 일이 있는 것처럼 읽힌다.
-    val showFailure = edit.attribute.failed && edit.attribute.isBlank
+    val status = PillResultStatus.of(edit, selected)
+    val tone = status.colors()
 
     // 메뉴는 가로로 카드 오른쪽 끝, 세로로 ⋮ 버튼 아래에 놓인다 — 둘을 따로 잰다.
     var cardRight by remember { mutableIntStateOf(0) }
     var menuTop by remember { mutableIntStateOf(0) }
-    Column(
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(64.dp)
             .onGloballyPositioned { cardRight = it.positionInRoot().round().x + it.size.width }
-            // 확정한 카드는 배경째로 바뀐다 — 목록을 훑을 때 남은 것이 몇 개인지 한눈에 들어와야 한다.
-            // 추출에 실패한 카드도 마찬가지로 배경으로 알린다(경고지 오류가 아니다 — 사용자가
-            // 직접 채우면 되는 상태다).
-            .background(color = cardFill(selected, showFailure, colors.surface), shape = RoundedCornerShape(14.dp))
-            .let { base ->
-                val stroke = cardStroke(selected, showFailure) ?: return@let base
-                base.border(1.5.dp, stroke, RoundedCornerShape(14.dp))
-            }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(tone.card)
+            // 카드 전체가 수정으로 들어가는 과녁이다(정본 ③ 변경 — 「한 줄 카드는 카드 전체가 누를 영역」).
+            .clickable(onClick = onClick)
+            .padding(start = 14.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Box(
+            modifier = Modifier.size(26.dp).background(tone.badge, CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .background(NmColor.Primary.C50, CircleShape)
-                    .border(1.dp, NmColor.Primary.C100, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "$number", style = NumberBadge, color = NmColor.Primary.C600)
-            }
-
-            val thumbnail = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(NmColor.Neutral.C100)
-            if (crop != null) {
-                Image(
-                    bitmap = crop.asImageBitmap(),
-                    contentDescription = null,
-                    // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
-                    contentScale = ContentScale.Fit,
-                    modifier = thumbnail
-                )
-            } else {
-                // 수동 추가 알약은 사진에 대응 영역이 없다. 확정 전에는 자리만, 확정 뒤에는
-                // 고른 후보의 낱알 이미지를 쓴다(spec NM-187).
-                AsyncImage(
-                    model = selected?.pillThumbnailUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = thumbnail
-                )
-            }
-
-            Text(
-                text = selected?.let { it.pillName ?: it.pillCode } ?: "알약을 선택해주세요",
-                style = if (selected != null) RowTitleDone else RowTitle,
-                color = if (selected != null) colors.textPrimary else colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-
-            // 정본 카드에는 chevron 이 그려져 있지만, 스펙(§수정·삭제)은 수정·삭제 **둘 다**
-            // ⋮ 메뉴로만 들어간다고 못박는다("수정 진입도 동일 ⋮ 메뉴 경유"). 둘을 함께 두면
-            // 좁은 행에 서로 다른 동작을 하는 과녁이 두 개 생긴다 — 스펙을 따른다.
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_more_vertical),
-                contentDescription = "메뉴",
-                tint = colors.textTertiary,
-                modifier = Modifier
-                    .size(28.dp)
-                    .onGloballyPositioned { menuTop = it.positionInRoot().round().y + it.size.height }
-                    .clip(CircleShape)
-                    .clickable { onMenuClick(IntOffset(cardRight, menuTop)) }
-                    .padding(5.dp)
-            )
+            Text(text = "$number", style = NumberBadge, color = tone.number)
         }
 
-        if (showFailure) {
-            ExtractionFailedNotice()
+        val thumbnail = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(NmColor.Neutral.C100)
+        if (crop != null) {
+            Image(
+                bitmap = crop.asImageBitmap(),
+                contentDescription = null,
+                // 낱알이 잘리면 각인을 못 보므로 채우지 않고 맞춘다.
+                contentScale = ContentScale.Fit,
+                modifier = thumbnail
+            )
         } else {
-            PillAttributeChips(attribute = edit.attribute, faces = edit.faces, manual = manual)
+            // 수동 추가 알약은 사진에 대응 영역이 없다. 확정 전에는 자리만, 확정 뒤에는
+            // 고른 후보의 낱알 이미지를 쓴다(spec NM-187).
+            AsyncImage(
+                model = selected?.pillThumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = thumbnail
+            )
         }
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = selected?.pillName ?: status.title(),
+                style = RowTitleDone,
+                color = tone.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // 둘째 줄은 **있을 때만** 그린다 — 확정이면 업체명, 실패면 무엇을 하라는 안내다.
+            // 선택 전에는 할 말이 없어 한 줄로 둔다.
+            status.subtitle(selected)?.let { sub ->
+                Text(
+                    text = sub,
+                    style = if (status == PillResultStatus.FAILED) RowSubtitleAction else RowSubtitle,
+                    color = if (status == PillResultStatus.FAILED) colors.textSecondary else colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // 정본 카드에는 chevron 이 그려져 있지만, 스펙(§수정·삭제)은 **수정·삭제 둘 다** ⋮ 로
+        // 들어간다고 적는다. 카드 탭이 수정이고 ⋮ 가 수정·삭제라, chevron 을 더하면 같은 일을
+        // 하는 과녁이 셋이 된다.
+        Icon(
+            painter = painterResource(R.drawable.nm_ic_more_vertical),
+            contentDescription = "메뉴",
+            tint = colors.textTertiary,
+            modifier = Modifier
+                .size(28.dp)
+                .onGloballyPositioned { menuTop = it.positionInRoot().round().y + it.size.height }
+                .clip(CircleShape)
+                .clickable { onMenuClick(IntOffset(cardRight, menuTop)) }
+                .padding(5.dp)
+        )
     }
+}
+
+/** 첫 줄 — 확정이면 품목명이 대신 들어가므로 여기엔 나머지 둘만 있다. */
+private fun PillResultStatus.title(): String = when (this) {
+    PillResultStatus.FAILED -> "정보 인식 실패"
+
+    // 정본 ① 의 문구. 「알약을 선택해주세요」가 아니다.
+    else -> "후보를 골라 주세요"
+}
+
+/** 둘째 줄 — 없으면 한 줄짜리 카드다. */
+private fun PillResultStatus.subtitle(selected: PillCandidate?): String? = when (this) {
+    PillResultStatus.IDENTIFIED -> selected?.companyName
+    PillResultStatus.FAILED -> "직접 입력"
+    PillResultStatus.PENDING -> null
 }
 
 /**
@@ -465,44 +493,13 @@ private fun AddPillButton(onClick: () -> Unit) {
     }
 }
 
-/** 정본 `⑤ 일부 정보 인식 실패 / 실패 안내`. 경고(warning)지 오류(error)가 아니다. */
-@Composable
-private fun ExtractionFailedNotice() {
-    val colors = NmTheme.semanticColors
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_triangle_alert),
-                contentDescription = null,
-                tint = NmColor.Warning.C600,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(text = "정보를 인식하지 못했어요", style = FailureTitle, color = NmColor.Warning.C700)
-        }
-        Text(text = "색·모양·제형·각인을 직접 입력하세요", style = FailureHint, color = colors.textSecondary)
-    }
-}
-
-private fun cardFill(selected: PillCandidate?, showFailure: Boolean, surface: Color) = when {
-    selected != null -> NmColor.Secondary.C50
-    showFailure -> NmColor.Warning.C50
-    else -> surface
-}
-
-private fun cardStroke(selected: PillCandidate?, showFailure: Boolean) = when {
-    selected != null -> NmColor.Secondary.C300
-    showFailure -> NmColor.Warning.C300
-    else -> null
-}
-
 private val AddPillLabel = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-private val FailureTitle = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-private val FailureHint = NmTypography.caption
+
+// 정본 ①·⑭ 의 카드 글자 — 첫 줄 14/bold, 둘째 줄 12. 「직접 입력」만 600 으로 눌러 둔다
+// (할 일을 가리키는 말이라 업체명보다 세야 한다).
 private val RowTitleDone = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold)
-private val RowTitle = NmTypography.body.copy(fontWeight = FontWeight.SemiBold)
+private val RowSubtitle = NmTypography.caption.copy(fontSize = 12.sp)
+private val RowSubtitleAction = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
 private val NumberBadge = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 private val BadgeLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
 private val ProgressLabel = NmTypography.caption

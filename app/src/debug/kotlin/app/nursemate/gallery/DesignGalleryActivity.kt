@@ -53,6 +53,7 @@ import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillFace
 import app.nursemate.core.model.PillFormulation
 import app.nursemate.core.model.PillShape
+import app.nursemate.pill.FaceInput
 import app.nursemate.pill.FaceInputs
 import app.nursemate.pill.PillAttributeChips
 
@@ -217,38 +218,45 @@ private fun Gallery() {
 @Composable
 private fun AttributeChipStates() {
     val cases = listOf(
-        "단색 · 정제" to PillAttribute(
-            pillId = "1",
-            colors = listOf(PillColor.WHITE),
-            shape = PillShape.ROUND,
-            formulation = PillFormulation.TABLET,
-            front = PillFace(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
-            back = PillFace()
+        "단색 · 정제" to Case(
+            PillAttribute(
+                pillId = "1",
+                attributeToken = "tok1",
+                colorHexes = listOf("#FFFFFF"),
+                shape = PillShape.ROUND,
+                formulation = PillFormulation.TABLET
+            ),
+            FaceInputs(
+                front = FaceInput(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
+                // 「없음」을 전부 고른 면 — 셋 다 호박색이어야 한다.
+                back = FaceInput(imprint = "", dividingLine = DividingLine.NONE, hasMark = false)
+            )
         ),
-        "다색 · 투명 캡슐" to PillAttribute(
-            pillId = "2",
-            colors = listOf(PillColor.GREEN, PillColor.YELLOW),
-            isTransparent = true,
-            shape = PillShape.OBLONG,
-            formulation = PillFormulation.HARD_CAPSULE,
-            front = PillFace(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true)
+        "다색 캡슐" to Case(
+            PillAttribute(
+                pillId = "2",
+                attributeToken = "tok2",
+                colorHexes = listOf("#4CAF50", "#FFEB3B"),
+                shape = PillShape.OBLONG,
+                formulation = PillFormulation.HARD_CAPSULE
+            ),
+            // 뒷면은 손대지 않은 그대로 — 셋 다 「전체」(회색)다.
+            FaceInputs(front = FaceInput(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true))
         ),
-        "부분 미인식 (모양만 못 뽑음)" to PillAttribute(
-            pillId = "3",
-            colors = listOf(PillColor.ORANGE),
-            shape = null,
-            formulation = PillFormulation.TABLET
-        ),
-        "추출 실패 (EXTRACTION_FAILED)" to PillAttribute(pillId = "4", error = "EXTRACTION_FAILED"),
-        "아직 못 받음 (null)" to null
+        // V1 은 속성별 부분 실패가 없다 — 모델값이 있으면 색·모양·제형이 모두 있다.
+        "추출 실패 (EXTRACTION_FAILED)" to Case(PillAttribute(pillId = "4", error = "EXTRACTION_FAILED"), FaceInputs()),
+        "아직 못 받음 (null)" to Case(null, FaceInputs())
     )
 
-    cases.forEach { (label, attribute) ->
+    cases.forEach { (label, case) ->
         Text(text = label, style = NmTypography.caption, color = NmTheme.semanticColors.textTertiary)
-        // 각인 표기값은 화면 입력([FaceInputs])이 정본이라 따로 넣는다 — 서버는 MVP 에서 안 보낸다.
-        PillAttributeChips(attribute = attribute, faces = attribute?.let(FaceInputs::from) ?: FaceInputs())
+        // 각인 표기값은 화면 입력([FaceInputs])이 정본이라 따로 넣는다 — 서버는 각인을 주지 않는다.
+        PillAttributeChips(attribute = case.attribute, faces = case.faces)
     }
 }
+
+/** 갤러리 표본 한 줄 — 모델값과 화면 입력이 따로라 함께 든다. */
+private data class Case(val attribute: PillAttribute?, val faces: FaceInputs)
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {

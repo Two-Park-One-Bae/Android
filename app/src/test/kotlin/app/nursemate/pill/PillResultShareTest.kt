@@ -15,11 +15,15 @@ import org.junit.Test
  */
 class PillResultShareTest {
 
-    private fun candidate(code: String, name: String?, company: String? = null) = PillCandidate(
+    // 계약(`PillCandidateV0`)이 여섯 필드를 전부 required 로 두어 널이 아니다(NM-453).
+    // 비어 있는 경우는 여전히 올 수 있으므로 빈 문자열로 검증한다.
+    private fun candidate(code: String, name: String, company: String = "") = PillCandidate(
         pillCode = code,
         licenseStatus = LicenseStatus.NORMAL,
         pillName = name,
-        companyName = company
+        companyName = company,
+        pillThumbnailUrl = "https://img.nursemate.app/pill-thumbnails/$code.webp",
+        pillImageUrl = "https://img.nursemate.app/pill-images/$code.jpg"
     )
 
     private val day = LocalDate.of(2026, 9, 3)
@@ -35,16 +39,16 @@ class PillResultShareTest {
     }
 
     @Test
-    fun `업체명이 없으면 그 줄을 아예 빼놓는다`() {
+    fun `업체명이 비어 있으면 그 줄을 아예 빼놓는다`() {
         val text = listOf(candidate("1", "게보린정")).toShareText(day)
 
         assertTrue(!text.contains("제조사:"))
     }
 
     @Test
-    fun `품목명이 없으면 이름 미상으로 적는다`() {
+    fun `품목명이 비어 있으면 이름 미상으로 적는다`() {
         // 빈 줄로 흘려보내면 몇 번 알약이 빠졌는지 알 수 없다. 품목코드는 아래 줄에 남는다.
-        val text = listOf(candidate("198800119", null)).toShareText(day)
+        val text = listOf(candidate("198800119", "")).toShareText(day)
 
         assertTrue(text.contains("1. 이름 미상"))
         assertTrue(text.contains("   품목코드: 198800119"))

@@ -39,17 +39,22 @@ firebaseCrashlyticsPlugin = "3.0.8"
 androidxCredentials = "1.6.0"
 googleid = "1.2.0"
 kakaoSdk = "2.25.0"
+# 유입 경로 측정 (NM-543). restricted 아닌 일반 SDK 다.
+airbridge = "4.11.3"
 
 # 낱알 이미지 로딩
 coil = "3.3.0"
 
 # 온디바이스 검출 (core:vision)
-onnxruntime = "1.22.0"
+onnxruntime = "1.30.0"
+opencv = "4.12.0"
 androidxExifInterface = "1.4.1"
 
 # 테스트
 junit = "4.13.2"
 kotlinTest = "2.3.0"
+androidxTestRunner = "1.7.0"
+androidxTestJunit = "1.3.0"
 
 # 코드 품질
 spotless = "8.10.0"
@@ -109,6 +114,9 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 # 인터셉터·Authenticator 검증용. okhttp 와 버전을 맞춰야 한다.
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlinTest" }
+# 계측 테스트 — 각인 전처리가 OpenCV 네이티브를 쓰므로 JVM 에서는 돌릴 수 없다(NM-485).
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 
 # 인증. BOM이 firebase-* 버전을 맞추므로 개별 라이브러리에는 버전을 적지 않는다.
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
@@ -139,6 +147,10 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 # v2-user 만 넣는다 — v2-all 은 톡·스토리·내비까지 딸려 온다.
 kakao-user = { group = "com.kakao.sdk", name = "v2-user", version.ref = "kakaoSdk" }
 
+# 인플루언서 게시글·Meta 광고의 유입 경로 측정 (NM-543).
+# 제품 이벤트는 Firebase 가 맡는다 — 이쪽으로는 가입 하나만 보낸다.
+airbridge-sdk = { group = "io.airbridge", name = "sdk-android", version.ref = "airbridge" }
+
 # 낱알 이미지. 네트워크는 OkHttp 로 갈아 끼워 인터셉터 없는 클라이언트를 쓴다.
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
@@ -146,6 +158,9 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 # 온디바이스 추론 런타임. 프리빌트 배포본이며 EP는 CPU만 쓴다.
 # (WebGPU EP는 소스 빌드에만 들어 있다 — NM-396 스파이크 참조)
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+# 각인 OCR 전처리(NM-485). 기준 구현(ML `infer.py`)이 OpenCV 라 같은 라이브러리를 쓴다 —
+# CLAHE·형태학·연결요소를 손으로 옮기면 수치가 갈려도 조용히 틀린다.
+opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "androidxExifInterface" }
 
 [plugins]

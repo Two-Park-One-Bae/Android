@@ -34,3 +34,16 @@
 # 여럿이고, 어느 것이 언제 불리는지는 모델 출력 타입에 따라 달라진다. Java API 표면은
 # 작아서(수십 KB) 남겨도 크기 영향이 없다.
 -keep class ai.onnxruntime.** { *; }
+
+# OpenCV — 각인 OCR 전처리(NM-485). ONNX Runtime 과 **같은 부류의 위험**이다(⑩).
+# 네이티브 쪽이 JVM 으로 값을 돌려줄 때 클래스를 이름으로 찾으므로, R8 이 이름을 바꾸면
+# 빌드는 멀쩡히 성공하고 릴리스에서만 죽는다. Java API 표면이 작아 남겨도 크기 영향이 없다.
+-keep class org.opencv.** { *; }
+
+# Airbridge — 앱 삭제 추적(uninstall tracking)이 FCM 의 `RemoteMessage` 를 참조한다.
+# 우리는 **그 기능을 쓰지 않아**(NM-543 범위 밖) firebase-messaging 을 넣지 않았는데,
+# R8 은 참조만 보고 "Missing class" 로 **빌드를 멈춘다**(경고가 아니라 실패다).
+#
+# 쓰지 않는 길이라 클래스를 끌어올 이유가 없다 — 없어도 된다고 알려 주는 쪽을 고른다.
+# 삭제 추적을 켜게 되면 그때 firebase-messaging 을 넣고 이 줄을 지운다.
+-dontwarn com.google.firebase.messaging.**

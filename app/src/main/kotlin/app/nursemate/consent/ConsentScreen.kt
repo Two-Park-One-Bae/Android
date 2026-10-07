@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +66,13 @@ import app.nursemate.ui.SystemBarIcons
  * ## 항목 문구를 앱이 갖고 있지 않다
  * 제목·URL·버전 전부 서버가 준다. 디자인의 "이용약관"·"개인정보처리방침"과 지금은 같은 값이지만,
  * 약관을 개정하면 서버만 바꿔서 반영되어야 한다(스펙: 클라 버전 하드코딩 금지).
+ *
+ * ## 개정 재동의면 시트 앞에 안내를 세운다
+ * 이미 동의하고 쓰던 사람에게 같은 화면이 예고 없이 뜨면 **앱이 동의를 잃어버린 것으로
+ * 읽힌다**(spec §개정 재동의). 최초 가입자는 흐름상 동의가 당연한 단계라 안내 없이 곧장 시트다.
+ *
+ * @param needsReconsent 개정 재동의인가 — **안내를 띄울지만** 정한다. 들여보낼지 말지는
+ *   이 화면에 오기 전에 서버의 `onboardingRequired` 가 이미 정했다
  */
 @Composable
 fun ConsentScreen(
@@ -75,14 +83,20 @@ fun ConsentScreen(
     onCancel: () -> Unit,
     onOpenPolicy: (ConsentDefinition) -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    needsReconsent: Boolean = false
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
     var confirmingCancel by remember { mutableStateOf(false) }
+    // 한 번 확인하면 다시 띄우지 않는다. 화면 회전으로 되살아나면 같은 말을 두 번 듣는다.
+    var noticeDismissed by rememberSaveable { mutableStateOf(false) }
+    val showingNotice = needsReconsent && !noticeDismissed
+
     // 뒤로가기로 조용히 빠져나가면 세션은 있는데 동의는 없는 상태가 된다. 취소와 같은 길로 보낸다.
-    BackHandler(enabled = !state.submitting) { confirmingCancel = true }
+    // 안내가 떠 있는 동안에는 삼킨다 — 안내를 건너뛰고 취소 확인이 뜨면 무엇을 묻는지 알 수 없다.
+    BackHandler(enabled = !state.submitting) { if (!showingNotice) confirmingCancel = true }
 
     Box(modifier = modifier.fillMaxSize().background(Color.White)) {
         Icon(
@@ -108,6 +122,21 @@ fun ConsentScreen(
             onRetry = onRetry,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // 안내가 먼저다. 취소 확인과 겹칠 일은 없다 — 안내가 떠 있는 동안은 시트도 뒤로가기도
+        // 닿지 않는다(모달이 화면 전체를 덮는다).
+        if (showingNotice) {
+            NmConfirmDialog(
+                title = "약관이 변경되었어요",
+                message = "서비스를 계속 이용하려면 변경된 약관에 다시 동의해 주세요.",
+                confirmLabel = "확인",
+                // 고를 것이 없는 알림이다 — 「취소」를 두면 동의하지 않고 빠져나가는 길이
+                // 있는 것처럼 읽힌다. iOS 도 확인 하나다.
+                dismissLabel = null,
+                onConfirm = { noticeDismissed = true },
+                onDismiss = {}
+            )
+        }
 
         if (confirmingCancel) {
             NmConfirmDialog(

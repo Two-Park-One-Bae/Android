@@ -3,15 +3,20 @@ package app.nursemate.pill
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -19,6 +24,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -31,9 +37,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -48,6 +56,7 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
 import app.nursemate.ui.SystemBarIcons
 
 /**
@@ -68,10 +77,14 @@ fun PillEditScreen(
     number: Int,
     manual: Boolean,
     crop: Bitmap?,
+    /** 모델이 읽은 값 — **읽기 전용**이다. 칩에 회색으로 비치고 되돌리기의 기준이 된다. */
     attribute: PillAttribute,
-    onAttributeChange: (PillAttribute) -> Unit,
+    conditions: PillConditions,
+    onConditionsChange: (PillConditions) -> Unit,
     faces: FaceInputs,
     onFacesChange: (FaceInputs) -> Unit,
+    /** 온디바이스가 읽은 값 — 되돌리기의 기준이다. 아직 안 읽었으면 null */
+    reading: FaceReading?,
     candidates: CandidateUiState,
     selected: PillCandidate?,
     onSelect: (PillCandidate) -> Unit,
@@ -79,6 +92,8 @@ fun PillEditScreen(
     onCancel: () -> Unit,
     onDetail: (PillCandidate) -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    onRetryLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
     /** 지금 펼쳐 둔 선택판. 이탈 지표(`pill_flow_exit.editing_attribute`)가 읽는다. */
     onPanelChange: (AttributePanel?) -> Unit = {},
@@ -90,20 +105,27 @@ fun PillEditScreen(
 
     // 어느 선택판을 펼쳐 뒀는지는 화면만의 사정이라 뷰모델에 두지 않는다. 회전해도 남게 Saveable.
     //
-    // ⚠️ 진입하면 **각인판이 펼쳐진 채로** 시작한다. 정본 ⑧-a 는 접힌 상태를 그리지만,
-    // MVP 는 색·모양·제형만 자동이고 **각인은 사람이 직접 넣어야 한다**(spec §로드맵 —
-    // 각인 자동은 V1). 접어 두면 이 화면에서 유일하게 해야 할 일이 꺾쇠 뒤에 숨는다.
-    // iOS 도 같은 이유로 `openPanel = .imprint` 로 시작한다.
-    var open by rememberSaveable { mutableStateOf<AttributePanel?>(AttributePanel.Imprint) }
+    // 각인은 이제 모델이 읽어 채워 주므로(NM-485 · NM-515) 들어오자마자 무언가를 입력해야
+    // 하는 화면이 아니다. 면 카드는 늘 보이고, 여기서 여는 것은 색·모양·제형 메뉴뿐이다.
+    var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
+
+    // 들어오면 **접힌 채로** 시작한다 — 정본 ② 다. 수정하러 들어왔다고 곧바로 고칠 칸을
+    // 펼치면, 사진에서 읽은 값을 **확인할 겨를 없이** 손대게 된다. 먼저 읽고 고칠 데를
+    // 고르는 순서다.
+    //
+    // ⚠️ 둘만 예외로 펼친다 — **수동 추가와 추출 실패**. 보여 줄 모델값이 없어 접어 봐야
+    // 「전체」만 늘어서고, 그 화면에서 해야 할 일은 읽기가 아니라 채우기다(NM-516).
+    var expanded by rememberSaveable { mutableStateOf(manual || attribute.failed) }
 
     // 진입 직후 값(각인)도 알려야 한다 — 아무것도 안 건드리고 나가는 경우가 이탈의 다수다.
     LaunchedEffect(open) { onPanelChange(open) }
 
-    // 각인 칸의 커서 자리는 기호를 끼워 넣을 때 필요해서 TextFieldValue 로 들고 있다.
-    // 글자 자체의 주인은 뷰모델([faces])이고 이것은 커서를 얹은 사본이다.
-    var frontText by remember { mutableStateOf(TextFieldValue(faces.front.imprint)) }
-    var backText by remember { mutableStateOf(TextFieldValue(faces.back.imprint)) }
-    var focusedSide by remember { mutableStateOf<FaceSide?>(null) }
+    // 각인을 치는 중인 면. null 이면 입력 줄이 안 떠 있다(정본 ⑦).
+    var editingSide by remember { mutableStateOf<FaceSide?>(null) }
+
+    // 치는 동안의 **초안**이다. 글자의 주인은 뷰모델([faces])이고, 확인을 눌러야 넘어간다 —
+    // 한 글자마다 넘기면 후보가 글자 수만큼 왕복한다. 커서 자리는 기호를 끼워 넣을 때 쓴다.
+    var draft by remember { mutableStateOf(TextFieldValue()) }
 
     // 이미지 비교 뷰어에 띄울 후보. null 이면 안 열려 있다.
     var comparing by remember { mutableStateOf<PillCandidate?>(null) }
@@ -113,11 +135,19 @@ fun PillEditScreen(
     //    (safeDrawing 을 먹은 Column 안이어도 WindowInsets.ime 는 창 원본 값을 준다.)
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val focusManager = LocalFocusManager.current
+    // 뒤로 키로 키보드를 내린 것은 「그만 친다」다. 줄만 남아 화면 아래에 떠 있으면
+    // 무엇을 하는 중인지 알 수 없다 — 쳐 둔 글자는 그대로 넘긴다.
     LaunchedEffect(imeVisible) {
-        if (!imeVisible) {
-            focusedSide = null
-            // 포커스까지 풀어야 각인 칸 테두리가 파란 채로 남지 않는다. 키보드를 내린 것은
-            // "다 적었다"는 뜻인데 칸만 열려 있으면 아직 입력 중처럼 보인다.
+        if (!imeVisible && editingSide != null) {
+            val typed = draft.text.trim()
+            onFacesChange(
+                if (editingSide == FaceSide.Front) {
+                    faces.copy(front = faces.front.typed(typed))
+                } else {
+                    faces.copy(back = faces.back.typed(typed))
+                }
+            )
+            editingSide = null
             focusManager.clearFocus()
         }
     }
@@ -127,7 +157,11 @@ fun PillEditScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                // ⚠️ 아래쪽 여백은 **하단 묶음만** 먹는다. 여기서 통째로 먹으면 키보드가
+                // 뜰 때 목록까지 키보드 높이만큼 줄어, 조건을 고치는 동안 후보가 거의 안 보인다.
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                )
         ) {
             NmNavBar(title = "수정", onBack = onCancel)
 
@@ -146,36 +180,49 @@ fun PillEditScreen(
                         manual = manual,
                         crop = crop,
                         attribute = attribute,
+                        conditions = conditions,
                         faces = faces,
+                        expanded = expanded,
+                        onExpandedChange = { next ->
+                            expanded = next
+                            // 접으면 열어 둔 메뉴·입력 줄도 같이 닫는다 — 안 보이는 판이
+                            // 열린 채로 남아 다시 펼쳤을 때 뜬금없이 튀어나온다.
+                            if (!next) {
+                                open = null
+                                editingSide = null
+                            }
+                        },
                         open = open,
                         onToggle = { panel ->
                             open = panel.takeIf { it != open }
-                            if (open != AttributePanel.Imprint) focusedSide = null
+                            // 외형 메뉴를 열면 각인 줄은 내린다 — 둘이 같이 떠 있으면
+                            // 키보드가 메뉴를 가린다.
+                            if (open != null) editingSide = null
                         },
                         onColorToggle = { color ->
-                            val current = attribute.colors.orEmpty()
-                            onAttributeChange(
-                                attribute.copy(colors = if (color in current) current - color else current + color)
+                            val current = conditions.colors
+                            onConditionsChange(
+                                conditions.copy(colors = if (color in current) current - color else current + color)
                             )
                         },
-                        onTransparentChange = { onAttributeChange(attribute.copy(isTransparent = it)) },
-                        onChange = onAttributeChange,
-                        imprint = {
-                            ImprintPanel(
+                        onChange = onConditionsChange,
+                        faceCard = {
+                            PillFaceCard(
                                 faces = faces,
-                                frontText = frontText,
-                                backText = backText,
+                                reading = reading,
                                 onChange = onFacesChange,
-                                onTextChange = { side, value ->
-                                    if (side == FaceSide.Front) frontText = value else backText = value
-                                },
-                                onFocus = { side -> focusedSide = side }
+                                onEditImprint = { side ->
+                                    val current = if (side == FaceSide.Front) faces.front else faces.back
+                                    val value = current.imprint.orEmpty().trim()
+                                    draft = TextFieldValue(value, selection = TextRange(value.length))
+                                    editingSide = side
+                                }
                             )
                         }
                     )
                 }
 
-                item { CandidateHeader() }
+                item { CandidateHeader(state = candidates) }
 
                 candidateSection(
                     state = candidates,
@@ -187,28 +234,41 @@ fun PillEditScreen(
                             onCompare()
                             comparing = it
                         },
-                        onLoadMore = onLoadMore
+                        onLoadMore = onLoadMore,
+                        onRetry = onRetry,
+                        onRetryLoadMore = onRetryLoadMore
                     )
                 )
             }
 
-            // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
-            EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
+            // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이
+            // 키보드와 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
+            Column(modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+                // 후보를 고르면 안내 대신 확인·취소가 뜬다(정본 ⑧-f).
+                EditFooter(confirmEnabled = selected != null, onConfirm = onConfirm, onCancel = onCancel)
 
-            val side = focusedSide
-            if (side != null && open == AttributePanel.Imprint && imeVisible) {
-                PillSymbolBar(
-                    onSymbol = { symbol ->
-                        val next = (if (side == FaceSide.Front) frontText else backText).insert(symbol)
-                        if (side == FaceSide.Front) {
-                            frontText = next
-                            onFacesChange(faces.copy(front = faces.front.copy(imprint = next.text)))
+                // 각인 입력 줄 + 기호 바는 키보드 **바로 위**에 쌓인다(정본 ⑦).
+                val side = editingSide
+                if (side != null) {
+                    val commit = {
+                        val typed = draft.text.trim()
+                        val next = if (side == FaceSide.Front) {
+                            faces.copy(front = faces.front.typed(typed))
                         } else {
-                            backText = next
-                            onFacesChange(faces.copy(back = faces.back.copy(imprint = next.text)))
+                            faces.copy(back = faces.back.typed(typed))
                         }
+                        onFacesChange(next)
+                        editingSide = null
+                        focusManager.clearFocus()
                     }
-                )
+                    PillImprintInputRow(
+                        side = side,
+                        text = draft,
+                        onTextChange = { draft = it },
+                        onConfirm = commit
+                    )
+                    PillSymbolBar(onSymbol = { symbol -> draft = draft.insert(symbol) })
+                }
             }
         }
 
@@ -221,9 +281,18 @@ fun PillEditScreen(
     }
 }
 
-/** 후보 헤더 — '후보' + 번개 아이콘 '실시간'. 정본 padding=[4,2,0,2]. */
+/**
+ * 후보 헤더 — '후보 N개' + 번개 아이콘 '실시간'. 정본 padding=[4,2,0,2].
+ *
+ * ## 개수를 적는다 (NM-517)
+ * 조건을 하나 고칠 때마다 이 숫자가 줄어드는 것이 **이 화면에서 사용자가 받는 유일한
+ * 피드백**이다. 38 → 12 → 4 로 줄어드는 걸 보고 「각인을 더 칠까」를 정한다.
+ *
+ * 200 에서 잘렸으면 `200개+` 로 적는다 — 「딱 200개」와 「200개 넘게 있는데 거기서 끊었다」는
+ * 다른 말이고, 뒤쪽은 조건을 더 넣어야 한다는 신호다.
+ */
 @Composable
-private fun CandidateHeader() {
+private fun CandidateHeader(state: CandidateUiState) {
     val colors = NmTheme.semanticColors
     Row(
         modifier = Modifier
@@ -233,7 +302,7 @@ private fun CandidateHeader() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = "후보", style = SectionTitle, color = colors.textPrimary)
+        Text(text = state.headerLabel(), style = SectionTitle, color = colors.textPrimary)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(
                 painter = painterResource(R.drawable.nm_ic_zap),
@@ -246,6 +315,34 @@ private fun CandidateHeader() {
     }
 }
 
+/**
+ * 통짜 카드의 **한 조각** — 목록은 LazyColumn 이라 카드를 통으로 두를 수 없다.
+ *
+ * 그래서 조각마다 같은 바탕·테두리를 그리고 **모서리만 첫/마지막에서 둥글린다.** 세로
+ * 테두리는 조각마다 이어져 한 줄로 보이고, 가로 테두리는 위아래 끝에만 남는다.
+ */
+@Composable
+private fun CandidateCardSlice(first: Boolean, last: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    val colors = NmTheme.semanticColors
+    val radius = 14.dp
+    val shape = RoundedCornerShape(
+        topStart = if (first) radius else 0.dp,
+        topEnd = if (first) radius else 0.dp,
+        bottomStart = if (last) radius else 0.dp,
+        bottomEnd = if (last) radius else 0.dp
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // 헤더와 목록 사이만 블록 간격(14)이다. 조각끼리는 붙는다.
+            .padding(top = if (first) BlockGap else 0.dp)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.border, shape),
+        content = content
+    )
+}
+
 /** 후보 목록 — 비었으면 왜 비었는지 알리고, 있으면 행과 다음 장 표시·선택 안내를 낸다. */
 private fun LazyListScope.candidateSection(
     state: CandidateUiState,
@@ -253,24 +350,54 @@ private fun LazyListScope.candidateSection(
     actions: CandidateActions
 ) {
     if (state.candidates.isEmpty()) {
-        item { CandidateEmpty(state, modifier = Modifier.padding(top = BlockGap)) }
+        item {
+            CandidateEmpty(
+                state = state,
+                onRetry = actions.onRetry,
+                modifier = Modifier.padding(top = BlockGap)
+            )
+        }
         return
     }
 
     itemsIndexed(state.candidates, key = { _, candidate -> candidate.pillCode }) { index, candidate ->
-        // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이면 뷰모델이 무시한다.
+        // 끝에 닿으면 다음 장을 부른다. 이미 받는 중이거나 **한 번 실패했으면** 뷰모델이
+        // 무시한다 — 실패 뒤 자동 재시도는 하지 않는다(NM-529).
         if (index == state.candidates.lastIndex && state.hasMore) {
             LaunchedEffect(candidate.pillCode) { actions.onLoadMore() }
         }
-        PillCandidateRow(
-            candidate = candidate,
-            selected = candidate.pillCode == selected?.pillCode,
-            onClick = { actions.onSelect(candidate) },
-            onDetailClick = { actions.onDetail(candidate) },
-            onThumbnailClick = { actions.onThumbnail(candidate) },
-            // 헤더와 첫 행 사이만 블록 간격(14)이고, 행끼리는 8 이다.
-            modifier = if (index == 0) Modifier.padding(top = BlockGap) else Modifier
-        )
+        CandidateCardSlice(first = index == 0, last = index == state.candidates.lastIndex) {
+            PillCandidateRow(
+                candidate = candidate,
+                selected = candidate.pillCode == selected?.pillCode,
+                onClick = { actions.onSelect(candidate) },
+                onDetailClick = { actions.onDetail(candidate) },
+                onThumbnailClick = { actions.onThumbnail(candidate) }
+            )
+            // 마지막 행 아래에는 긋지 않는다 — 카드 테두리와 겹쳐 두 줄로 보인다.
+            if (index != state.candidates.lastIndex) {
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
+            }
+        }
+    }
+
+    candidateListTail(state = state, selected = selected, actions = actions)
+}
+
+/**
+ * 목록 **끝**에 붙는 것들 — 이어서 조회 실패 · 받는 중 · 200개+ 안내 · 선택 안내.
+ *
+ * 넷은 서로 배타적이지 않다(잘렸는데 아직 안 고른 경우가 그렇다). 본문에 섞어 두면 어느
+ * 것이 어느 조건에 뜨는지가 안 보여 갈라 뒀다.
+ */
+private fun LazyListScope.candidateListTail(
+    state: CandidateUiState,
+    selected: PillCandidate?,
+    actions: CandidateActions
+) {
+    // 이어서 조회가 실패했으면 목록 끝에 한 줄만 둔다 — 보이는 후보는 그대로다(NM-529).
+    if (state.loadMoreFailed) {
+        item { CandidateLoadMoreFailed(onRetry = actions.onRetryLoadMore) }
     }
 
     if (state.loadingMore) {
@@ -279,9 +406,23 @@ private fun LazyListScope.candidateSection(
                 CircularProgressIndicator(
                     color = NmColor.Primary.C500,
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
+        }
+    }
+
+    // 200 에서 잘렸으면 목록 끝에서 한 번 더 알린다. 헤더의 `200개+` 는 들어올 때 한 번
+    // 보고 지나치는데, 끝까지 훑고도 못 찾은 사람에게는 **여기가 할 말을 할 자리**다.
+    if (state.truncated && !state.hasMore) {
+        item {
+            Text(
+                text = "찾는 약이 없다면 조건을 더 입력해 주세요",
+                style = SelectHint,
+                color = NmTheme.semanticColors.textTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            )
         }
     }
 
@@ -346,3 +487,22 @@ private val SelectHint = NmTypography.body.copy(fontSize = 13.sp)
 private val BlockGap = 6.dp
 
 private val Disclaimer = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Normal)
+
+/**
+ * 헤더에 적을 말.
+ *
+ * 개수를 **아는 때만** 적는다. 숫자를 붙이면 그 자체가 단언이라, 모르는 상태에서 0 을
+ * 적으면 「조건에 맞는 약이 없다」가 된다.
+ *
+ * | | |
+ * |---|---|
+ * | 조회 전 | 「후보」 — 아직 아무것도 안 물었다 |
+ * | **조회 실패** | 「후보」 — 못 물어봤지 없는 게 아니다 |
+ * | 0개 | 「후보 0개」 — 물어봤고 정말 없다 |
+ * | 200 에서 잘림 | 「후보 200개+」 |
+ */
+private fun CandidateUiState.headerLabel(): String = when {
+    !searched || failed -> "후보"
+    truncated -> "후보 ${ids.size}개+"
+    else -> "후보 ${ids.size}개"
+}

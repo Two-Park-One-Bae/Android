@@ -1,0 +1,10 @@
+# 릴리스에 들어가는 온디바이스 모델 — `md5sum` 형식(해시 두 칸 이름).
+#
+# 정본은 ML 저장소의 DVC 다. DVC 리모트가 내용주소 저장소라 **해시가 곧 객체 키**여서
+# (`s3://nursemate-ml-models/files/md5/<앞2>/<나머지>`), 이 파일 하나로 받는 경로와 검사가
+# 동시에 정해진다. Gradle 가드와 CI 가 **같은 파일**을 읽으므로 둘이 갈라질 수 없다.
+#
+# 절차는 docs/RELEASE.md 「검출 모델」.
+cb20efc7d45a9104226fd86a1c019885  rfdetr_seg_small.onnx
+8e574cd5f9db305414f836ccdf20ee2e  reader_ep60_s1.onnx
+b87ab569eb08dbcd7ee4823a6254b9d3  mark_species_fp16.onnx

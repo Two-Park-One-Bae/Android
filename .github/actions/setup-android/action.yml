@@ -1,0 +1,68 @@
+name: Android 빌드 환경
+description: |
+  `ci.yml` 과 `release-smoke.yml` 이 공통으로 쓰는 셋업 — JDK · Gradle · secrets.properties ·
+  google-services.json. 두 워크플로에 복사본으로 두었더니 한쪽만 고쳐 갈라질 자리가 됐다.
+
+# ⚠️ **`actions/checkout` 은 여기 없다.** 이 파일 자체가 저장소 안에 있어서, 체크아웃이
+# 끝난 뒤라야 `uses: ./.github/actions/setup-android` 가 해석된다. 부르는 쪽에 남긴다.
+#
+# ⚠️ **시크릿은 입력으로 받는다.** composite action 안에서는 `secrets` 컨텍스트를 쓸 수 없다.
+# 값은 그대로 마스킹된다.
+inputs:
+  base-url-dev:
+    description: secrets.properties 의 BASE_URL_DEBUG
+    required: true
+  base-url-prod:
+    description: secrets.properties 의 BASE_URL_RELEASE
+    required: true
+  google-services-debug:
+    description: app/src/debug/google-services.json (base64)
+    required: true
+  google-services-release:
+    description: app/src/release/google-services.json (base64)
+    required: true
+  airbridge-app-name:
+    description: secrets.properties 의 AIRBRIDGE_APP_NAME (없으면 유입 측정을 건너뛴다)
+    required: false
+    default: ''
+  airbridge-app-token:
+    description: secrets.properties 의 AIRBRIDGE_APP_TOKEN (없으면 유입 측정을 건너뛴다)
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - uses: gradle/actions/setup-gradle@v6
+
+    - name: secrets.properties 생성
+      shell: bash
+      env:
+        BASE_URL_DEBUG: ${{ inputs.base-url-dev }}
+        BASE_URL_RELEASE: ${{ inputs.base-url-prod }}
+        AIRBRIDGE_APP_NAME: ${{ inputs.airbridge-app-name }}
+        AIRBRIDGE_APP_TOKEN: ${{ inputs.airbridge-app-token }}
+      run: |
+        printf 'BASE_URL_DEBUG=%s\nBASE_URL_RELEASE=%s\n' \
+          "$BASE_URL_DEBUG" "$BASE_URL_RELEASE" > secrets.properties
+        # 비어 있어도 그대로 쓴다 — 앱이 빈 토큰을 보고 초기화를 건너뛴다(NM-543).
+        printf 'AIRBRIDGE_APP_NAME=%s\nAIRBRIDGE_APP_TOKEN=%s\n' \
+          "$AIRBRIDGE_APP_NAME" "$AIRBRIDGE_APP_TOKEN" >> secrets.properties
+
+    # ⚠️ debug·release 를 **각각** 만든다. 플러그인이 파일 안의 패키지명을 검증하는데
+    #    debug 는 app.nursemate.debug, release 는 app.nursemate 라 한 파일을 복사해
+    #    쓰면 빌드가 죽는다. 파일이 아예 없어도 하드 실패한다(플러그인 기본 동작).
+    - name: google-services.json 생성
+      shell: bash
+      env:
+        GS_DEBUG: ${{ inputs.google-services-debug }}
+        GS_RELEASE: ${{ inputs.google-services-release }}
+      run: |
+        mkdir -p app/src/debug app/src/release
+        printf '%s' "$GS_DEBUG"   | base64 -d > app/src/debug/google-services.json
+        printf '%s' "$GS_RELEASE" | base64 -d > app/src/release/google-services.json

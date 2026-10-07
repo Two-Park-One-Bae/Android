@@ -8,9 +8,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -37,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -292,11 +297,26 @@ private fun MemoField(initial: String, onSave: (String) -> Unit) {
     val colors = NmTheme.semanticColors
     var value by remember { mutableStateOf(initial) }
     val focusRequester = remember { FocusRequester() }
+    val bringIntoView = remember { BringIntoViewRequester() }
+
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    // ⚠️ 포커스만으로는 부족하다.
+    //
+    // 포커스를 잡는 **그 순간에는 키보드가 아직 안 떠 있어** 목록이 제 높이고, 칸은 이미
+    // 보이는 자리에 있다 — Compose 는 올릴 이유를 못 찾는다. 그다음 키보드가 올라와
+    // 목록이 줄어들면(`TimerListScreen` 의 `imePadding`) 칸이 아래로 밀려 잘리는데,
+    // 그때는 아무도 다시 스크롤하지 않는다.
+    //
+    // 그래서 키보드 높이가 **바뀔 때마다** 다시 올린다. 애니메이션 도중에도 여러 번 불려
+    // 칸이 끝까지 따라 올라온다.
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(imeBottom) { bringIntoView.bringIntoViewSafely() }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoView)
             .clip(ActionShape)
             .background(NmColor.Neutral.C50, ActionShape)
             .border(MemoStroke, NmColor.Primary.C500, ActionShape)
@@ -421,3 +441,13 @@ private val ActionStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight
 private val CompleteStyle = NmTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
 private val RingText = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
 private val RingTextSmall = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+/**
+ * 화면이 이미 사라졌으면 조용히 넘어간다.
+ *
+ * 키보드가 내려가는 중에 사용자가 메모를 닫으면 노드가 먼저 떨어져 나가, 올리려던 요청이
+ * 갈 곳을 잃는다. 메모를 닫는 흔한 동작이라 예외로 세울 일이 아니다.
+ */
+private suspend fun BringIntoViewRequester.bringIntoViewSafely() {
+    runCatching { bringIntoView() }
+}

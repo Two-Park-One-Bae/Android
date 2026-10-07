@@ -1,87 +1,93 @@
 package app.nursemate.pill
 
 import app.nursemate.core.model.DividingLine
-import app.nursemate.core.model.PillAttribute
-import app.nursemate.core.model.PillFace
+import app.nursemate.core.model.ImprintSource
 import app.nursemate.core.model.PillFaceRequest
 
 /**
- * 한 면의 각인 입력값 — 화면 전용 모델.
+ * 한 면의 조건 — 화면 전용 모델.
  *
- * ## 왜 [PillFace] 를 그대로 쓰지 않는가
- * 도메인 [PillFace] 는 "없다"만 말할 수 있고 **"아직 안 정했다"** 를 담지 못한다. 그런데 이 화면의
- * 입력은 전부 하드 필터라 둘을 구분하지 못하면 사용자가 손대지도 않은 조건으로 후보가 걸러진다.
- * 그래서 '해당 없음'([blank]) 을 따로 들고, 내보낼 때만 두 도메인 타입으로 갈라 준다.
+ * ## 세 칸이 모두 **3단**이다 (NM-516)
+ * 각인·구분선·마크가 각각 「전체 · 없음 · 값」을 갖는다. 정본이 세 칸을 같은 드롭다운으로
+ * 그리는 이유이기도 하다.
  *
- * @param blank 이 면에는 아무것도 없다(정본 '해당 없음'). 켜면 아래 입력은 감춘다.
- * @param hasMark 마크가 **있다**. 꺼져 있는 것은 "없다"가 아니라 "조건으로 걸지 않는다"이다 —
- *                정본 라벨이 '마크 있음' 이라 체크가 존재의 주장이고, 해제는 주장의 부재다.
- *                마크가 없음을 조건으로 걸려면 면 전체를 [blank] 로 둔다.
+ * | | 전체 | 없음 | 값 |
+ * |---|---|---|---|
+ * | [imprint] | `null` | `""` | `"ALX3"` |
+ * | [dividingLine] | `null` | [DividingLine.NONE] | `PLUS`·`MINUS` |
+ * | [hasMark] | `null` | `false` | `true` |
+ *
+ * **전체와 없음은 정반대다.** 전체는 「이 항으로 자르지 마라」이고, 없음은 「이게 없는 알약만」
+ * 이라는 하드 조건이다. 계약의 `PillFaceRequest` 가 그렇게 읽는다. 각인 칸을 비우고 확인하는
+ * 것은 **없음**이고, 조건을 푸는 것은 드롭다운의 **전체**다 — 헷갈리게 만들면 사용자가
+ * 무심코 정답을 지운다.
+ *
+ * ## 모델이 「없음」을 말하지 않는다
+ * 셋 다 모델은 값 아니면 `null` 만 낸다. 못 읽은 것을 「없음」으로 보내면 정답 약이 통째로
+ * 빠진다(`MarkPresence` · `ImprintReader`). 「없음」은 사용자가 직접 고를 때만이다.
+ *
+ * @param imprintSource [imprint] 의 출처. 값이 있으면 **필수**다 — 서버가 `MODEL` 과 `USER` 를
+ *   다르게 매칭한다(NM-517). 한 글자라도 고치면 면 전체가 `USER` 다
+ * @param markEmbedding 모델이 이 면에서 뽑은 마크 임베딩(base64 fp16 8×768). **조건이 아니다** —
+ *   사용자가 무엇을 고르든 사진에서 나온 값 그대로 가고, 서버가 정렬에만 쓴다
+ * @param species 마크 종 번호. 사람에게 보여 줄 식약처 그림을 고르는 데 쓴다. 0 이면 못 읽었다
  */
 data class FaceInput(
-    val blank: Boolean = false,
-    val imprint: String = "",
+    val imprint: String? = null,
+    val imprintSource: ImprintSource? = null,
     val dividingLine: DividingLine? = null,
-    val hasMark: Boolean = false
+    val hasMark: Boolean? = null,
+    val markEmbedding: String? = null,
+    val species: Int = 0
 ) {
-    private val untouched: Boolean
-        get() = imprint.isBlank() && dividingLine == null && !hasMark
+    /** 후보를 **자르는** 조건이 하나라도 있는가. 임베딩은 정렬 재료라 세지 않는다. */
+    val hasCondition: Boolean
+        get() = imprint != null || dividingLine != null || hasMark != null
 
-    /** 카드의 표기값 줄이 읽는 값. 아무것도 안 정했으면 null 이라 '미인식'으로 보인다. */
-    fun toFace(): PillFace? = when {
-        // 셋 다 비운 [PillFace] = 각인·구분선 없음 + 마크 없음. 카드가 '없음'으로 읽는다.
-        blank -> PillFace()
-
-        untouched -> null
-
-        else -> PillFace(
-            imprint = imprint.ifBlank { null },
-            dividingLine = dividingLine,
-            hasMark = hasMark
-        )
-    }
+    /**
+     * 사용자가 각인을 손댔다고 표시한다.
+     *
+     * 값이 같아도 사용자가 입력했으면 `USER` 다 — 계약이 「초기 상태와 명시적 원복만 모델값」
+     * 으로 정했다. 되돌리기만 [ImprintSource.MODEL] 로 되돌린다.
+     */
+    fun typed(text: String?): FaceInput = copy(
+        imprint = text,
+        imprintSource = text?.let { ImprintSource.USER }
+    )
 
     /**
      * 후보 검색의 면 조건.
      *
-     * ⚠️ [PillFaceRequest] 는 null 이 **"조건에서 빼라"** 다. 그래서 '해당 없음'은 null 이 아니라
-     * 빈 문자열·NONE·false 를 **명시**해야 한다 — null 로 보내면 "각인 없는 알약"을 찾으려던
-     * 조건이 통째로 사라진다.
+     * 보낼 것이 하나도 없으면 null 이다 — 면 자체를 요청에서 뺀다.
      */
-    fun toRequest(): PillFaceRequest? = when {
-        blank -> PillFaceRequest(imprint = "", dividingLine = DividingLine.NONE, hasMark = false)
-
-        untouched -> null
-
-        else -> PillFaceRequest(
-            imprint = imprint.ifBlank { null },
-            dividingLine = dividingLine,
-            hasMark = hasMark.takeIf { it }
-        )
-    }
+    fun toRequest(): PillFaceRequest? = PillFaceRequest(
+        imprint = imprint,
+        // 각인이 있으면 출처가 **필수**다. 빠지면 서버가 400 INVALID_REQUEST 를 준다.
+        imprintSource = imprintSource?.takeIf { imprint != null },
+        dividingLine = dividingLine,
+        hasMark = hasMark,
+        markEmbedding = markEmbedding
+    ).takeIf { !it.isEmpty() }
 }
 
 /** 앞뒤 한 쌍. 앞면은 **사진에 찍힌 면** 기준이다(spec §수정·후보 선택). */
-data class FaceInputs(val front: FaceInput = FaceInput(), val back: FaceInput = FaceInput()) {
-    companion object {
-        /**
-         * 서버가 뽑아 준 값에서 시작한다.
-         *
-         * MVP 는 서버가 각인을 뽑지 않아 늘 빈 값이지만(spec §로드맵 — 각인 자동은 V1),
-         * 여기서 읽어 두면 나중에 서버가 채워 보내도 화면을 고칠 게 없다.
-         */
-        fun from(attribute: PillAttribute) = FaceInputs(
-            front = attribute.front.toInput(),
-            back = attribute.back.toInput()
-        )
+data class FaceInputs(val front: FaceInput = FaceInput(), val back: FaceInput = FaceInput())
 
-        private fun PillFace?.toInput() = FaceInput(
-            imprint = this?.imprint.orEmpty(),
-            dividingLine = this?.dividingLine,
-            hasMark = this?.hasMark == true
-        )
-    }
-}
+/**
+ * 온디바이스가 읽은 값을 조건 칸의 **초기값**으로 옮긴다.
+ *
+ * 뒷면은 사진이 없어 읽을 것이 없다 — 「전체」로 남는다.
+ */
+fun FaceReading.toInputs(): FaceInputs = FaceInputs(
+    front = FaceInput(
+        imprint = imprint,
+        // 모델이 읽은 값이라 MODEL 이다. 사용자가 손대면 그때 USER 가 된다.
+        imprintSource = imprint?.let { ImprintSource.MODEL },
+        hasMark = hasMark,
+        markEmbedding = markEmbedding,
+        species = species
+    )
+)
 
 /** 어느 면을 만지고 있는가. 기호 바가 어느 칸에 넣을지 이 값으로 고른다. */
 enum class FaceSide { Front, Back }

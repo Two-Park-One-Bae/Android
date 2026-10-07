@@ -4,9 +4,11 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.PillRepository
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.model.PillConditions
+import app.nursemate.core.model.PillFaceRequest
 import app.nursemate.core.network.api.PillCandidatesRequest
+import app.nursemate.core.vision.mark.MarkReader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -20,18 +22,29 @@ import kotlinx.coroutines.launch
  * @param candidates 조건에 맞는 후보. **빈 목록은 오류가 아니다** — 조건이 좁아 아무것도
  *                   걸리지 않은 정상 응답이다(spec §후보 0개).
  * @param searched 한 번이라도 조회했는가. 조회 전의 빈 목록과 "0개"를 구분한다.
- * @param nextCursor 다음 장 커서. null 이면 더 없다.
- * @param loadingMore 다음 장을 받는 중. 첫 조회([loading])와 구분해야 목록을 지우지 않는다.
+ * @param ids 서버가 정렬한 **전체 순서**(최대 200). 21번째부터의 상세는 이 순서로 이어 받는다
+ * @param truncated 하드 필터를 통과한 후보가 200개를 넘어 뒤가 잘렸는가 — 목록 끝 안내의 기준
+ * @param loadingMore 뒤쪽을 받는 중. 첫 조회([loading])와 구분해야 목록을 지우지 않는다.
  */
 data class CandidateUiState(
     val candidates: List<PillCandidate> = emptyList(),
+    val ids: List<String> = emptyList(),
     val loading: Boolean = false,
     val searched: Boolean = false,
     val failed: Boolean = false,
-    val nextCursor: String? = null,
-    val loadingMore: Boolean = false
+    val truncated: Boolean = false,
+    val loadingMore: Boolean = false,
+    /**
+     * 이어서 조회가 실패했다 — **조회 실패와 다르다**(NM-529).
+     *
+     * 이미 보이는 후보는 그대로 두고 목록 끝에만 알린다. 그리고 **자동으로 다시 시도하지
+     * 않는다** — 목록 끝에 닿을 때마다 저절로 재요청하면 끊긴 망에서 같은 실패를 쉬지 않고
+     * 반복한다.
+     */
+    val loadMoreFailed: Boolean = false
 ) {
-    val hasMore: Boolean get() = nextCursor != null
+    /** 아직 상세를 못 받은 후보가 남아 있는가. 커서가 아니라 **받은 개수**로 센다. */
+    val hasMore: Boolean get() = candidates.size < ids.size
 }
 
 /**
@@ -53,18 +66,14 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     private var searchJob: Job? = null
     private var moreJob: Job? = null
 
-    /** 다음 장을 받으려면 그때 쓴 조건이 그대로 필요하다 — 커서만으로는 서버가 뭘 찾는지 모른다. */
-    private var lastRequest: PillCandidatesRequest? = null
-
-    fun search(attribute: PillAttribute?, faces: FaceInputs = FaceInputs()) {
+    fun search(conditions: PillConditions?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
         moreJob?.cancel()
 
         // ⚠️ 조건이 하나도 없으면 **부르지 않는다.** 서버가 400 을 주고 화면에는 오류가 뜨는데,
         //    사용자는 아직 아무것도 입력하지 않았을 뿐이다(수동 추가 진입 직후 — 정본 ⑧-h).
-        val request = attribute?.toRequest(faces)?.takeIf { it.hasCondition }
+        val request = conditions?.toRequest(faces)?.takeIf { it.hasCondition }
         if (request == null) {
-            lastRequest = null
             _state.value = CandidateUiState()
             return
         }
@@ -76,83 +85,136 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
         searchJob = viewModelScope.launch {
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
-            lastRequest = request
 
             pillRepository.candidates(request)
-                .onSuccess { page ->
-                    Log.i(
-                        TAG,
-                        "후보 ${page.candidates.size}개" +
-                            page.candidates.take(2).joinToString { " | ${it.pillCode} ${it.pillThumbnailUrl}" }
-                    )
+                .onSuccess { result ->
+                    Log.i(TAG, "후보 ${result.ids.size}개 (상세 ${result.candidates.size}) 잘림=${result.truncated}")
                     _state.value = CandidateUiState(
-                        candidates = page.candidates,
+                        candidates = result.candidates,
+                        ids = result.ids,
                         loading = false,
                         searched = true,
-                        nextCursor = page.nextCursor
+                        truncated = result.truncated
                     )
                 }
                 .onFailure { throwable ->
                     Log.w(TAG, "후보 조회 실패", throwable)
-                    _state.update { it.copy(loading = false, searched = true, failed = true) }
+                    // 목록을 **지운다**. 조건이 바뀌어 요청한 것이라, 남겨 두면 지금 조건과
+                    // 맞지 않는 후보를 보여 주게 된다(NM-529).
+                    _state.value = CandidateUiState(searched = true, failed = true)
                 }
         }
     }
 
+    /** 사용자가 목록 끝의 「다시 시도」를 눌렀다. 실패 표시를 지우고 같은 구간을 다시 부른다. */
+    fun retryLoadMore() {
+        _state.update { it.copy(loadMoreFailed = false) }
+        loadMore()
+    }
+
     /**
-     * 다음 장을 이어 붙인다.
+     * 아직 상세를 못 받은 후보를 이어 붙인다 (NM-489).
      *
-     * 목록 끝에 닿을 때마다 불리므로 **이미 받고 있으면 무시한다** — 안 그러면 같은 장을
-     * 여러 번 받아 후보가 중복된다.
+     * 목록 끝에 닿을 때마다 불리므로 **이미 받고 있으면 무시한다.**
+     *
+     * ## 순서는 우리가 잡는다
+     * 서버 응답은 순서를 보장하지 않으므로 [CandidateUiState.ids] 순서대로 다시 배치한다.
+     * `missing`(데이터 갱신으로 사라진 품목)은 **목록에서 뺀다** — 로딩 중으로 남기면
+     * 영원히 안 채워진다.
      */
     fun loadMore() {
-        val request = lastRequest
-        val cursor = _state.value.nextCursor
-        // 조건이 없거나(아직 조회 전) 다음 장이 없거나 이미 받는 중이면 아무것도 하지 않는다.
-        if (request == null || cursor == null || _state.value.loadingMore) return
+        val current = _state.value
+        // ⚠️ 한 번 실패하면 **사용자가 다시 시도를 누를 때까지** 부르지 않는다. 목록 끝에
+        //    닿을 때마다 저절로 재요청하면 끊긴 망에서 같은 실패를 쉬지 않고 반복한다.
+        if (!current.hasMore || current.loadingMore || current.loadMoreFailed) return
+
+        val next = current.ids.drop(current.candidates.size).take(PAGE_SIZE)
+        if (next.isEmpty()) return
 
         moreJob = viewModelScope.launch {
             _state.update { it.copy(loadingMore = true) }
-            pillRepository.candidates(request.copy(cursor = cursor))
+            pillRepository.candidateItems(next)
                 .onSuccess { page ->
-                    _state.update {
-                        it.copy(
-                            candidates = it.candidates + page.candidates,
-                            nextCursor = page.nextCursor,
-                            loadingMore = false
+                    _state.update { state ->
+                        val byCode = page.items.associateBy { it.pillCode }
+                        // ids 순서대로 꽂는다. 없는 것(missing)은 그대로 빠진다.
+                        val added = next.mapNotNull(byCode::get)
+                        state.copy(
+                            candidates = state.candidates + added,
+                            // 사라진 품목을 ids 에서도 지운다 — 안 그러면 hasMore 가 영영 참이다.
+                            ids = state.ids - page.missing.toSet(),
+                            loadingMore = false,
+                            loadMoreFailed = false
                         )
                     }
                 }
                 .onFailure { throwable ->
-                    Log.w(TAG, "다음 후보 장 실패", throwable)
-                    // 목록은 그대로 두고 표시만 끈다 — 받아 둔 후보까지 잃을 이유가 없다.
-                    _state.update { it.copy(loadingMore = false) }
+                    Log.w(TAG, "후보 카드 이어받기 실패", throwable)
+                    // 목록은 그대로 두고 끝에만 알린다 — 받아 둔 후보까지 잃을 이유가 없다.
+                    _state.update { it.copy(loadingMore = false, loadMoreFailed = true) }
                 }
         }
     }
 
     private companion object {
         const val TAG = "NM393"
+
+        /**
+         * 한 번에 이어받을 후보 카드 수 — **50** 이다(NM-517).
+         *
+         * 첫 응답이 20개를 주길래 같은 단위로 맞춰 뒀었는데, 그 20 은 서버가 **한 왕복에
+         * 첫 화면을 그리라고** 끼워 준 수지 이어받기 단위가 아니다. 계약이 `items` 를
+         * 1~50 으로 열어 뒀으니 끝까지 쓴다 — 200개를 훑는 데 왕복이 10번에서 4번으로 준다.
+         */
+        const val PAGE_SIZE = 50
         const val DEBOUNCE_MS = 250L
     }
 }
 
 /**
- * 속성·각인 → 후보 검색 조건.
+ * 사용자 조건 → 후보 검색 요청.
+ *
+ * ⚠️ **모델값은 여기 들어오지 않는다.** [PillConditions] 에 담긴 것은 사용자가 고른 값뿐이고,
+ * 모델이 본 색·모양·제형은 `attributeToken` 하나로 전달돼 **정렬에만** 쓰인다.
  *
  * 면 조건은 [FaceInput.toRequest] 가 만든다 — 요청의 null 이 "조건 제외"라 '없음'을 걸려면
  * 값을 명시해야 하고, 그 판단은 화면 입력값을 봐야 할 수 있는 일이다.
  */
-private fun PillAttribute.toRequest(faces: FaceInputs) = PillCandidatesRequest(
-    colors = colors.orEmpty(),
-    isTransparent = isTransparent.takeIf { it },
-    shape = shape,
-    formulation = formulation,
-    front = faces.front.toRequest(),
-    back = faces.back.toRequest()
-)
+internal fun PillConditions.toRequest(faces: FaceInputs): PillCandidatesRequest {
+    val front = faces.front.toRequest()
+    val back = faces.back.toRequest()
+    return PillCandidatesRequest(
+        attributeToken = attributeToken,
+        // 어느 면이든 임베딩이 있으면 **필수**다. 빠지면 400 INVALID_REQUEST 이고,
+        // 보내도 서버가 모르는 버전이면 임베딩 항만 빠진다 — 에러가 아니다(NM-533).
+        markEmbeddingModel = MarkReader.MODEL_VERSION
+            .takeIf { front?.markEmbedding != null || back?.markEmbedding != null },
+        colors = colors,
+        shape = shape,
+        formulation = formulation,
+        front = front,
+        back = back
+    )
+}
 
-/** 서버에 물어볼 게 하나라도 있는가. 다 비어 있으면 400 이라 부르지 않는다. */
-private val PillCandidatesRequest.hasCondition: Boolean
-    get() = colors.isNotEmpty() || isTransparent != null || shape != null ||
-        formulation != null || front != null || back != null
+/**
+ * 서버에 물어볼 게 하나라도 있는가 — 「입력 전」을 가르는 기준이다(NM-529).
+ *
+ * 토큰만 있어도 부를 값어치가 있다 — 조건 없이도 모델값 정렬로 후보가 나온다.
+ *
+ * ## ⚠️ 마크 임베딩은 **입력으로 치지 않는다**
+ * 면이 비어 있지 않다고 세면 안 된다. 추출 실패 알약도 사진은 있어 임베딩은 딸려 오는데,
+ * 그걸 입력으로 치면 **사용자가 아무것도 넣지 않았는데 후보 200개가 쏟아진다.** 정본은 그
+ * 자리에 「속성·각인을 입력하면 후보가 나타나요」를 둔다. iOS 도 같은 규칙이다
+ * (`PillCandidateQuery.isWithoutInput`).
+ *
+ * 임베딩은 **자르지도 않고 줄만 세우는** 값이라, 그것만으로 띄운 200개는 사용자가 보기엔
+ * 아무 근거 없는 목록이다.
+ */
+internal val PillCandidatesRequest.hasCondition: Boolean
+    get() = attributeToken != null || colors.isNotEmpty() || shape != null ||
+        formulation != null || front.hasFilter || back.hasFilter
+
+/** 그 면이 후보를 **자르는가**. 임베딩만 실린 면은 아니다. */
+internal val PillFaceRequest?.hasFilter: Boolean
+    get() = this != null && (imprint != null || dividingLine != null || hasMark != null)
