@@ -41,6 +41,18 @@ fun com.android.build.api.dsl.ApplicationBuildType.kakaoAppKey(key: String?) {
     manifestPlaceholders["kakaoScheme"] = if (value.isEmpty()) "kakao-unset" else "kakao$value"
 }
 
+/**
+ * Airbridge 앱 이름·SDK 토큰을 BuildConfig 에 넣는다 (NM-543).
+ *
+ * 카카오 키와 같은 패턴이다 — 비밀값은 `secrets.properties` 에서만 오고 저장소에 남지 않는다.
+ * **토큰이 비면 앱이 초기화를 건너뛴다**(`NurseMateApplication`). 그래서 비밀값이 없는 환경
+ * (PR CI · 외부 기여자)에서도 빌드는 통과하고, 내부 debug 빌드도 같은 길로 측정에서 빠진다.
+ */
+fun com.android.build.api.dsl.ApplicationBuildType.airbridge(appName: String?, token: String?) {
+    buildConfigField("String", "AIRBRIDGE_APP_NAME", "\"${appName.orEmpty()}\"")
+    buildConfigField("String", "AIRBRIDGE_APP_TOKEN", "\"${token.orEmpty()}\"")
+}
+
 android {
     namespace = "app.nursemate"
 
@@ -63,6 +75,10 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             kakaoAppKey(secret("KAKAO_APP_KEY_DEBUG"))
+            // ⚠️ debug 는 **일부러 비워 둔다**(NM-543 ⑨). 내부 사용이 유입 지표에 섞이면
+            //    광고 성과가 부풀려진다 — Firebase 와 달리 여기는 프로젝트가 하나뿐이라
+            //    패키지가 갈려도 지표가 갈리지 않는다.
+            airbridge(appName = null, token = null)
         }
 
         release {
@@ -73,6 +89,7 @@ android {
                 "proguard-rules.pro"
             )
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
+            airbridge(secret("AIRBRIDGE_APP_NAME"), secret("AIRBRIDGE_APP_TOKEN"))
 
             // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
             // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
@@ -113,6 +130,7 @@ dependencies {
 
     // 카카오 로그인 — 액세스 토큰까지만 여기서 받고, Firebase 교환은 서버가 한다.
     implementation(libs.kakao.user)
+    implementation(libs.airbridge.sdk)
 
     // 촬영 화면(① 촬영). PreviewView + ImageCapture 만 쓴다.
     implementation(libs.androidx.camera.core)

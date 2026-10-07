@@ -39,6 +39,8 @@ firebaseCrashlyticsPlugin = "3.0.8"
 androidxCredentials = "1.6.0"
 googleid = "1.2.0"
 kakaoSdk = "2.25.0"
+# 유입 경로 측정 (NM-543). restricted 아닌 일반 SDK 다.
+airbridge = "4.11.3"
 
 # 낱알 이미지 로딩
 coil = "3.3.0"
@@ -144,6 +146,10 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 # 카카오 로그인. Firebase 비네이티브라 서버가 Custom Token 으로 바꿔 준다.
 # v2-user 만 넣는다 — v2-all 은 톡·스토리·내비까지 딸려 온다.
 kakao-user = { group = "com.kakao.sdk", name = "v2-user", version.ref = "kakaoSdk" }
+
+# 인플루언서 게시글·Meta 광고의 유입 경로 측정 (NM-543).
+# 제품 이벤트는 Firebase 가 맡는다 — 이쪽으로는 가입 하나만 보낸다.
+airbridge-sdk = { group = "io.airbridge", name = "sdk-android", version.ref = "airbridge" }
 
 # 낱알 이미지. 네트워크는 OkHttp 로 갈아 끼워 인터셉터 없는 클라이언트를 쓴다.
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }

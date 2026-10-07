@@ -225,7 +225,8 @@ private fun NmNavHost(
                 onToggleAll = viewModel::toggleAll,
                 // 저장 응답의 회원 정보를 셸로 올린다. onboardingRequired 가 false 로 바뀌면서
                 // 진입 상태가 홈으로 넘어간다 — 화면이 스스로 이동하지 않는다.
-                onSubmit = { viewModel.submit(onUserUpdated) },
+                // 개정 재동의는 가입이 아니다 — 최초 동의일 때만 유입 지표로 올린다(NM-543).
+                onSubmit = { viewModel.submit(firstTime = !needsReconsent, onAgreed = onUserUpdated) },
                 onCancel = viewModel::cancel,
                 onOpenPolicy = { context.openPolicy(it.policyUrl) },
                 onRetry = viewModel::load,

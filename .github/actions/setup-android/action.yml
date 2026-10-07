@@ -21,6 +21,14 @@ inputs:
   google-services-release:
     description: app/src/release/google-services.json (base64)
     required: true
+  airbridge-app-name:
+    description: secrets.properties 의 AIRBRIDGE_APP_NAME (없으면 유입 측정을 건너뛴다)
+    required: false
+    default: ''
+  airbridge-app-token:
+    description: secrets.properties 의 AIRBRIDGE_APP_TOKEN (없으면 유입 측정을 건너뛴다)
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -37,9 +45,14 @@ runs:
       env:
         BASE_URL_DEBUG: ${{ inputs.base-url-dev }}
         BASE_URL_RELEASE: ${{ inputs.base-url-prod }}
+        AIRBRIDGE_APP_NAME: ${{ inputs.airbridge-app-name }}
+        AIRBRIDGE_APP_TOKEN: ${{ inputs.airbridge-app-token }}
       run: |
         printf 'BASE_URL_DEBUG=%s\nBASE_URL_RELEASE=%s\n' \
           "$BASE_URL_DEBUG" "$BASE_URL_RELEASE" > secrets.properties
+        # 비어 있어도 그대로 쓴다 — 앱이 빈 토큰을 보고 초기화를 건너뛴다(NM-543).
+        printf 'AIRBRIDGE_APP_NAME=%s\nAIRBRIDGE_APP_TOKEN=%s\n' \
+          "$AIRBRIDGE_APP_NAME" "$AIRBRIDGE_APP_TOKEN" >> secrets.properties
 
     # ⚠️ debug·release 를 **각각** 만든다. 플러그인이 파일 안의 패키지명을 검증하는데
     #    debug 는 app.nursemate.debug, release 는 app.nursemate 라 한 파일을 복사해
