@@ -285,7 +285,11 @@ split·universal 을 가리지 않고 전부 같은 주소에서 죽어서, 어�
 undetected CPU features.` 문자열이 있는 것으로 보아, CPU 기능 감지가 실패하면 SME 미지원
 기기에서도 이 경로를 타는 구조로 보인다.
 
-## ⑨ `firebase-analytics` 는 광고 ID 권한을 몰래 끼워 넣는다
+## ⑨ 광고 ID 권한은 선언하지 않아도 병합으로 들어온다
+
+> **2026-10-08 — 결론이 뒤집혔다.** 아래는 `0.2.2` 에서 권한을 **뺀** 사정이고, NM-543 에서
+> 다시 **되살렸다.** 사건은 그대로 두고 결말만 아래 「되살렸다」에 이어 적는다 —
+> 막혔던 경위를 지우면 다음에 같은 자리에서 또 막힌다.
 
 **무엇이.** `0.2.2` 를 알파에 올렸더니 게시 개요가 **검토 전송을 막았다.**
 
@@ -301,28 +305,29 @@ grep -oE 'android:name="[^"]*permission[^"]*"' \
   | sort -u
 ```
 
-**선언이 아니라 제거를 골랐다.** 개인정보처리방침 3항이 「광고 식별자(IDFA) 및 광고·추적 목적의
-데이터」를 수집하지 않는다고 못박았고, 데이터 보안 신고에서도 「기기 또는 기타 ID」를 선택하지
-않았다. 권한만 남기면 공개한 약속과 실제가 어긋난다.
-
-```xml
-<manifest xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
-```
-
 Privacy Sandbox 쪽 둘은 Play 의 선언 요구를 촉발하지 않지만, 남기면 **스토어에 광고 관련
-권한이 보인다** — 광고를 쓰지 않는다고 공개한 앱에서 설명할 수 없다.
+권한이 보인다**. Airbridge 도 Attribution Reporting API 를 쓰지 않으므로 **이 둘은 계속 뺀다.**
 
-**확인.** Analytics 는 광고 ID 없이도 동작한다(앱 인스턴스 ID 로 센다).
+**되살렸다 (NM-543).** 인플루언서·Meta 광고의 유입 경로를 Airbridge 로 재게 됐는데,
+**광고 ID 없이는 Meta 광고 유입을 기기 단위로 확인할 수 없다.** 그래서 `AD_ID` 의
+`tools:node="remove"` 를 지웠다. 지금은 `firebase-analytics` 와 Airbridge 둘이 병합한다.
+
+⚠️ **다시 빼지 말 것.** 광고를 띄우지도 않는데 Play 가 선언을 요구하니 빼고 싶어지는데,
+빼면 **Airbridge 가 GAID 를 못 읽어 유입이 조용히 끊긴다** — 빌드도 로그도 멀쩡하고 지표만
+비어 간다. 매니페스트 주석도 같은 말을 한다.
+
+⚠️ 되살리는 것은 **한 묶음**이다 — 셋 중 하나만 바꾸면 공개한 약속과 실제가 어긋난다.
+
+1. Play Console 광고 ID 선언을 「사용함」(목적: 분석·광고 측정)으로
+2. 데이터 보안 양식에 「기기 또는 기타 ID」 수집·제3자 공유 추가
+3. 개인정보처리방침 3항 — 「광고·추적 목적의 데이터를 수집하지 않는다」를 걷어낸다
+
+**확인.** 병합 결과에 `AD_ID` 가 **있어야** 정상이다(기댓값이 0.2.2 때와 반대다).
 
 ```bash
-aapt2 dump badging app-release.apk | grep -cE "uses-permission.*(AD_ID|ADSERVICES)"   # → 0
+aapt2 dump badging app-release.apk | grep -cE "uses-permission.*AD_ID"        # → 1
+aapt2 dump badging app-release.apk | grep -cE "uses-permission.*ADSERVICES"   # → 0
 ```
-
-⚠️ **광고를 붙이게 되면** 이 줄들을 지우고 방침 3항·데이터 보안 신고·Play 광고 ID 선언을
-**함께** 고쳐야 한다. 셋 중 하나만 바꾸면 어긋난 채로 남는다.
 
 ## ⑩ R8 이 ONNX Runtime 의 Java 클래스 이름을 바꿔 알약 식별이 SIGABRT 로 죽는다
 
