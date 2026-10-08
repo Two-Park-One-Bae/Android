@@ -59,8 +59,12 @@ android {
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
-        versionCode = 11
-        versionName = "1.0.0"
+        //
+        // ⚠️ **12 를 건너뛴다.** 워치가 `1_000_000_012` 를 이미 올렸다(2026-09-24, 프로덕션
+        // 활성). 오프셋 규칙상 폰 12 는 워치 1_000_000_012 를 요구하는데 versionCode 는
+        // 재사용할 수 없다 — 폰·워치를 13 으로 함께 올려 오프셋을 지킨다.
+        versionCode = 13
+        versionName = "2.0.0"
     }
 
     buildFeatures {
