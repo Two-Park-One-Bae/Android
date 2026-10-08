@@ -49,6 +49,7 @@ coil = "3.3.0"
 onnxruntime = "1.30.0"
 opencv = "4.12.0"
 androidxExifInterface = "1.4.1"
+androidxBrowser = "1.10.0"
 
 # 테스트
 junit = "4.13.2"
@@ -73,6 +74,7 @@ androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "l
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "androidxDataStore" }
 androidx-hilt-lifecycle-viewmodel-compose = { group = "androidx.hilt", name = "hilt-lifecycle-viewmodel-compose", version.ref = "androidxHiltViewModelCompose" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "androidxNavigation" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "androidxBrowser" }
 
 # 앱 내 카메라 촬영 화면. 디자인 정본이 전체화면 뷰파인더(가이드 사각형·셔터)를 요구해서
 # 시스템 카메라 위임으로는 만들 수 없다 — spec/design/DESIGN.pen "① 촬영 (카메라)"

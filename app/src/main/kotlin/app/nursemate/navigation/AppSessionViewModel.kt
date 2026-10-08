@@ -8,6 +8,7 @@ import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.AuthSession
 import app.nursemate.core.data.auth.UserRepository
 import app.nursemate.core.data.pill.UsageHolder
+import app.nursemate.core.model.ConsentStatus
 import app.nursemate.core.model.User
 import app.nursemate.core.network.error.ApiFailure
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -93,6 +94,20 @@ class AppSessionViewModel @Inject constructor(
     val needsReconsent: StateFlow<Boolean> = currentUser
         .map { it?.needsReconsent == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * 회원의 동의 기록 — 동의 화면이 **선택 항목을 보일지** 가리는 데 쓴다(spec §선택 동의).
+     *
+     * 현재 버전에 이미 응답한 선택 항목은 다시 묻지 않는데, 그 판단에 필요한 값이 여기 있다.
+     * 동의 화면이 `GET /users/me` 를 스스로 한 번 더 받지 않도록 내려 준다
+     * ([app.nursemate.consent.ConsentViewModel.start]).
+     *
+     * [needsReconsent] 와 마찬가지로 **문구·표시**를 정하는 값이다 — 게이트는 그대로
+     * 서버의 `onboardingRequired` 가 쥔다.
+     */
+    val consents: StateFlow<List<ConsentStatus>> = currentUser
+        .map { it?.consents ?: emptyList() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val entry: StateFlow<AppEntry> =
         combine(authRepository.session, currentUser, initialLoadFailed) { session, user, failed ->

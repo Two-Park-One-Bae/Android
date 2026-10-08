@@ -34,7 +34,7 @@ import app.nursemate.timer.AlertModePicker
 import app.nursemate.ui.SystemBarIcons
 
 /**
- * 설정 — 디자인 `설정 — 타이머 섹션 (NM-308)`.
+ * 설정 — 디자인 `설정 — 타이머 섹션 (NM-308)` · `설정 — 약관 및 동의 행 (NM-548)`.
  *
  * ## 두 항목 모두 확인을 거친다
  * 로그아웃도 되돌리려면 다시 로그인해야 하고, 탈퇴는 아예 복구가 없다.
@@ -46,6 +46,7 @@ fun SettingsScreen(
     onConfirm: (SettingsConfirm) -> Unit,
     alertMode: AlertMode,
     onAlertMode: (AlertMode) -> Unit,
+    onOpenConsents: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
@@ -73,6 +74,22 @@ fun SettingsScreen(
                     style = CaptionStyle,
                     color = colors.textTertiary,
                     modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(text = "약관", style = SectionLabel, color = colors.textSecondary)
+
+                // ⚠️ 이용약관·개인정보처리방침 **링크 행을 따로 두지 않는다**(spec §약관 및 동의).
+                //    전문은 이 화면 안의 「보기」로 연다 — 설정에 링크를 또 깔면 같은 문서로 가는
+                //    길이 둘이 되고, 그중 하나(설정 쪽)에서는 동의를 바꿀 수가 없다.
+                NmListRow(
+                    icon = painterResource(R.drawable.nm_ic_file_text),
+                    title = "약관 및 동의",
+                    // 정본이 이 행만 부가 설명을 비워 뒀다.
+                    subtitle = null,
+                    iconBackground = NmColor.Primary.C50,
+                    iconTint = NmColor.Primary.C500,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { if (!state.deleting) onOpenConsents() }
                 )
 
                 Text(text = "계정", style = SectionLabel, color = colors.textSecondary)

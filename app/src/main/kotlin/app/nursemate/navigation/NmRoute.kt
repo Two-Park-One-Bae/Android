@@ -13,6 +13,13 @@ object NmRoute {
     /** 동의 온보딩 — 로그인은 됐지만 필수 동의가 남은 상태. 동의 없이 홈으로 가는 경로도 없다. */
     const val CONSENT = "consent"
 
+    /**
+     * 설정 / 약관 및 동의 — 선택 동의 철회·재동의(NM-548).
+     *
+     * 설정 탭 안에서 밀고 들어간다. 탭바를 두르지 않는다 — 정본에 탭바가 없다.
+     */
+    const val CONSENT_SETTINGS = "settings/consents"
+
     const val HOME = "home"
     const val TIMER = "timer"
     const val SETTINGS = "settings"

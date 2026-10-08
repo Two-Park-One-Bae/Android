@@ -122,6 +122,11 @@ dependencies {
 
     implementation(libs.androidx.navigation.compose)
 
+    // 약관 전문을 **앱 안에서** 연다(Custom Tabs). 기본 브라우저 엔진을 그대로 쓰므로
+    // 렌더링·쿠키·TLS 를 우리가 책임지지 않고, WebView 를 들이지 않아도 된다.
+    // Custom Tab 을 지원하는 브라우저가 없으면 알아서 기존 외부 브라우저로 떨어진다.
+    implementation(libs.androidx.browser)
+
     // 구글 로그인 — 자격 증명 획득은 UI 레이어의 일이라 app 에 둔다.
     // 세션(FirebaseAuth)은 core:data 의 AuthRepository 가 갖는다.
     implementation(libs.androidx.credentials)

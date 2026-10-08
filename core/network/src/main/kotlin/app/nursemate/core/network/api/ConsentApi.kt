@@ -26,11 +26,17 @@ interface ConsentApi {
     suspend fun definitions(): List<ConsentDefinition>
 
     /**
-     * 동의 저장. **필수 항목 전체를 한 번에** 보낸다 — 부분 저장이 없다(단일 트랜잭션).
+     * 동의 저장 — **보낸 항목만** 갱신한다(한 번의 트랜잭션).
+     *
+     * 안 보낸 항목은 서버에 있던 값이 그대로 남는다. 그래서 「약관 및 동의」 화면이 선택 항목
+     * 하나만 실어 보내도 되고(NM-548), 동의 온보딩은 화면에 보인 것 전부를 실어 보낸다.
+     *
+     * 필수 항목은 `agreed=true` 만 받고, 선택 항목은 `true`·`false` 둘 다 받는다 —
+     * **거부도 기록한다**(spec §선택 동의). 어느 쪽이든 `version` 은 현재 버전이어야 한다.
      *
      * @return 갱신된 회원. `onboardingRequired` 는 이 응답 값만 믿고 앱이 추측하지 않는다.
      * @throws app.nursemate.core.network.error.ApiFailure
-     *   400 — 항목 누락·`agreed=false`·**버전 불일치**. 저장하는 사이 서버가 약관을 개정한
+     *   400 — 필수 항목의 `agreed=false`·**버전 불일치**. 저장하는 사이 서버가 약관을 개정한
      *   경우라, 오류로 끝내지 말고 [definitions] 를 다시 받아 화면을 새 버전으로 다시 그린다.
      */
     @POST("api/v0/users/me/consents")

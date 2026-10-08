@@ -1,8 +1,5 @@
 package app.nursemate.navigation
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,11 +30,15 @@ import androidx.navigation.compose.rememberNavController
 import app.nursemate.auth.LoginScreen
 import app.nursemate.auth.LoginViewModel
 import app.nursemate.consent.ConsentScreen
+import app.nursemate.consent.ConsentSettingsScreen
+import app.nursemate.consent.ConsentSettingsViewModel
 import app.nursemate.consent.ConsentViewModel
+import app.nursemate.consent.openPolicy
 import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.model.ConsentStatus
 import app.nursemate.core.model.Usage
 import app.nursemate.core.model.User
 import app.nursemate.home.HomeScreen
@@ -70,6 +71,7 @@ fun NurseMateApp(
     val entry by sessionViewModel.entry.collectAsStateWithLifecycle()
     val sessionExpired by sessionViewModel.sessionExpired.collectAsStateWithLifecycle()
     val needsReconsent by sessionViewModel.needsReconsent.collectAsStateWithLifecycle()
+    val consents by sessionViewModel.consents.collectAsStateWithLifecycle()
 
     // ⚠️ 여기서 포그라운드 복귀마다 회원 정보를 다시 받던 것을 걷어냈다(NM-463).
     //    재동의 판정 시점은 **앱 실행 때**다(spec §진입 라우팅 「포그라운드 복귀에는 다시
@@ -96,7 +98,8 @@ fun NurseMateApp(
                 startPresetId = startPresetId,
                 onStartPresetHandled = onStartPresetHandled,
                 onUserUpdated = sessionViewModel::onUserUpdated,
-                needsReconsent = needsReconsent
+                needsReconsent = needsReconsent,
+                consents = consents
             )
         }
     }
@@ -135,7 +138,8 @@ private fun NmNavHost(
     startPresetId: String?,
     onStartPresetHandled: () -> Unit,
     onUserUpdated: (User) -> Unit,
-    needsReconsent: Boolean
+    needsReconsent: Boolean,
+    consents: List<ConsentStatus>
 ) {
     val navController = rememberNavController()
 
@@ -219,6 +223,9 @@ private fun NmNavHost(
             val viewModel: ConsentViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val context = LocalContext.current
+            // 회원의 동의 기록을 넣고 첫 조회를 시킨다. 화면이 `GET /users/me` 를 한 번 더
+            // 받지 않게 셸이 가진 값을 그대로 내린다 — 선택 항목을 보일지 가리는 데만 쓴다.
+            LaunchedEffect(Unit) { viewModel.start(consents) }
             ConsentScreen(
                 state = state,
                 onToggle = viewModel::toggle,
@@ -320,9 +327,29 @@ private fun NmNavHost(
                     state = state,
                     onConfirm = { confirming = it },
                     alertMode = alertMode,
-                    onAlertMode = viewModel::setAlertMode
+                    onAlertMode = viewModel::setAlertMode,
+                    onOpenConsents = { navController.navigate(NmRoute.CONSENT_SETTINGS) }
                 )
             }
+        }
+
+        // 설정 / 약관 및 동의 — 선택 동의 철회·재동의(NM-548).
+        // 탭바를 두르지 않는다(정본에 없다) — 설정 탭 위로 밀고 들어왔다가 뒤로가기로 돌아간다.
+        composable(NmRoute.CONSENT_SETTINGS) {
+            val viewModel: ConsentSettingsViewModel = hiltViewModel()
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            val context = LocalContext.current
+            LaunchedEffect(Unit) { viewModel.start(consents) }
+            ConsentSettingsScreen(
+                state = state,
+                onBack = { navController.popBackStack() },
+                onToggle = viewModel::toggle,
+                // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
+                // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
+                onSave = { viewModel.save(onSaved = onUserUpdated) },
+                onOpenPolicy = { context.openPolicy(it.policyUrl) },
+                onRetry = { viewModel.load() }
+            )
         }
     }
 }
@@ -363,17 +390,6 @@ private fun NavController.replaceWith(route: String) {
     navigate(route) {
         popUpTo(0) { inclusive = true }
     }
-}
-
-/**
- * 약관 전문을 기본 브라우저로 연다.
- *
- * Custom Tab 이 앱 안에 머무는 만큼 UX 는 낫지만 `androidx.browser` 의존성이 는다.
- * 지금은 '보기' 한 곳뿐이라 기본 브라우저로 둔다.
- */
-private fun Context.openPolicy(url: String) {
-    // 브라우저가 없는 기기는 사실상 없지만, 없다고 앱이 죽으면 동의를 못 끝낸다.
-    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
 /**
