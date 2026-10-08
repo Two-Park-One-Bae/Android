@@ -38,7 +38,8 @@ import androidx.compose.ui.unit.sp
 fun NmListRow(
     icon: Painter,
     title: String,
-    subtitle: String,
+    /** null 이면 제목만 그린다 — 정본의 「약관 및 동의」 행처럼 부가 설명이 없는 경우. */
+    subtitle: String?,
     iconBackground: Color,
     iconTint: Color,
     modifier: Modifier = Modifier,
@@ -77,7 +78,9 @@ fun NmListRow(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(text = title, style = RowTitle, color = titleColor ?: colors.textPrimary)
-            Text(text = subtitle, style = RowSubtitle, color = colors.textTertiary)
+            if (subtitle != null) {
+                Text(text = subtitle, style = RowSubtitle, color = colors.textTertiary)
+            }
         }
         if (onClick != null) {
             Icon(

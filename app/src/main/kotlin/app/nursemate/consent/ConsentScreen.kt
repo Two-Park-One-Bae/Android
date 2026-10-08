@@ -265,7 +265,9 @@ private fun ConsentGroup(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            CheckBox(checked = allChecked, size = 26.dp, radius = NmRadius.sm, mark = 16.dp, colors = colors)
+            // 선택 항목까지 켜져 있어야 체크된다(spec §동의 온보딩). 필수만 켠 상태에서
+            // 「전체 동의」가 체크돼 보이면 화면이 무엇에 동의했는지를 거짓으로 말한다.
+            NmConsentCheckBox(checked = allChecked, size = 26.dp, radius = NmRadius.sm, mark = 16.dp)
             Text(text = "전체 동의", style = AllLabel, color = colors.textPrimary)
         }
 
@@ -277,94 +279,10 @@ private fun ConsentGroup(
                     definition = definition,
                     checked = definition.type in state.checked,
                     enabled = !state.submitting,
-                    colors = colors,
                     onToggle = { onToggle(definition.type) },
                     onOpenPolicy = { onOpenPolicy(definition) }
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun ConsentRow(
-    definition: ConsentDefinition,
-    checked: Boolean,
-    enabled: Boolean,
-    colors: app.nursemate.core.designsystem.NmSemanticColors,
-    onToggle: () -> Unit,
-    onOpenPolicy: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            // 체크 토글은 행 전체가 받고, '보기'만 따로 가로챈다. 체크박스만 누르게 하면
-            // 22dp 과녁이라 손가락으로 맞추기 어렵다.
-            .clickable(enabled = enabled, onClick = onToggle)
-            .padding(vertical = 14.dp, horizontal = NmSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        CheckBox(checked = checked, size = 22.dp, radius = 7.dp, mark = 14.dp, colors = colors)
-
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            if (definition.required) {
-                Text(text = "필수", style = RequiredBadge, color = NmColor.Primary.C600)
-            }
-            // 서버가 준 표시용 항목명. 앱에 문구를 갖고 있지 않다.
-            Text(text = definition.title, style = ItemLabel, color = colors.textPrimary)
-        }
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(NmRadius.sm))
-                .clickable(enabled = enabled, onClick = onOpenPolicy)
-                .padding(horizontal = NmSpacing.xs, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(text = "보기", style = ViewLabel, color = colors.textSecondary)
-            Icon(
-                painter = painterResource(DsR.drawable.nm_ic_chevron_right),
-                contentDescription = null,
-                tint = colors.textTertiary,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-/** 체크박스 — DS 컴포넌트 목록에 없어 이 화면에서 만든다. 크기만 두 가지(26·22)라 인자로 받는다. */
-@Composable
-private fun CheckBox(
-    checked: Boolean,
-    size: androidx.compose.ui.unit.Dp,
-    radius: androidx.compose.ui.unit.Dp,
-    mark: androidx.compose.ui.unit.Dp,
-    colors: app.nursemate.core.designsystem.NmSemanticColors
-) {
-    val shape = RoundedCornerShape(radius)
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(shape)
-            .background(if (checked) NmColor.Primary.C500 else colors.surface)
-            .let { if (checked) it else it.border(1.5.dp, colors.border, shape) },
-        contentAlignment = Alignment.Center
-    ) {
-        // 미체크 상태에서도 정본은 체크 표시를 두되 배경과 같은 색으로 감춘다.
-        // 그리지 않으면 체크할 때 아이콘이 튀어나오는 느낌이라, 색만 바꾼다.
-        if (checked) {
-            Icon(
-                painter = painterResource(R.drawable.nm_ic_check),
-                contentDescription = null,
-                tint = NmColor.Neutral.C0,
-                modifier = Modifier.size(mark)
-            )
         }
     }
 }
@@ -378,6 +296,3 @@ private val SheetTitle = NmTypography.heading3.copy(fontWeight = FontWeight.Bold
 private val SheetSubtitle = NmTypography.body.copy(fontSize = 13.sp, lineHeight = 20.sp)
 private val SheetNotice = NmTypography.body.copy(fontSize = 13.sp)
 private val AllLabel = NmTypography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
-private val RequiredBadge = NmTypography.caption.copy(fontWeight = FontWeight.SemiBold)
-private val ItemLabel = NmTypography.bodyLarge.copy(fontSize = 15.sp)
-private val ViewLabel = NmTypography.body.copy(fontSize = 13.sp)

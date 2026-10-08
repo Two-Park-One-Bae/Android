@@ -60,10 +60,15 @@ android {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
         //
-        // ⚠️ **12 를 건너뛴다.** 워치가 `1_000_000_012` 를 이미 올렸다(2026-09-24, 프로덕션
-        // 활성). 오프셋 규칙상 폰 12 는 워치 1_000_000_012 를 요구하는데 versionCode 는
-        // 재사용할 수 없다 — 폰·워치를 13 으로 함께 올려 오프셋을 지킨다.
-        versionCode = 13
+        // ⚠️ **12 와 13 을 건너뛴다.**
+        //  - 12: 워치가 `1_000_000_012` 를 이미 올렸다(2026-09-24, 프로덕션 활성).
+        //    오프셋 규칙상 폰 12 는 워치 1_000_000_012 를 요구하는데 재사용할 수 없다.
+        //  - 13: 2026-10-08, NM-548 재작업 전 AAB 를 프로덕션 **출시 초안**까지 올렸다가
+        //    버렸다. 검토 제출을 안 했어도 **업로드한 순간 소비된다** — 초안을 지워도
+        //    같은 번호로 다시 올릴 수 없다.
+        //
+        // 폰·워치를 함께 올려 오프셋을 지킨다.
+        versionCode = 14
         versionName = "2.0.0"
     }
 
@@ -125,6 +130,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.androidx.navigation.compose)
+
+    // 약관 전문을 **앱 안에서** 연다(Custom Tabs). 기본 브라우저 엔진을 그대로 쓰므로
+    // 렌더링·쿠키·TLS 를 우리가 책임지지 않고, WebView 를 들이지 않아도 된다.
+    // Custom Tab 을 지원하는 브라우저가 없으면 알아서 기존 외부 브라우저로 떨어진다.
+    implementation(libs.androidx.browser)
 
     // 구글 로그인 — 자격 증명 획득은 UI 레이어의 일이라 app 에 둔다.
     // 세션(FirebaseAuth)은 core:data 의 AuthRepository 가 갖는다.

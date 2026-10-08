@@ -33,6 +33,22 @@ interface AttributionTracker {
      * (`User.needsReconsent`) 호출부가 가른다.
      */
     fun signUp()
+
+    /**
+     * 수집을 켠다 — **로그인한 회원이 `OVERSEAS` 에 동의했을 때만**(spec §선택 동의).
+     *
+     * 초기화는 앱이 뜰 때 하지만 수집은 여기서 시작한다([AirbridgeAttributionTracker.initialize]
+     * 가 자동 시작을 꺼 둔다). 동의가 로그인 뒤라 **첫 실행보다 늦게** 불린다.
+     */
+    fun start()
+
+    /**
+     * 수집을 멈춘다 — 로그인 전 · 로그아웃 · 탈퇴 · 철회.
+     *
+     * 병동 공용 기기에서 **앞사람의 동의로 뒷사람이 측정되면 안 된다.** 그래서 「켜는 조건이
+     * 아니면」이 아니라 「아닌 모든 때」 부른다.
+     */
+    fun stop()
 }
 
 /**
@@ -48,6 +64,28 @@ interface AttributionTracker {
  */
 @Singleton
 class AirbridgeAttributionTracker @Inject constructor() : AttributionTracker {
+
+    @Suppress("TooGenericExceptionCaught")
+    override fun start() {
+        if (!enabled) return
+        try {
+            Airbridge.startTracking()
+            Log.i(TAG, "수집 시작 — OVERSEAS 동의")
+        } catch (t: Throwable) {
+            Log.w(TAG, "수집을 시작하지 못했다", t)
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    override fun stop() {
+        if (!enabled) return
+        try {
+            Airbridge.stopTracking()
+            Log.i(TAG, "수집 중지")
+        } catch (t: Throwable) {
+            Log.w(TAG, "수집을 멈추지 못했다", t)
+        }
+    }
 
     @Suppress("TooGenericExceptionCaught")
     override fun signUp() {
@@ -76,7 +114,9 @@ class AirbridgeAttributionTracker @Inject constructor() : AttributionTracker {
         /**
          * SDK 를 깨운다 — `Application.onCreate` 에서 **한 번**.
          *
-         * 설치 유입은 앱이 처음 열리는 그 순간에 잡히므로 늦게 부르면 놓친다.
+         * **수집은 시작하지 않는다.** 자동 시작을 끄고 [AttributionTracker.start] 를 기다린다
+         * (spec §선택 동의). 초기화를 여기서 하는 것은 동의 시점에 SDK 가 이미 서 있어야
+         * 설치 리퍼러를 읽을 수 있기 때문이다.
          */
         @Suppress("TooGenericExceptionCaught")
         fun initialize(application: Application) {
@@ -94,9 +134,14 @@ class AirbridgeAttributionTracker @Inject constructor() : AttributionTracker {
                     // ⚠️ **우리 딥링크만 센다.** 카카오 로그인이 `kakao{키}://oauth` 로 돌아오는데,
                     //    이것까지 딥링크 유입으로 잡히면 로그인할 때마다 유입이 하나씩 생긴다.
                     .setTrackAirbridgeDeeplinkOnlyEnabled(true)
+                    // ⚠️ **초기화만 하고 수집은 시작하지 않는다**(NM-548).
+                    //    측정 정보는 국외 수탁사와 Meta 로 나가고, 그 근거가 개인정보 보호법
+                    //    제28조의8 제1항 제1호의 **별도 동의**다 — 동의 전에는 아무것도
+                    //    전송하지 않는다. 켜는 것은 [start] 뿐이다.
+                    .setAutoStartTrackingEnabled(false)
                     .build()
                 Airbridge.initializeSDK(application, option)
-                Log.i(TAG, "유입 측정 시작")
+                Log.i(TAG, "SDK 초기화 — 수집은 동의 뒤에 시작한다")
             } catch (t: Throwable) {
                 // 측정이 안 서는 것과 앱이 안 뜨는 것은 비교할 일이 아니다.
                 Log.w(TAG, "SDK 초기화 실패 — 유입 측정 없이 간다", t)

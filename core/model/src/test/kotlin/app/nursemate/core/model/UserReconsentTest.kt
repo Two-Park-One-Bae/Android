@@ -57,6 +57,50 @@ class UserReconsentTest {
         assertFalse(user.needsReconsent)
     }
 
+    // ── NM-548 선택 동의 ──────────────────────────────────────────────
+
+    /**
+     * 선택 항목 하나 때문에 「약관이 변경되었어요」가 뜨면 안 된다.
+     *
+     * `OVERSEAS` 는 고지사항이 바뀌면 버전이 오르는데, 필수 약관은 그대로인 채로 이 상태가
+     * 오래 남는다. 세어 버리면 쓸 때마다 변경 안내를 본다.
+     */
+    @Test
+    fun `선택 항목이 옛 버전이어도 개정 재동의가 아니다`() {
+        val user = user(
+            consent(ConsentType.TERMS, agreed = true, satisfied = true),
+            consent(ConsentType.PRIVACY, agreed = true, satisfied = true),
+            consent(ConsentType.OVERSEAS, agreed = true, satisfied = false)
+        )
+        assertFalse(user.needsReconsent)
+    }
+
+    @Test
+    fun `지금 버전으로 동의했을 때만 측정을 켠다`() {
+        assertTrue(user(consent(ConsentType.OVERSEAS, agreed = true, satisfied = true)).overseasConsented)
+    }
+
+    /** 옛 버전 동의는 **미동의로 다룬다** — 고지가 바뀌었는데 옛 동의로 계속 보내면 안 된다. */
+    @Test
+    fun `선택 항목이 옛 버전이면 측정을 켜지 않는다`() {
+        assertFalse(user(consent(ConsentType.OVERSEAS, agreed = true, satisfied = false)).overseasConsented)
+    }
+
+    @Test
+    fun `거부했으면 측정을 켜지 않는다`() {
+        assertFalse(user(consent(ConsentType.OVERSEAS, agreed = false, satisfied = false)).overseasConsented)
+    }
+
+    /** 서버에 `OVERSEAS` 정의가 없는 동안(도입 순서 ②~③)은 항목 자체가 안 온다. */
+    @Test
+    fun `선택 항목이 아예 없으면 측정을 켜지 않는다`() {
+        val user = user(
+            consent(ConsentType.TERMS, agreed = true, satisfied = true),
+            consent(ConsentType.PRIVACY, agreed = true, satisfied = true)
+        )
+        assertFalse(user.overseasConsented)
+    }
+
     private fun consent(type: ConsentType, agreed: Boolean, satisfied: Boolean) =
         ConsentStatus(type = type, agreed = agreed, version = "2026-09-10".takeIf { agreed }, satisfied = satisfied)
 

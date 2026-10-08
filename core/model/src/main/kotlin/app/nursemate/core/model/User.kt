@@ -18,9 +18,18 @@ object AuthProviderSerializer : FallbackEnumSerializer<AuthProvider>(
     AuthProvider.UNKNOWN
 )
 
-/** 동의 항목. 이용약관·개인정보처리방침 **둘 다 필수**다. */
+/**
+ * 동의 항목.
+ *
+ * **필수 여부는 앱이 정하지 않는다** — 서버가 `ConsentDefinition.required` 로 내려준다
+ * (spec §선택 동의). 아래 주석의 필수·선택은 지금 서버가 주는 값을 적어 둔 것이다.
+ *
+ * - [TERMS] · [PRIVACY] — 필수
+ * - [OVERSEAS] — **선택**. 광고 유입 측정에 따른 국외 이전·제3자 제공(NM-548).
+ *   거부해도 앱을 그대로 쓴다. 이 항목이 `agreed && satisfied` 일 때만 측정 SDK 를 켠다
+ */
 @Serializable(with = ConsentTypeSerializer::class)
-enum class ConsentType { TERMS, PRIVACY, UNKNOWN }
+enum class ConsentType { TERMS, PRIVACY, OVERSEAS, UNKNOWN }
 
 object ConsentTypeSerializer : FallbackEnumSerializer<ConsentType>(
     "ConsentType",
@@ -76,9 +85,32 @@ data class User(
      *
      * `agreed && !satisfied` = 「동의는 했는데 그 버전이 지금 필수 버전이 아니다」 = 개정.
      * 한 번도 동의한 적 없는 항목은 `agreed == false` 라 걸리지 않는다.
+     *
+     * ## ⚠️ **선택 항목은 세지 않는다** (NM-548)
+     * spec 이 「동의 기록이 있는 **필수** 항목」으로 못박는다. [ConsentType.OVERSEAS] 는
+     * 옛 버전에 동의한 상태로 오래 남을 수 있는데, 그걸 세면 **선택 항목 하나 때문에
+     * 「약관이 변경되었어요」가 뜬다** — 필수 약관은 그대로인데.
+     *
+     * [ConsentStatus] 에는 필수 여부가 없어(서버는 `ConsentDefinition.required` 로 준다)
+     * 타입으로 가른다. 서버가 선택 항목을 더 늘리면 여기도 함께 고쳐야 한다 — 틀려도
+     * 문구만 어긋나는 자리라 이 정도로 둔다.
      */
     val needsReconsent: Boolean
-        get() = consents.any { it.agreed && !it.satisfied }
+        get() = consents.any { it.type !in OPTIONAL_TYPES && it.agreed && !it.satisfied }
+
+    /**
+     * 국외 이전·제3자 제공에 **지금 버전으로** 동의했는가 — 측정 SDK 를 켜는 유일한 조건이다.
+     *
+     * `agreed && satisfied` 둘 다 본다. 옛 버전에 동의한 상태(`agreed && !satisfied`)는
+     * **미동의로 다룬다**(spec §선택 동의) — 고지사항이 바뀌었는데 옛 동의로 계속 보내면 안 된다.
+     */
+    val overseasConsented: Boolean
+        get() = consents.any { it.type == ConsentType.OVERSEAS && it.agreed && it.satisfied }
+
+    private companion object {
+        /** 서버가 선택으로 내려주는 항목. [needsReconsent] 가 세지 않는다. */
+        val OPTIONAL_TYPES = setOf(ConsentType.OVERSEAS)
+    }
 }
 
 /**

@@ -3,10 +3,12 @@ package app.nursemate.navigation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nursemate.attribution.AttributionTracker
 import app.nursemate.core.data.auth.AuthRepository
 import app.nursemate.core.data.auth.AuthSession
 import app.nursemate.core.data.auth.UserRepository
 import app.nursemate.core.data.pill.UsageHolder
+import app.nursemate.core.model.ConsentStatus
 import app.nursemate.core.model.User
 import app.nursemate.core.network.error.ApiFailure
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -57,7 +59,8 @@ sealed interface AppEntry {
 class AppSessionViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
-    private val usageHolder: UsageHolder
+    private val usageHolder: UsageHolder,
+    private val attribution: AttributionTracker
 ) : ViewModel() {
 
     private val currentUser = MutableStateFlow<User?>(null)
@@ -92,6 +95,20 @@ class AppSessionViewModel @Inject constructor(
         .map { it?.needsReconsent == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /**
+     * 회원의 동의 기록 — 동의 화면이 **선택 항목을 보일지** 가리는 데 쓴다(spec §선택 동의).
+     *
+     * 현재 버전에 이미 응답한 선택 항목은 다시 묻지 않는데, 그 판단에 필요한 값이 여기 있다.
+     * 동의 화면이 `GET /users/me` 를 스스로 한 번 더 받지 않도록 내려 준다
+     * ([app.nursemate.consent.ConsentViewModel.start]).
+     *
+     * [needsReconsent] 와 마찬가지로 **문구·표시**를 정하는 값이다 — 게이트는 그대로
+     * 서버의 `onboardingRequired` 가 쥔다.
+     */
+    val consents: StateFlow<List<ConsentStatus>> = currentUser
+        .map { it?.consents ?: emptyList() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val entry: StateFlow<AppEntry> =
         combine(authRepository.session, currentUser, initialLoadFailed) { session, user, failed ->
             when (session) {
@@ -112,6 +129,20 @@ class AppSessionViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, AppEntry.Loading)
 
     init {
+        // 유입 측정은 **로그인한 회원이 국외 이전에 동의했을 때만** 돈다 (spec §선택 동의).
+        //
+        // ## 켤 자리가 아니라 **가를 자리**다
+        // 「동의했으면 켠다」가 아니라 「그 밖의 모든 때는 끈다」로 적는다 — 병동 공용 기기에서
+        // 앞사람의 동의로 뒷사람이 측정되면 안 된다. 로그인 전·로그아웃·탈퇴·철회가 전부
+        // `currentUser` 가 null 이 되거나 `overseasConsented` 가 false 가 되는 것으로 드러나므로,
+        // 이 한 줄이 티켓 13 의 네 시점(앱 실행·동의 저장·약관 및 동의 저장·로그아웃)을 모두 덮는다.
+        viewModelScope.launch {
+            currentUser
+                .map { it?.overseasConsented == true }
+                .distinctUntilChanged()
+                .collect { if (it) attribution.start() else attribution.stop() }
+        }
+
         viewModelScope.launch {
             authRepository.session
                 // uid 로 좁혀서 같은 세션에 두 번 부르지 않는다. 재구성마다 호출하면 낭비다.
