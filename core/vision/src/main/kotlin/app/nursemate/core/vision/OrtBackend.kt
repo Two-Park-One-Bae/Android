@@ -26,9 +26,20 @@ import java.io.File
  * 들어 있다**(ABI 4개 전부 · minSdk 24). 저장소가 1.22.0 에 머물러 있었을 뿐이다.
  *
  * ## 되돌아갈 길이 필요한 이유
- * WebGPU 는 Dawn 을 통해 Vulkan 으로 내려간다. 드라이버가 못 받는 기기가 있을 수 있고, 그때
- * 예외가 아니라 **조용히 이상한 결과**가 아니라 세션 생성 실패로 나온다 — 그러니 잡아서 CPU 로
- * 다시 연다. 답은 같다(감사셋 대조 완료, NM-528).
+ * WebGPU 는 Dawn 을 통해 Vulkan 으로 내려간다. 드라이버가 못 받는 기기가 있어서, 세션 생성이
+ * 실패하면 잡아서 CPU 로 다시 연다. 답은 같다(감사셋 대조 완료, NM-528).
+ *
+ * ⚠️ **아래 `runCatching` 은 세션 생성 실패만 잡는다.** 예전 주석은 「드라이버가 못 받으면
+ * 세션 생성 실패로 나온다」를 전제했는데 **그 전제가 틀렸다**(NM-574, 2026-10-13 Test Lab 실측).
+ * 실제로 터지는 자리는 [OrtSession.run][ai.onnxruntime.OrtSession.run] 안이고, 양상이 둘이다:
+ *
+ * | 기기 | 무엇이 일어나나 | 잡히나 |
+ * |---|---|---|
+ * | SM-S916N · Adreno 740 | `vulkan.adreno.so` `vkCmdPipelineBarrier` 에서 **SIGSEGV** | **못 잡는다** — OS 가 프로세스를 끝낸다 |
+ * | SM-S928N · Adreno 750 | Conv 노드 `OrtException`, 이어서 WebGPU 디바이스 사망 | 잡히지만 그 프로세스의 WebGPU 는 죽은 뒤다 |
+ *
+ * 그래서 **들어가기 전에 막는 길**을 [VisionBackend] 로 따로 냈다. 이 폴백은 그대로 두되,
+ * 이것만으로 충분하다고 읽히면 안 된다.
  */
 internal object OrtBackend {
 
@@ -63,9 +74,14 @@ internal object OrtBackend {
         cpuNodeNames: String? = null,
         configure: OrtSession.SessionOptions.() -> Unit = {}
     ): OrtSession {
-        if (webGpuEnabled && hasWebGpu) {
+        // 바깥이 막는 모델은 아예 시도하지 않는다 — 이 기기에서 터지는 것이 이미 알려진 조합이거나,
+        // 전에 네이티브로 죽은 적이 있는 기기다(NM-574).
+        val allowed = VisionBackend.allowWebGpu(modelFile.name)
+        if (!allowed) Log.i(TAG, "${modelFile.name} WebGPU 차단됨 — CPU 로 연다")
+
+        if (allowed && webGpuEnabled && hasWebGpu) {
             runCatching {
-                return env.createSession(
+                env.createSession(
                     modelFile.absolutePath,
                     OrtSession.SessionOptions().apply {
                         configure()
@@ -73,6 +89,11 @@ internal object OrtBackend {
                         cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
                     }
                 )
+            }.onSuccess { session ->
+                // 열렸다는 것만 알린다. **추론은 아직 안 돌았다** — 터지는 것은 그다음이라,
+                // 기록하는 쪽이 「이 프로세스는 WebGPU 를 썼다」를 미리 남겨 둬야 죽고 나서 안다.
+                VisionBackend.onWebGpuSessionOpened(modelFile.name)
+                return session
             }.onFailure {
                 // 기기에 따라 드라이버가 못 받을 수 있다. 판독을 통째로 포기하는 것보다 느려도 도는 쪽이 낫다.
                 Log.w(TAG, "${modelFile.name} WebGPU 세션 실패 — CPU 로 연다: ${it.message}")

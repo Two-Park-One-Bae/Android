@@ -8,6 +8,7 @@ import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.pill.WebGpuPolicy
 import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
@@ -63,6 +64,9 @@ class NurseMateApplication :
     @Inject
     lateinit var telemetryIdentity: TelemetryIdentity
 
+    @Inject
+    lateinit var webGpuPolicy: WebGpuPolicy
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -82,6 +86,13 @@ class NurseMateApplication :
         // 특히 Crashlytics 를 debug 에서 끄면 **개발 중 크래시를 볼 수 없다** — 이 SDK 를 넣은
         // 이유 자체가 그것이라 앞뒤가 맞지 않는다(iOS `AppEnvironment` 주석도 같은 판단).
         telemetryIdentity.start(applicationScope)
+
+        // 어느 모델을 GPU 로 돌릴지 정한다 (NM-574). **온디바이스 추론이 처음 돌기 전**이어야
+        // 하므로 여기다 — 늦게 꽂으면 그 사이에 열린 세션이 막아야 할 WebGPU 로 열린다.
+        //
+        // Adreno 드라이버가 각인 모델을 받다 죽는데, 그 죽음이 예외가 아니라 SIGSEGV 라
+        // 어떤 catch 로도 못 막는다. 들어가기 전에 거르는 유일한 자리다.
+        webGpuPolicy.install()
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.
