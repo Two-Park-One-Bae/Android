@@ -66,12 +66,15 @@ internal object OrtBackend {
      * @param cpuNodeNames WebGPU 로 열 때 **CPU 에 남겨 둘 노드**의 이름 조각.
      *                     각인처럼 일부 연산이 GPU 에서 오히려 느린 모델이 쓴다 — [ImprintReader] KDoc 참조.
      *                     CPU 로 되돌아갈 때는 의미가 없으므로 무시된다.
+     * @param webGpuOptions WebGPU EP 제공자 옵션(`preferredLayout` 등). 기본은 비어 있다 —
+     *                       **무엇이 Adreno 를 살리는지 재는 데 쓴다**(NM-577).
      * @param configure CPU·WebGPU 양쪽에 공통으로 줄 설정
      */
     fun openSession(
         env: OrtEnvironment,
         modelFile: File,
         cpuNodeNames: String? = null,
+        webGpuOptions: Map<String, String> = emptyMap(),
         configure: OrtSession.SessionOptions.() -> Unit = {}
     ): OrtSession {
         // 바깥이 막는 모델은 아예 시도하지 않는다 — 이 기기에서 터지는 것이 이미 알려진 조합이거나,
@@ -85,7 +88,7 @@ internal object OrtBackend {
                     modelFile.absolutePath,
                     OrtSession.SessionOptions().apply {
                         configure()
-                        addWebGPU(emptyMap())
+                        addWebGPU(webGpuOptions)
                         cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
                     }
                 )
