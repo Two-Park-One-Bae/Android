@@ -5,6 +5,22 @@ plugins {
 
 android {
     namespace = "app.nursemate.core.vision"
+
+    /*
+     * 계측 테스트 APK 의 ABI 를 하나로 줄이는 탈출구 — **Firebase Test Lab 에 올릴 때만** 쓴다.
+     *
+     * OpenCV 와 ONNX Runtime 이 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 267MB 다.
+     * 올리는 데만 한참 걸리는데 Test Lab 실기기는 전부 arm64 다.
+     *
+     * ```
+     * ./gradlew :core:vision:assembleDebugAndroidTest -Pnm.abi=arm64-v8a
+     * ```
+     *
+     * ⚠️ 속성을 주지 않으면 평소대로 ABI 전부다 — CI·로컬 빌드는 영향받지 않는다.
+     */
+    providers.gradleProperty("nm.abi").orNull?.let { abi ->
+        defaultConfig.ndk.abiFilters.add(abi)
+    }
 }
 
 /*

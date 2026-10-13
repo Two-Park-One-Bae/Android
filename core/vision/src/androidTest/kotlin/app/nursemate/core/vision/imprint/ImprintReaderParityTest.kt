@@ -2,6 +2,7 @@ package app.nursemate.core.vision.imprint
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.EpOverride
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -36,6 +37,8 @@ class ImprintReaderParityTest {
     @Test
     fun `sample_crop_의_답이_기준과_같다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
+        // 세션을 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 EP 로 돈다.
+        val path = EpOverride.apply()
 
         val context = InstrumentationRegistry.getInstrumentation().context
         val model = File(context.getExternalFilesDir(null), ImprintReader.MODEL_FILE_NAME)
@@ -52,8 +55,8 @@ class ImprintReaderParityTest {
         val result = ImprintReader(model).use { it.readGray(gray) }
         gray.release()
 
-        assertEquals("확신 글자", "YS", result.imprint)
-        assertEquals("best_pair", "YS", result.pair)
-        assertEquals("best_pair 점수", 0.969883f, result.score, 1e-4f)
+        assertEquals("[$path] 확신 글자", "YS", result.imprint)
+        assertEquals("[$path] best_pair", "YS", result.pair)
+        assertEquals("[$path] best_pair 점수", 0.969883f, result.score, 1e-4f)
     }
 }

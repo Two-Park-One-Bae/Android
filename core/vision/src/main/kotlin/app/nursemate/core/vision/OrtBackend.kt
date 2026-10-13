@@ -32,6 +32,18 @@ import java.io.File
  */
 internal object OrtBackend {
 
+    /**
+     * WebGPU 를 쓸지 — **계측 테스트만 끈다**(`-e nm_webgpu false`).
+     *
+     * 같은 기기에서 CPU 와 WebGPU 의 답을 맞대 보려면 한쪽을 강제로 끌 수 있어야 한다.
+     * 운영 코드에는 이 값을 바꾸는 자리가 없고, 기본값은 늘 켜짐이다.
+     *
+     * 왜 필요했나: 2026-10-13 Adreno(SM-S916N)에서 `vulkan.adreno.so` 세그폴트가 올라왔는데,
+     * WebGPU 성능·정확도 근거가 전부 Xclipse(S24 · Exynos 2400) 한 대에서 나온 것이었다.
+     * 다른 GPU 에서 **답이 같은지**를 재려면 같은 기기에서 두 경로를 다 돌려야 한다.
+     */
+    internal var webGpuEnabled: Boolean = true
+
     /** 이 기기가 WebGPU EP 를 갖고 있는가. 런타임 한 번만 묻는다. */
     private val hasWebGpu: Boolean by lazy {
         OrtEnvironment.getAvailableProviders().contains(OrtProvider.WEBGPU).also {
@@ -51,7 +63,7 @@ internal object OrtBackend {
         cpuNodeNames: String? = null,
         configure: OrtSession.SessionOptions.() -> Unit = {}
     ): OrtSession {
-        if (hasWebGpu) {
+        if (webGpuEnabled && hasWebGpu) {
             runCatching {
                 return env.createSession(
                     modelFile.absolutePath,
