@@ -21,6 +21,18 @@ android {
     providers.gradleProperty("nm.abi").orNull?.let { abi ->
         defaultConfig.ndk.abiFilters.add(abi)
     }
+
+    /*
+     * 테스트 메서드마다 프로세스를 새로 띄운다 (NM-577).
+     *
+     * 두 가지를 막는다.
+     *  - **세그폴트가 나머지를 날리는 것.** Adreno 에서 각인이 죽으면 그 뒤 EP 를 하나도 못 쟀다.
+     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 119MB 검출 모델을 EP 마다 열면
+     *    뒤쪽 테스트가 압박을 받아 메시지도 없이 죽는다(2026-10-13 실측).
+     *
+     * Test Lab 은 `--use-orchestrator`, 로컬은 이 설정이 같은 일을 한다.
+     */
+    testOptions.execution = "ANDROIDX_TEST_ORCHESTRATOR"
 }
 
 /*
@@ -92,4 +104,8 @@ dependencies {
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+
+    // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
+    // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
+    androidTestUtil(libs.androidx.test.orchestrator)
 }

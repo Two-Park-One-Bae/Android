@@ -55,6 +55,19 @@ internal object OrtBackend {
      */
     internal var webGpuEnabled: Boolean = true
 
+    /**
+     * 실행 공급자를 하나로 **못박는다** — 계측 테스트 전용(`-e nm_ep nnapi`).
+     *
+     * ## 왜 필요한가
+     * 지금의 EP 비교표([OrtBackend] KDoc)가 **Galaxy S24(Exynos 2400 · Xclipse 940) 한 대**
+     * 에서 나왔다. 「NNAPI 실패」는 엑시노스 드라이버 얘기지 퀄컴 NNAPI(Hexagon NPU 로
+     * 내려간다)에 대한 것이 아니고, 「XNNPACK 더 느림」도 그 CPU 에서의 값이다.
+     * 2026-10-13 Adreno 에서 각인이 깨지는 것이 드러나면서 **그 표를 다시 깔아야** 한다.
+     *
+     * `null` 이면 운영과 같다 — WebGPU 가 되면 WebGPU, 안 되면 CPU.
+     */
+    internal var forcedEp: Ep? = null
+
     /** 이 기기가 WebGPU EP 를 갖고 있는가. 런타임 한 번만 묻는다. */
     private val hasWebGpu: Boolean by lazy {
         OrtEnvironment.getAvailableProviders().contains(OrtProvider.WEBGPU).also {
@@ -77,12 +90,23 @@ internal object OrtBackend {
         webGpuOptions: Map<String, String> = emptyMap(),
         configure: OrtSession.SessionOptions.() -> Unit = {}
     ): OrtSession {
+        forcedEp?.let { ep ->
+            Log.i(TAG, "${modelFile.name} EP 고정 → $ep")
+            return env.createSession(
+                modelFile.absolutePath,
+                OrtSession.SessionOptions().apply {
+                    configure()
+                    applyEp(ep, cpuNodeNames, webGpuOptions)
+                }
+            )
+        }
+
         // 바깥이 막는 모델은 아예 시도하지 않는다 — 이 기기에서 터지는 것이 이미 알려진 조합이거나,
         // 전에 네이티브로 죽은 적이 있는 기기다(NM-574).
         val allowed = VisionBackend.allowWebGpu(modelFile.name)
         if (!allowed) Log.i(TAG, "${modelFile.name} WebGPU 차단됨 — CPU 로 연다")
 
-        if (allowed && webGpuEnabled && hasWebGpu) {
+        val onWebGpu = if (allowed && webGpuEnabled && hasWebGpu) {
             runCatching {
                 env.createSession(
                     modelFile.absolutePath,
@@ -92,21 +116,39 @@ internal object OrtBackend {
                         cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
                     }
                 )
-            }.onSuccess { session ->
+            }.onSuccess {
                 // 열렸다는 것만 알린다. **추론은 아직 안 돌았다** — 터지는 것은 그다음이라,
                 // 기록하는 쪽이 「이 프로세스는 WebGPU 를 썼다」를 미리 남겨 둬야 죽고 나서 안다.
                 VisionBackend.onWebGpuSessionOpened(modelFile.name)
-                return session
             }.onFailure {
                 // 기기에 따라 드라이버가 못 받을 수 있다. 판독을 통째로 포기하는 것보다 느려도 도는 쪽이 낫다.
                 Log.w(TAG, "${modelFile.name} WebGPU 세션 실패 — CPU 로 연다: ${it.message}")
-            }
+            }.getOrNull()
+        } else {
+            null
         }
-        return env.createSession(
+
+        return onWebGpu ?: env.createSession(
             modelFile.absolutePath,
             OrtSession.SessionOptions().apply(configure)
         )
     }
+
+    /** [forcedEp] 가 정한 EP 하나만 건다 — 계측 테스트 경로다. 폴백이 없어야 그 EP 를 잰 값이 된다. */
+    private fun OrtSession.SessionOptions.applyEp(ep: Ep, cpuNodeNames: String?, webGpuOptions: Map<String, String>) =
+        when (ep) {
+            Ep.CPU -> Unit
+
+            Ep.WEBGPU -> {
+                addWebGPU(webGpuOptions)
+                cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
+            }
+
+            // 기본 플래그로 연다. 세부 플래그는 되는 것이 확인된 다음에 만진다.
+            Ep.NNAPI -> addNnapi()
+
+            Ep.XNNPACK -> addXnnpack(emptyMap())
+        }
 
     /**
      * 노드 이름 조각으로 배정을 강제하는 **공식 설정 키**.
@@ -119,3 +161,6 @@ internal object OrtBackend {
 
     private const val TAG = "NM534"
 }
+
+/** 계측 테스트가 못박을 수 있는 실행 공급자. 프리빌트 `onnxruntime-android` 에 들어 있는 넷이다. */
+internal enum class Ep { CPU, WEBGPU, NNAPI, XNNPACK }
