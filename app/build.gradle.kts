@@ -68,8 +68,8 @@ android {
         //    같은 번호로 다시 올릴 수 없다.
         //
         // 폰·워치를 함께 올려 오프셋을 지킨다.
-        versionCode = 14
-        versionName = "2.0.0"
+        versionCode = 15
+        versionName = "2.0.1"
     }
 
     buildFeatures {
