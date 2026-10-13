@@ -5,6 +5,34 @@ plugins {
 
 android {
     namespace = "app.nursemate.core.vision"
+
+    /*
+     * 계측 테스트 APK 의 ABI 를 하나로 줄이는 탈출구 — **Firebase Test Lab 에 올릴 때만** 쓴다.
+     *
+     * OpenCV 와 ONNX Runtime 이 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 267MB 다.
+     * 올리는 데만 한참 걸리는데 Test Lab 실기기는 전부 arm64 다.
+     *
+     * ```
+     * ./gradlew :core:vision:assembleDebugAndroidTest -Pnm.abi=arm64-v8a
+     * ```
+     *
+     * ⚠️ 속성을 주지 않으면 평소대로 ABI 전부다 — CI·로컬 빌드는 영향받지 않는다.
+     */
+    providers.gradleProperty("nm.abi").orNull?.let { abi ->
+        defaultConfig.ndk.abiFilters.add(abi)
+    }
+
+    /*
+     * 테스트 메서드마다 프로세스를 새로 띄운다 (NM-577).
+     *
+     * 두 가지를 막는다.
+     *  - **세그폴트가 나머지를 날리는 것.** Adreno 에서 각인이 죽으면 그 뒤 EP 를 하나도 못 쟀다.
+     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 119MB 검출 모델을 EP 마다 열면
+     *    뒤쪽 테스트가 압박을 받아 메시지도 없이 죽는다(2026-10-13 실측).
+     *
+     * Test Lab 은 `--use-orchestrator`, 로컬은 이 설정이 같은 일을 한다.
+     */
+    testOptions.execution = "ANDROIDX_TEST_ORCHESTRATOR"
 }
 
 /*
@@ -76,4 +104,8 @@ dependencies {
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+
+    // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
+    // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
+    androidTestUtil(libs.androidx.test.orchestrator)
 }

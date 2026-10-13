@@ -54,7 +54,12 @@ import org.opencv.imgproc.Imgproc
  * 빈 문자열이 아니다. 계약에서 `imprint: ""` 는 「각인이 없는 알약만」이라는 하드 조건이라,
  * 못 읽은 것을 그렇게 보내면 각인이 있는 정답이 전부 탈락한다.
  */
-class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
+class ImprintReader(
+    modelFile: File,
+    threads: Int = DEFAULT_THREADS,
+    cpuNodes: String? = RNN_ON_CPU,
+    webGpuOptions: Map<String, String> = emptyMap()
+) : Closeable {
 
     init {
         // 네이티브 로딩은 여기서 한 번만 한다. 앱 시작에 걸면 각인을 쓰지 않는 사용자도 비용을 낸다.
@@ -63,7 +68,12 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
 
-    private val session: OrtSession = OrtBackend.openSession(env, modelFile, cpuNodeNames = RNN_ON_CPU) {
+    private val session: OrtSession = OrtBackend.openSession(
+        env,
+        modelFile,
+        cpuNodeNames = cpuNodes,
+        webGpuOptions = webGpuOptions
+    ) {
         setIntraOpNumThreads(threads)
     }
 
@@ -203,7 +213,7 @@ class ImprintReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable
          * WebGPU EP 전용 옵션 `forceCpuNodeNames` 로도 해 봤는데 **안 먹는다**(11715 ms).
          * 그쪽은 정확한 노드 이름 목록을 받는 것으로 보인다.
          */
-        private const val RNN_ON_CPU = "/rnn/"
+        internal const val RNN_ON_CPU = "/rnn/"
 
         /** 검출기와 같은 값. 실측 근거는 `PillDetector.DEFAULT_THREADS`. */
         const val DEFAULT_THREADS = 4

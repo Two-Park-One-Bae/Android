@@ -3,6 +3,7 @@ package app.nursemate.core.vision.mark
 import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.EpOverride
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -45,6 +46,8 @@ class MarkReaderParityTest {
     @Before
     fun setUp() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
+        // 리더를 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 EP 로 돈다.
+        EpOverride.apply()
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         fixtures = JSONObject(assets.open("mark/fixtures.json").use { it.readBytes().decodeToString() })
         answers = JSONObject(assets.open("mark/answers.json").use { it.readBytes().decodeToString() })

@@ -119,6 +119,8 @@ kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.re
 # 계측 테스트 — 각인 전처리가 OpenCV 네이티브를 쓰므로 JVM 에서는 돌릴 수 없다(NM-485).
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
+# 테스트 메서드마다 프로세스를 새로 띄운다 — 네이티브 세그폴트가 나머지 테스트를 날리지 않게 (NM-577).
+androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version = "1.6.1" }
 
 # 인증. BOM이 firebase-* 버전을 맞추므로 개별 라이브러리에는 버전을 적지 않는다.
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
