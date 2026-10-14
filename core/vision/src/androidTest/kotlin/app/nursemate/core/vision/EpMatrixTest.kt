@@ -168,8 +168,9 @@ class EpMatrixTest {
 
     // ── 거들기 ───────────────────────────────────────────────────────
 
-    /** 기준값은 `ImprintReaderParityTest` 와 같다 — `sample_crop` → `YS`, 0.969883. */
     /**
+     * 기준값은 `ImprintReaderParityTest` 와 같다 — `sample_crop` → `YS`, 0.969883.
+     *
      * @param model 돌릴 각인 모델. 기본은 운영과 같은 것이고, 변형을 댈 때만 바꾼다.
      * @param expectedScore 기준 모델의 기록값. 변형은 수치가 달라도 되므로 `null` 로 끈다 —
      *                      그때 보는 것은 **점수가 [ImprintDecoding.ADOPT_THRESHOLD] 를 넘는지**다.
@@ -188,7 +189,10 @@ class EpMatrixTest {
             // ⚠️ **단정보다 먼저 찍는다.** 읽은 답까지 같이 — 틀렸을 때 「null」만 남으면
             //    얼마나 틀렸는지 모른다. QNN 이 각인을 잃은 것을 이 줄 없이 쫓느라 한 번 더 돌렸다.
             report(
-                label, ep, openMs = ms(opened, ready), runMs = result.timings.totalMs,
+                label,
+                ep,
+                openMs = ms(opened, ready),
+                runMs = result.timings.totalMs,
                 answer = "${result.imprint} · pair ${result.pair} · 점수 ${"%.4f".format(result.score)}"
             )
 
@@ -200,7 +204,8 @@ class EpMatrixTest {
         }
     }
 
-    /** 기준값은 `MarkReaderParityTest` 와 같다 — 종 일치, 유무 ±5e-3. */
+    /**
+     * 기준값은 `MarkReaderParityTest` 와 같다 — 종 일치, 유무 ±5e-3. */
     private fun mark(ep: Ep) {
         OrtBackend.forcedEp = ep
         warmCache(ep) { MarkReader(markModel).close() }
@@ -251,8 +256,8 @@ class EpMatrixTest {
             }
     }
 
-    /** 세션 생성과 추론을 **갈라서** 적는다. 모델을 여는 값은 한 번만 드는데 섞으면 알약마다 든다고 잘못 읽힌다. */
-    /**
+    /** 세션 생성과 추론을 **갈라서** 적는다. 모델을 여는 값은 한 번만 드는데 섞으면 알약마다 든다고 잘못 읽힌다.
+     *
      * [Ep.QNN_CACHED] 일 때만 **세션을 한 번 버리고 연다** — 그래야 캐시 적중을 재는 것이 된다.
      *
      * `ep.context_enable` 은 첫 세션에서 컴파일 결과를 쓴다. 한 번만 열면 재는 값이 **쓰기

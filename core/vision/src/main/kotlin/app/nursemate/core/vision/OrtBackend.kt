@@ -1,14 +1,15 @@
 package app.nursemate.core.vision
 
+// `ai.onnxruntime.qnnpluginep.*` 는 플러그인 artifact 가 들고 있는 이름이다. 손으로 적지
+// 않는다 — artifact 를 올렸을 때 이름이 바뀌면 컴파일이 깨져 알게 된다.
+//
+// ⚠️ `compileOnly` 로 문다 — 이 클래스들은 feature module `qnn_core` 에 있고, 설치본에 따라
+//    런타임에 없을 수 있다([QNN_BUNDLED]).
+
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtProvider
 import ai.onnxruntime.OrtSession
 import ai.onnxruntime.providers.NNAPIFlags
-// 플러그인 artifact 가 들고 있는 이름 둘. 손으로 적지 않는다 — artifact 를 올렸을 때
-// 이름이 바뀌면 컴파일이 깨져 알게 된다.
-//
-// ⚠️ `compileOnly` 로 문다 — 이 클래스들은 feature module `:qnn` 에 있고, 설치본에 따라
-//    런타임에 없을 수 있다([QNN_BUNDLED]).
 import ai.onnxruntime.qnnpluginep.getEpName as qnnEpName
 import ai.onnxruntime.qnnpluginep.getLibraryPath as qnnLibraryPath
 import android.util.Log
@@ -374,21 +375,20 @@ internal object OrtBackend {
         modelFile: File,
         cpuNodeNames: String?,
         webGpuOptions: Map<String, String>
-    ) =
-        when (ep) {
-            Ep.CPU -> Unit
+    ) = when (ep) {
+        Ep.CPU -> Unit
 
-            Ep.WEBGPU -> {
-                addWebGPU(webGpuOptions)
-                cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
-            }
+        Ep.WEBGPU -> {
+            addWebGPU(webGpuOptions)
+            cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
+        }
 
-            // 기본 플래그. CPU 폴백이 **허용**돼 있어, 느리게 나오면 NNAPI 의 자체 CPU 구현
-            // (`nnapi-reference`)으로 떨어진 것일 수 있다 — 그걸 가리는 것이 [Ep.NNAPI_NO_CPU] 다.
-            Ep.NNAPI -> addNnapi()
+        // 기본 플래그. CPU 폴백이 **허용**돼 있어, 느리게 나오면 NNAPI 의 자체 CPU 구현
+        // (`nnapi-reference`)으로 떨어진 것일 수 있다 — 그걸 가리는 것이 [Ep.NNAPI_NO_CPU] 다.
+        Ep.NNAPI -> addNnapi()
 
-            // CPU 폴백을 막는다. 그래도 돌면 진짜 NPU/GPU 에서 돈 것이고, 실패하면 위가 CPU 였다는 뜻이다.
-            Ep.NNAPI_NO_CPU -> addNnapi(EnumSet.of(NNAPIFlags.CPU_DISABLED))
+        // CPU 폴백을 막는다. 그래도 돌면 진짜 NPU/GPU 에서 돈 것이고, 실패하면 위가 CPU 였다는 뜻이다.
+        Ep.NNAPI_NO_CPU -> addNnapi(EnumSet.of(NNAPIFlags.CPU_DISABLED))
 
             /*
              * **NNAPI 가 잘하는 것만 준다** — 가속기가 못 받는 덩어리를 손으로 CPU 에 고정한다.
@@ -401,27 +401,27 @@ internal object OrtBackend {
              * 고정하면 남는 그래프가 **conv 뿐**이라 NNAPI 가 한 덩이로 가져갈 수 있다.
              * WebGPU 에서 같은 수법이 9943 → 1796ms 를 만들었다([ImprintReader] KDoc).
              */
-            Ep.NNAPI_SPLIT -> {
-                addNnapi()
-                cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
-            }
-
-            // ⚠️ 권장 설정이 **아니다**. 바깥 `configure()` 가 ORT 풀에 4스레드를 거는데 XNNPACK 은
-            // 자기 풀이 따로라 경합한다. 비교 기준으로만 둔다 — 제대로 건 것은 [Ep.XNNPACK_TUNED].
-            Ep.XNNPACK -> addXnnpack(emptyMap())
-
-            // ORT 문서 권장: ORT 풀은 1, XNNPACK 풀에 코어 수, intra-op 스핀 끄기.
-            // 「XNNPACK has a separate internal threadpool which can lead to contention with
-            //   the ORT intra-op threadpool」
-            Ep.XNNPACK_TUNED -> {
-                setIntraOpNumThreads(1)
-                addConfigEntry(INTRA_OP_SPINNING, "0")
-                addXnnpack(mapOf("intra_op_num_threads" to XNNPACK_THREADS.toString()))
-            }
-
-            // 퀄컴 HTP 계열. 분기가 여섯이고 KDoc 이 길어 따로 뺐다 — 여기서 복잡도가 샜다.
-            else -> applyQnnEp(env, ep, modelFile, cpuNodeNames)
+        Ep.NNAPI_SPLIT -> {
+            addNnapi()
+            cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
         }
+
+        // ⚠️ 권장 설정이 **아니다**. 바깥 `configure()` 가 ORT 풀에 4스레드를 거는데 XNNPACK 은
+        // 자기 풀이 따로라 경합한다. 비교 기준으로만 둔다 — 제대로 건 것은 [Ep.XNNPACK_TUNED].
+        Ep.XNNPACK -> addXnnpack(emptyMap())
+
+        // ORT 문서 권장: ORT 풀은 1, XNNPACK 풀에 코어 수, intra-op 스핀 끄기.
+        // 「XNNPACK has a separate internal threadpool which can lead to contention with
+        //   the ORT intra-op threadpool」
+        Ep.XNNPACK_TUNED -> {
+            setIntraOpNumThreads(1)
+            addConfigEntry(INTRA_OP_SPINNING, "0")
+            addXnnpack(mapOf("intra_op_num_threads" to XNNPACK_THREADS.toString()))
+        }
+
+        // 퀄컴 HTP 계열. 분기가 여섯이고 KDoc 이 길어 따로 뺐다 — 여기서 복잡도가 샜다.
+        else -> applyQnnEp(env, ep, modelFile, cpuNodeNames)
+    }
 
     /**
      * 퀄컴 HTP 계열 분기. [applyEp] 에서 떼어냈다 — 여섯 갈래에 각각 긴 사정이 붙어
@@ -432,10 +432,9 @@ internal object OrtBackend {
         ep: Ep,
         modelFile: File,
         cpuNodeNames: String?
-    ) =
-        when (ep) {
-            // 퀄컴 HTP. 기본 설정만 — 옵션은 [qnnBaseOptions] 가 공통으로 깐다.
-            Ep.QNN -> addQnn(env, emptyMap())
+    ) = when (ep) {
+        // 퀄컴 HTP. 기본 설정만 — 옵션은 [qnnBaseOptions] 가 공통으로 깐다.
+        Ep.QNN -> addQnn(env, emptyMap())
 
             /*
              * **HTP 를 fp32 로 묶는다** — 각인이 QNN 에서 틀리는 이유를 가르는 대조군이다.
@@ -452,7 +451,7 @@ internal object OrtBackend {
              * 격자만 fp32 로 남긴 변형이 99.6% 로 올라갔다 — 격자가 fp16 에 민감한 것이다.
              * 여기서 fp32 로 묶어 **그 설명이 맞는지**, 그리고 묶고도 CPU 보다 빠른지를 본다.
              */
-            Ep.QNN_FP32 -> addQnn(env, mapOf("enable_htp_fp16_precision" to "0"))
+        Ep.QNN_FP32 -> addQnn(env, mapOf("enable_htp_fp16_precision" to "0"))
 
             /*
              * **fp16 을 명시로 켠다.** [Ep.QNN_FP32] 의 반대쪽이고, 둘 중 하나는 기본값과 같다.
@@ -464,7 +463,7 @@ internal object OrtBackend {
              * 2026-10-13 에 이 축을 빼고 「기본」과 「=0」만 재서 **같은 설정을 두 번 재고
              * 「fp16 은 원인이 아니다」로 잘못 결론**했다.
              */
-            Ep.QNN_FP16 -> addQnn(env, mapOf("enable_htp_fp16_precision" to "1"))
+        Ep.QNN_FP16 -> addQnn(env, mapOf("enable_htp_fp16_precision" to "1"))
 
             /*
              * **LSTM 을 CPU 에 남기고 conv 만 HTP 에 준다** — 각인이 QNN 에서 답을 잃는 이유의
@@ -526,20 +525,20 @@ internal object OrtBackend {
              * 채택률과 정밀도를 비교해야 한다 — ML 쪽 일이고, 돌릴 하네스는
              * `scratchpad/qnn_stn_cpu.py` 에 있다.
              */
-            // ⚠️ **지금 이 분기는 [Ep.QNN] 과 같다.** 331면 전수에서 점수가 **331/331 동일**하게
-            //    나왔다 — `session.name_based_layer_assignment` 가 플러그인 EP(`addExecutionProvider`)
-            //    경로에는 적용되지 않는 것으로 보인다. WebGPU·NNAPI 는 ORT 안에 박힌 EP 라 먹는다.
-            //    각인이 전수에서 쓸 만하게 나왔으므로(위 표) 급한 축은 아니다. 고치려면 QNN
-            //    제공자 옵션 쪽(`qnn_subgraphs` 등)을 봐야 한다.
-            Ep.QNN_STN_CPU -> {
-                addQnn(env, emptyMap())
-                addConfigEntry(LAYER_ASSIGNMENT, "cpu($STN_PREFIX)")
-            }
+        // ⚠️ **지금 이 분기는 [Ep.QNN] 과 같다.** 331면 전수에서 점수가 **331/331 동일**하게
+        //    나왔다 — `session.name_based_layer_assignment` 가 플러그인 EP(`addExecutionProvider`)
+        //    경로에는 적용되지 않는 것으로 보인다. WebGPU·NNAPI 는 ORT 안에 박힌 EP 라 먹는다.
+        //    각인이 전수에서 쓸 만하게 나왔으므로(위 표) 급한 축은 아니다. 고치려면 QNN
+        //    제공자 옵션 쪽(`qnn_subgraphs` 등)을 봐야 한다.
+        Ep.QNN_STN_CPU -> {
+            addQnn(env, emptyMap())
+            addConfigEntry(LAYER_ASSIGNMENT, "cpu($STN_PREFIX)")
+        }
 
-            Ep.QNN_RNN_CPU -> {
-                addQnn(env, emptyMap())
-                cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
-            }
+        Ep.QNN_RNN_CPU -> {
+            addQnn(env, emptyMap())
+            cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
+        }
 
             /*
              * **컴파일 결과를 캐시한다** — 84MB `libQnnHtpPrepare.so` 를 운영에서 뺄 수 있는지가
@@ -554,27 +553,27 @@ internal object OrtBackend {
              * [contextCacheFile] 이 그 경로고, 파일이 이미 있으면 [openSession] 이 그쪽을 연다.
              * 2026-10-13 첫 측정에서 원본 ONNX 를 다시 열어 둘째 세션도 86초였다.
              */
-            Ep.QNN_CACHED -> {
-                // ⚠️ **생성을 켜는 것은 캐시가 없을 때만이다.** 이미 컨텍스트 모델을 열면서
-                //    또 켜면 ORT 가 거절한다 — `Failed to generate EP context model since the
-                //    file … exists already`(2026-10-13 실측).
-                if (contextModelOrNull(ep, modelFile) == null) {
-                    // ⚠️ **세션 설정이다, EP 제공자 옵션이 아니다.** `addExecutionProvider` 에
-                    //    넘기면 조용히 무시된다 — 그래서 한 번은 캐시가 아예 안 생겼다.
-                    addConfigEntry(EP_CONTEXT_ENABLE, "1")
-                    // 컴파일 바이너리를 ONNX 안에 품지 않고 옆 파일로 뺀다. 각인 것이 27.9MB 다.
-                    addConfigEntry(EP_CONTEXT_EMBED_MODE, "0")
-                    // ⚠️ **모델마다 다른 파일**이어야 한다. 하나로 두면 먼저 돈 모델의 컴파일
-                    //    결과를 다음 모델이 읽는다 — orchestrator 가 프로세스는 새로 띄우지만
-                    //    `cacheDir` 은 그대로라 파일이 남는다.
-                    addConfigEntry(EP_CONTEXT_FILE_PATH, contextCacheFile(modelFile))
-                }
-                addQnn(env, emptyMap())
+        Ep.QNN_CACHED -> {
+            // ⚠️ **생성을 켜는 것은 캐시가 없을 때만이다.** 이미 컨텍스트 모델을 열면서
+            //    또 켜면 ORT 가 거절한다 — `Failed to generate EP context model since the
+            //    file … exists already`(2026-10-13 실측).
+            if (contextModelOrNull(ep, modelFile) == null) {
+                // ⚠️ **세션 설정이다, EP 제공자 옵션이 아니다.** `addExecutionProvider` 에
+                //    넘기면 조용히 무시된다 — 그래서 한 번은 캐시가 아예 안 생겼다.
+                addConfigEntry(EP_CONTEXT_ENABLE, "1")
+                // 컴파일 바이너리를 ONNX 안에 품지 않고 옆 파일로 뺀다. 각인 것이 27.9MB 다.
+                addConfigEntry(EP_CONTEXT_EMBED_MODE, "0")
+                // ⚠️ **모델마다 다른 파일**이어야 한다. 하나로 두면 먼저 돈 모델의 컴파일
+                //    결과를 다음 모델이 읽는다 — orchestrator 가 프로세스는 새로 띄우지만
+                //    `cacheDir` 은 그대로라 파일이 남는다.
+                addConfigEntry(EP_CONTEXT_FILE_PATH, contextCacheFile(modelFile))
             }
-
-            // [applyEp] 가 QNN 계열만 넘긴다. 나머지는 거기서 이미 갈렸다.
-            else -> error("QNN 계열이 아닌 EP 가 넘어왔다: $ep")
+            addQnn(env, emptyMap())
         }
+
+        // [applyEp] 가 QNN 계열만 넘긴다. 나머지는 거기서 이미 갈렸다.
+        else -> error("QNN 계열이 아닌 EP 가 넘어왔다: $ep")
+    }
 
     /**
      * QNN 플러그인 EP 를 세션에 건다.
@@ -734,6 +733,17 @@ internal object OrtBackend {
  * (`com.qualcomm.qti:onnxruntime-android-qnn`)이 더해 주는 것이다 — 스냅드래곤에서만 성립한다.
  */
 internal enum class Ep {
-    CPU, WEBGPU, NNAPI, NNAPI_NO_CPU, NNAPI_SPLIT, XNNPACK, XNNPACK_TUNED,
-    QNN, QNN_FP32, QNN_FP16, QNN_STN_CPU, QNN_RNN_CPU, QNN_CACHED
+    CPU,
+    WEBGPU,
+    NNAPI,
+    NNAPI_NO_CPU,
+    NNAPI_SPLIT,
+    XNNPACK,
+    XNNPACK_TUNED,
+    QNN,
+    QNN_FP32,
+    QNN_FP16,
+    QNN_STN_CPU,
+    QNN_RNN_CPU,
+    QNN_CACHED
 }

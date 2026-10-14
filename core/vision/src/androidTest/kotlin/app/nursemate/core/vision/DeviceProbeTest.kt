@@ -67,7 +67,9 @@ class DeviceProbeTest {
         val files = dir?.listFiles()
         when {
             files == null -> add("모델       디렉터리를 못 읽었다")
+
             files.isEmpty() -> add("모델       **비어 있다** — 밀어 넣는 경로가 위와 같은지 보라")
+
             else -> files.sortedBy { it.name }
                 .forEach { add("모델       ${it.name} ${it.length() / 1024 / 1024}MB") }
         }

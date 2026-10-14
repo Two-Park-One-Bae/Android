@@ -1,14 +1,16 @@
 import app.nursemate.buildlogic.libs
 import com.android.build.api.dsl.DynamicFeatureExtension
 import com.android.build.api.variant.DynamicFeatureAndroidComponentsExtension
+import java.io.File
+import java.util.zip.ZipFile
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.SetProperty
-import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -17,8 +19,6 @@ import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.register
-import java.io.File
-import java.util.zip.ZipFile
 
 /**
  * QNN 조건부 전달 모듈을 만든다 — `qnn_core` 하나와 세대별 `qnn_v73` · `qnn_v75` · `qnn_v79`.
