@@ -51,7 +51,9 @@ class QnnModuleProbeTest {
         lines += "QNN so     ${qnn.size}개 ${qnn.joinToString { it.name }.ifEmpty { "**없음**" }}"
 
         val marker = "ai.onnxruntime.qnnpluginep.QnnPluginEpLibraryKt"
-        lines += "플러그인EP ${runCatching { Class.forName(marker) }.fold({ "로드됨" }, { "**없음** ${it.javaClass.simpleName}" })}"
+        val ep = runCatching { Class.forName(marker) }
+            .fold({ "로드됨" }, { "**없음** ${it.javaClass.simpleName}" })
+        lines += "플러그인EP $ep"
 
         // `FLAG_EXTRACT_NATIVE_LIBS` 는 공개 상수가 아니라 비트를 직접 본다 — 1 shl 28.
         val extract = (info.flags ushr 28) and 1
