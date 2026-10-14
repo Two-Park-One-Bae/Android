@@ -166,17 +166,7 @@ abstract class QnnJniLibsTask : DefaultTask() {
         val arm64 = File(root, ABI).apply { mkdirs() }
 
         for (aar in sourceAars) {
-            ZipFile(aar).use { zip ->
-                for (entry in zip.entries()) {
-                    val name = entry.name.substringAfterLast('/')
-                    if (entry.isDirectory || name !in wanted) continue
-                    if (!entry.name.contains("/$ABI/")) continue
-                    zip.getInputStream(entry).use { input ->
-                        File(arm64, name).outputStream().use(input::copyTo)
-                    }
-                    found += name
-                }
-            }
+            found += extractInto(aar, arm64, wanted)
         }
 
         // 조용히 비는 것을 막는다 — `.so` 가 빠지면 세션 생성이 실패하는 게 아니라 QNN 이
@@ -190,6 +180,29 @@ abstract class QnnJniLibsTask : DefaultTask() {
                 .resolve("libqnn_abi_placeholder.so")
                 .writeBytes(ByteArray(0))
         }
+    }
+
+    /**
+     * `aar` 안에서 [wanted] 에 적힌 `.so` 만 [dest] 로 옮긴다.
+     *
+     * @return 실제로 옮긴 이름들. 부르는 쪽이 [wanted] 와 대조해 **조용히 비는 것**을 막는다.
+     */
+    private fun extractInto(aar: File, dest: File, wanted: Set<String>): Set<String> {
+        val copied = mutableSetOf<String>()
+        ZipFile(aar).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .filter { it.name.substringAfterLast('/') in wanted }
+                .filter { it.name.contains("/$ABI/") }
+                .forEach { entry ->
+                    val name = entry.name.substringAfterLast('/')
+                    zip.getInputStream(entry).use { input ->
+                        File(dest, name).outputStream().use(input::copyTo)
+                    }
+                    copied += name
+                }
+        }
+        return copied
     }
 
     private companion object {

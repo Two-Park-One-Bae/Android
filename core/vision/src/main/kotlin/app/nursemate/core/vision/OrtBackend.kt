@@ -419,6 +419,21 @@ internal object OrtBackend {
                 addXnnpack(mapOf("intra_op_num_threads" to XNNPACK_THREADS.toString()))
             }
 
+            // 퀄컴 HTP 계열. 분기가 여섯이고 KDoc 이 길어 따로 뺐다 — 여기서 복잡도가 샜다.
+            else -> applyQnnEp(env, ep, modelFile, cpuNodeNames)
+        }
+
+    /**
+     * 퀄컴 HTP 계열 분기. [applyEp] 에서 떼어냈다 — 여섯 갈래에 각각 긴 사정이 붙어
+     * 한 함수에 두면 읽기도 어렵고 복잡도 한계도 넘는다.
+     */
+    private fun OrtSession.SessionOptions.applyQnnEp(
+        env: OrtEnvironment,
+        ep: Ep,
+        modelFile: File,
+        cpuNodeNames: String?
+    ) =
+        when (ep) {
             // 퀄컴 HTP. 기본 설정만 — 옵션은 [qnnBaseOptions] 가 공통으로 깐다.
             Ep.QNN -> addQnn(env, emptyMap())
 
@@ -556,6 +571,9 @@ internal object OrtBackend {
                 }
                 addQnn(env, emptyMap())
             }
+
+            // [applyEp] 가 QNN 계열만 넘긴다. 나머지는 거기서 이미 갈렸다.
+            else -> error("QNN 계열이 아닌 EP 가 넘어왔다: $ep")
         }
 
     /**
