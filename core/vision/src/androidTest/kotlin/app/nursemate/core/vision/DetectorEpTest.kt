@@ -63,11 +63,21 @@ class DetectorEpTest {
             ?.filter { it.name.startsWith(PHOTO_PREFIX) && it.extension.lowercase() in IMAGES }
             ?.sortedBy { it.name }.orEmpty()
         assumeTrue("검출용 사진이 없어 건너뛴다 — files/ 에 $PHOTO_PREFIX*.jpg 를 밀어 넣어야 한다", photos.isNotEmpty())
+
+        // [Ep.QNN_CACHED] 가 컴파일 결과를 쓸 곳. 모델이 놓인 자리는 adb 가 밀어 넣은 데라
+        // 앱에 쓰기 권한이 없을 수 있어 앱 캐시로 보낸다.
+        OrtBackend.contextCacheDir = InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+        // HTP 가 DSP skel 을 찾는 자리. 여기를 안 주면 EP 가 노드를 하나도 안 가져가고
+        // **CPU 로 돌면서 성공한다** — [OrtBackend.qnnNativeLibDir] KDoc 참조.
+        OrtBackend.qnnNativeLibDir =
+            File(InstrumentationRegistry.getInstrumentation().targetContext.applicationInfo.nativeLibraryDir)
     }
 
     @After
     fun tearDown() {
         OrtBackend.forcedEp = null
+        OrtBackend.contextCacheDir = null
+        OrtBackend.qnnNativeLibDir = null
     }
 
     @Test fun `검출_CPU`() = measure(Ep.CPU)
@@ -77,6 +87,12 @@ class DetectorEpTest {
     @Test fun `검출_NNAPI`() = measure(Ep.NNAPI)
 
     @Test fun `검출_XNNPACK`() = measure(Ep.XNNPACK)
+
+    @Test fun `검출_QNN`() = measure(Ep.QNN)
+
+    @Test fun `검출_QNN_FP32`() = measure(Ep.QNN_FP32)
+
+    @Test fun `검출_QNN_CACHED`() = measure(Ep.QNN_CACHED)
 
     private fun measure(ep: Ep) = runBlocking {
         val bitmaps = photos.map { file ->

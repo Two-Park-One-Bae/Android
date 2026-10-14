@@ -75,6 +75,24 @@ class ImprintReader(
         webGpuOptions = webGpuOptions
     ) {
         setIntraOpNumThreads(threads)
+
+        /*
+         * **배치 차원을 못박는다** — QNN 이 이것 없이는 그래프를 거의 못 받는다 (NM-577).
+         *
+         * 모델 입력이 `image: [batch, 1, 128, 128]` 로 **`batch` 가 심볼릭**이다. 그런데 이
+         * 리더는 늘 144장을 넣는다 — 바뀔 여지가 없다.
+         *
+         * 심볼릭으로 두면 HTP 가 이렇게 거절한다(2026-10-13 Adreno 740 logcat).
+         * ```
+         * W [GeluFusion] ValidateOnQnn failed … : Cannot get shape
+         * W Unable to get producer node for OrtValueInfo '/rnn/Shape_output_0'
+         * ```
+         * 그러면 QNN EP 가 노드를 거의 안 가져가고 **CPU 로 돌면서 세션은 열리고 답도 맞는다.**
+         * 느린 것만이 증거다(각인 5368ms — AI Hub 가 같은 칩에서 잰 값은 234ms).
+         *
+         * CPU·WebGPU 에도 해롭지 않다 — 모양이 확정되면 ORT 가 추론·상수접기를 더 할 수 있다.
+         */
+        setSymbolicDimensionValue(OrtBackend.BATCH_DIM, ImprintPreprocess.SAMPLES.toLong())
     }
 
     /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
@@ -217,6 +235,9 @@ class ImprintReader(
 
         /** 검출기와 같은 값. 실측 근거는 `PillDetector.DEFAULT_THREADS`. */
         const val DEFAULT_THREADS = 4
+
+        /** `session.run` 한 번에 넣는 기본 장수 — 144 는 WebGPU 에서 깨진다. 사정은 생성자 KDoc. */
+        const val DEFAULT_BATCH = 72
 
         /** CRNN + CTC, 5.97M 파라미터. 21MB. */
         const val MODEL_FILE_NAME = "reader_ep60_s1.onnx"

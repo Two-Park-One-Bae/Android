@@ -56,6 +56,28 @@ fun com.android.build.api.dsl.ApplicationBuildType.airbridge(appName: String?, t
 android {
     namespace = "app.nursemate"
 
+    /*
+     * 조건부 전달 모듈 — **퀄컴 기기에만** 내려간다.
+     *
+     * `qnn-runtime` 이 arm64 비압축 180MB 인데 Hexagon NPU 가 없는 기기에는 한 바이트도
+     * 쓸모가 없다. base 에 넣으면 엑시노스·Dimensity·Tensor 사용자가 쓰지도 않을 180MB 를
+     * 받는다. 어느 기기에 내려줄지는 `src/main/device_targeting_configuration.xml` 이 정하고,
+     * 조건 자체는 `qnn/src/main/AndroidManifest.xml` 의 `<dist:device-groups>` 가 건다.
+     *
+     * ⚠️ 이 메커니즘은 **번들(AAB)에만** 산다. `assembleRelease` 로 뽑은 APK 에는 feature
+     *    모듈이 통째로 들어간다 — 크기를 볼 때는 `bundleRelease` + bundletool 로 본다.
+     */
+    dynamicFeatures += setOf(":qnn_core", ":qnn_v73", ":qnn_v75", ":qnn_v79", ":qnn_v81")
+
+    /*
+     * 어느 기기에 `:qnn` 을 내려줄지 — **경로를 명시해야 한다.**
+     *
+     * `src/main/device_targeting_configuration.xml` 에 두기만 하면 AGP 가 **조용히 무시한다.**
+     * 처음에 그렇게 뒀더니 번들은 멀쩡히 빌드되는데 `BUNDLE-METADATA` 에 설정이 안 들어갔고,
+     * 그러면 조건이 없는 셈이라 **180MB 가 전 기기에 깔린다.** 빌드가 알려 주지 않는다.
+     */
+    bundle.deviceTargetingConfig = file("src/main/device_targeting_configuration.xml")
+
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
