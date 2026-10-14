@@ -106,13 +106,53 @@ class ImprintVariantTest {
         read("WebGPU · NCHW · 분할 없음", cpuNodes = null, options = mapOf("preferredLayout" to "NCHW"))
     }
 
+    /**
+     * **배치를 쪼갠다** — 엑시노스 2600 에서 나온 빈 답을 겨눈다 (2026-10-14).
+     *
+     * `s5e9965` WebGPU 가 39회 중 3회 **답 null · 점수 0.0000** 을 냈다. 예외도 크래시도 로그도
+     * 없다. 실패한 세 번은 전부 추론이 가장 느린 구간(3804·3884·3888 ms)이었는데, 같은 느린
+     * 구간의 3412~3590 ms 는 통과했으므로 **느린 것 자체가 원인은 아니다.**
+     *
+     * 각인만 깨지고 마크·검출은 한 번도 안 깨진 것이 단서다.
+     *
+     * | | 검출 | 마크 | 각인 |
+     * |---|---|---|---|
+     * | 배치 | 1 | 8 | **144** |
+     * | 실패 | 0/6 | 0/39 | **3/39** |
+     *
+     * 144 는 `ROTATIONS(24) × ZOOMS(6)` TTA 다. 쪼개도 **후보 144개를 다 쓰므로 답이 같아야
+     * 한다** — 그래서 다른 변형과 똑같이 0.969883 을 단정한다. 빈 답이 사라지면 배치가 원인이다.
+     *
+     * ⚠️ **한 번으로는 못 가린다.** 기준 설정도 36번 중 33번은 멀쩡했다. 회차를 벌어야 한다.
+     */
+    @Test
+    fun `F_WebGPU_배치36`() {
+        OrtBackend.webGpuEnabled = true
+        read("WebGPU · 배치 36", batch = 36)
+    }
+
+    /** 36 과 144 사이. 실패율이 배치에 비례하는지 본다 — 가르는 선이 어디인지도 알고 싶다. */
+    @Test
+    fun `G_WebGPU_배치72`() {
+        OrtBackend.webGpuEnabled = true
+        read("WebGPU · 배치 72", batch = 72)
+    }
+
+    /** 쪼개기 자체가 답을 바꾸지 않는다는 대조 — 여기서 틀리면 병합 코드가 틀린 것이다. */
+    @Test
+    fun `H_CPU_배치36`() {
+        OrtBackend.webGpuEnabled = false
+        read("CPU · 배치 36", batch = 36)
+    }
+
     private fun read(
         label: String,
         cpuNodes: String? = ImprintReader.RNN_ON_CPU,
-        options: Map<String, String> = emptyMap()
+        options: Map<String, String> = emptyMap(),
+        batch: Int = ImprintPreprocess.SAMPLES
     ) {
         val started = System.nanoTime()
-        val result = ImprintReader(model, cpuNodes = cpuNodes, webGpuOptions = options)
+        val result = ImprintReader(model, cpuNodes = cpuNodes, webGpuOptions = options, batch = batch)
             .use { it.readGray(gray) }
         val elapsed = (System.nanoTime() - started) / 1_000_000
 

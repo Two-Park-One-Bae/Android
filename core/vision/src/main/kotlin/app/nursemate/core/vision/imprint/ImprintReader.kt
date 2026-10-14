@@ -58,7 +58,37 @@ class ImprintReader(
     modelFile: File,
     threads: Int = DEFAULT_THREADS,
     cpuNodes: String? = RNN_ON_CPU,
-    webGpuOptions: Map<String, String> = emptyMap()
+    webGpuOptions: Map<String, String> = emptyMap(),
+    /**
+     * `session.run` 한 번에 넣는 장수. **144 를 한 번에 넣으면 WebGPU 가 빈 답을 낸다.**
+     *
+     * ## 왜 72 인가
+     * 엑시노스 2600 에서 배치 144 가 **225회 중 30회**(13.3%) `각인=null · 점수 0.0` 을 냈다.
+     * 예외도 크래시도 logcat 오류도 없다 — 앱은 「못 읽었다」로 처리하고 넘어간다. 한 번은
+     * `pair=EE · 0.609` 로 **계산이 망가진 값**이 나왔다. 채택 임계 0.949 를 못 넘어 null 이
+     * 됐을 뿐, 넘었으면 틀린 각인을 그대로 채택했을 것이다.
+     *
+     * 세 모델의 배치와 실패율이 같은 순서였다 — 검출 1→0/6, 마크 8→0/39, 각인 **144→3/39**.
+     *
+     * | 배치 | 결과 |
+     * |---|---|
+     * | 144 | 225회 중 30 실패 · 기기가 43°C 넘으면 6~8% → **16~20%** |
+     * | **72** | **718회 중 0** · 55분 연속 부하에서 온도가 45.9 → 42.9°C 로 **하강** |
+     * | 36 | 675회 중 0 |
+     *
+     * 한 번에 GPU 로 가는 양이 절반이라 피크 부하도 절반이다. 정확도와 발열에 같은 방향으로
+     * 듣는다.
+     *
+     * ## 답은 바뀌지 않는다
+     * 쪼개도 **후보 144개를 다 쓴다** — 출력 `[32, 144, 37]` 의 N 축으로 이어 붙인다. 점수가
+     * 끝자리까지 같은 것을 확인했다(WebGPU 0.96988875).
+     *
+     * 대가는 `session.run` 횟수다. 배치 36 이 기준보다 11% 느렸다(2366 대 2134ms).
+     *
+     * ⚠️ [ImprintPreprocess.SAMPLES] 의 약수여야 한다 — 세션이 배치를 못박고 열리므로
+     *    나머지 청크를 다른 모양으로 넣을 수 없다.
+     */
+    private val batch: Int = DEFAULT_BATCH
 ) : Closeable {
 
     init {
@@ -92,7 +122,13 @@ class ImprintReader(
          *
          * CPU·WebGPU 에도 해롭지 않다 — 모양이 확정되면 ORT 가 추론·상수접기를 더 할 수 있다.
          */
-        setSymbolicDimensionValue(OrtBackend.BATCH_DIM, ImprintPreprocess.SAMPLES.toLong())
+        setSymbolicDimensionValue(OrtBackend.BATCH_DIM, batch.toLong())
+    }
+
+    init {
+        require(ImprintPreprocess.SAMPLES % batch == 0) {
+            "batch 는 ${ImprintPreprocess.SAMPLES} 의 약수여야 한다 — 받은 값 $batch"
+        }
     }
 
     /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
@@ -156,14 +192,27 @@ class ImprintReader(
         )
     }
 
-    /** @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). */
+    /**
+     * @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). N 은 늘
+     *         [ImprintPreprocess.SAMPLES] 다. [batch] 가 그보다 작으면 나눠 돌린 뒤 **N 축으로
+     *         이어 붙인다** — 디코딩은 후보가 몇 번에 나눠 왔는지 알 필요가 없다.
+     */
     private fun runSession(): Array<Array<FloatArray>> {
-        val shape = longArrayOf(ImprintPreprocess.SAMPLES.toLong(), 1, SIDE_L, SIDE_L)
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
-            session.run(mapOf(INPUT_NAME to tensor)).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                return (result[0].value as Array<Array<FloatArray>>)
-            }
+        val shape = longArrayOf(batch.toLong(), 1, SIDE_L, SIDE_L)
+        val chunks = ArrayList<Array<Array<FloatArray>>>(ImprintPreprocess.SAMPLES / batch)
+        for (start in 0 until ImprintPreprocess.SAMPLES step batch) {
+            OnnxTensor.createTensor(env, FloatBuffer.wrap(input, start * PLANE, batch * PLANE), shape)
+                .use { tensor ->
+                    session.run(mapOf(INPUT_NAME to tensor)).use { result ->
+                        @Suppress("UNCHECKED_CAST")
+                        chunks += result[0].value as Array<Array<FloatArray>>
+                    }
+                }
+        }
+        if (chunks.size == 1) return chunks[0]
+        // 시간축 T 는 청크마다 같다 — 배치와 무관한 모델 상수다.
+        return Array(chunks[0].size) { t ->
+            Array(ImprintPreprocess.SAMPLES) { n -> chunks[n / batch][t][n % batch] }
         }
     }
 
