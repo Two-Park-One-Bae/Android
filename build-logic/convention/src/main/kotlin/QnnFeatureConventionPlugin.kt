@@ -69,6 +69,11 @@ abstract class QnnFeatureConventionPlugin : Plugin<Project> {
                 // base 는 26 인데 여기만 27 이다 — 플러그인 artifact 가 27 을 요구한다.
                 // `system-on-chip` 조건 자체가 API 31+ 라 실질적으로는 더 높아도 상관없다.
                 defaultConfig.minSdk = 27
+
+                // base 와 **같아야** 한다 — `extractNativeLibs` 가 모듈마다 갈리면 어떤 split 은
+                // 풀리고 어떤 split 은 안 풀린다. QNN 은 skel 이 실파일이어야 도므로 여기도 켠다.
+                // 사정은 app/build.gradle.kts 의 같은 설정 주석 참고.
+                packaging.jniLibs.useLegacyPackaging = true
             }
 
             // 풀어 쓰기만 하는 설정 — `implementation` 이 아니라서 AGP 가 패키징하지 않는다.
