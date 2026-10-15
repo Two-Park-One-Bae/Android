@@ -439,8 +439,10 @@ internal object OrtBackend {
             /*
              * **HTP 를 fp32 로 묶는다** — 각인이 QNN 에서 틀리는 이유를 가르는 대조군이다.
              *
-             * [Ep.QNN] 은 ORT 기본값대로 `enable_htp_fp16_precision=1` 이다(HTP 가 fp16 기계라
-             * 그게 기본이다). 그 설정에서 2026-10-13 Adreno 740 측정이 이렇게 나왔다.
+             * ⚠️ **지금은 [Ep.QNN] 과 같은 설정이다.** 기본값에 기대지 않으려고 [qnnBaseOptions] 가
+             *    `0` 을 명시하게 바꿨기 때문이다. fp16 대조는 [Ep.QNN_FP16] 과 해야 한다.
+             *
+             * 아래 표는 바꾸기 전, [Ep.QNN] 이 기본값(문서상 `1`)으로 돌던 2026-10-13 Adreno 740 측정이다.
              *
              * | | CPU | QNN |
              * |---|---|---|
@@ -465,21 +467,6 @@ internal object OrtBackend {
              */
         Ep.QNN_FP16 -> addQnn(env, mapOf("enable_htp_fp16_precision" to "1"))
 
-            /*
-             * **LSTM 을 CPU 에 남기고 conv 만 HTP 에 준다** — 각인이 QNN 에서 답을 잃는 이유의
-             * 두 번째 가설이다.
-             *
-             * 첫 가설은 fp16 이었고 **틀렸다** — `enable_htp_fp16_precision=0` 으로 묶어도 답이
-             * 그대로 `null` 이고 시간도 418 → 435ms 로 거의 안 변했다(2026-10-13 Adreno 740).
-             *
-             * 남은 용의자가 양방향 LSTM 이다. 근거가 둘 있다.
-             *  - **LiteRT 는 이 모델을 아예 못 열었다** — CPU 포함 전 백엔드 `Failed to load
-             *    model from file`. 마크·검출은 열렸다. LSTM 이 변환기를 막는다는 뜻이다
-             *  - WebGPU 도 통째로는 9943ms 였고 **LSTM 을 CPU 에 고정해서 1796ms** 가 됐다
-             *    ([ImprintReader] KDoc). 같은 경계가 QNN 에도 있을 수 있다
-             *
-             * 마크가 QNN 에서 **정답**인 것이 이 가설을 받친다 — 마크엔 LSTM 이 없다.
-             */
             /*
              * **STN 만 CPU 에 남기고 나머지를 HTP 에 준다** — 각인 오차의 **발원지**를 피한다.
              *
@@ -535,6 +522,24 @@ internal object OrtBackend {
             addConfigEntry(LAYER_ASSIGNMENT, "cpu($STN_PREFIX)")
         }
 
+            /*
+             * **LSTM 을 CPU 에 남기고 conv 만 HTP 에 준다** — 각인이 QNN 에서 답을 잃는 이유의
+             * 두 번째 가설이다.
+             *
+             * 첫 가설은 fp16 이었고 **틀렸다** — `enable_htp_fp16_precision=0` 으로 묶어도 답이
+             * 그대로 `null` 이고 시간도 418 → 435ms 로 거의 안 변했다(2026-10-13 Adreno 740).
+             *
+             * 남은 용의자가 양방향 LSTM 이다. 근거가 둘 있다.
+             *  - **LiteRT 는 이 모델을 아예 못 열었다** — CPU 포함 전 백엔드 `Failed to load
+             *    model from file`. 마크·검출은 열렸다. LSTM 이 변환기를 막는다는 뜻이다
+             *  - WebGPU 도 통째로는 9943ms 였고 **LSTM 을 CPU 에 고정해서 1796ms** 가 됐다
+             *    ([ImprintReader] KDoc). 같은 경계가 QNN 에도 있을 수 있다
+             *
+             * 마크가 QNN 에서 **정답**인 것이 이 가설을 받친다 — 마크엔 LSTM 이 없다.
+             *
+             * ⚠️ **기각됐다.** 단계별 측정에서 오차의 발원지는 STN 재샘플링이었고 이 분기는 효과가
+             *    없었다 — 위 [Ep.QNN_STN_CPU] 표 참고. 비교용으로만 남긴다.
+             */
         Ep.QNN_RNN_CPU -> {
             addQnn(env, emptyMap())
             cpuNodeNames?.let { addConfigEntry(LAYER_ASSIGNMENT, "cpu($it)") }
@@ -602,6 +607,7 @@ internal object OrtBackend {
      * [OrtEnvironment] 는 프로세스에 하나라, orchestrator 가 메서드마다 프로세스를 새로 띄우는
      * 지금 구조에서는 사실상 테스트당 한 번이다.
      */
+    @Synchronized
     private fun ensureQnnRegistered(env: OrtEnvironment) {
         // 이 설치본에 `:qnn` feature module 이 없으면 여기서 끊어 **무엇이 없는지** 말한다 —
         // 그냥 두면 NoClassDefFoundError 가 한 칸 더 안쪽에서 터져 읽기 어렵다.
@@ -614,6 +620,8 @@ internal object OrtBackend {
         Log.i(TAG, "QNN 플러그인 등록 — ${qnnLibraryPath()} · EP 디바이스 ${env.epDevices.size}개")
     }
 
+    /** 두 번 등록하면 ORT 가 던진다. 검출·각인·마크가 동시에 열 수 있어 [ensureQnnRegistered] 를 잠근다. */
+    @Volatile
     private var qnnRegistered = false
 
     /**
@@ -642,9 +650,16 @@ internal object OrtBackend {
     /** 생성될 컨텍스트 모델의 경로. 이 경로를 **다음에 직접 열어야** 적중이다. */
     private const val EP_CONTEXT_FILE_PATH = "ep.context_file_path"
 
-    /** 모델 하나당 캐시 파일 하나. 디렉터리를 안 주면 모델 옆이다(ORT 기본과 같다). */
+    /**
+     * 모델 하나당 캐시 파일 하나. 디렉터리를 안 주면 모델 옆이다(ORT 기본과 같다).
+     *
+     * 이름에 **원본의 크기·수정 시각**을 넣는다 — 같은 파일명으로 모델을 바꿔 끼우면 옛 HTP
+     * 그래프를 그대로 집어 들어 이전 모델을 잰다. 생성이 중간에 끊겨 남은 반쪽 파일은 여전히
+     * 거르지 못한다(크기 > 0 만 본다) — 그때는 캐시 디렉터리를 비운다.
+     */
     private fun contextCacheFile(modelFile: File): String {
-        val name = "${modelFile.name.substringBeforeLast('.')}.ctx.onnx"
+        val stamp = "${modelFile.length()}-${modelFile.lastModified()}"
+        val name = "${modelFile.name.substringBeforeLast('.')}.$stamp.ctx.onnx"
         return File(contextCacheDir ?: modelFile.parentFile, name).absolutePath
     }
 

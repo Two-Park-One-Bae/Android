@@ -50,8 +50,12 @@ import org.gradle.kotlin.dsl.register
  * - 다른 세대 `Skel`/`Stub` · `libQnnGpu.so` · `libQnnDsp*.so`
  *
  * ⚠️ **`HtpPrepare` 를 뺐으므로 기기에서 컴파일할 수 없다.** QNN 으로 여는 모델은 반드시
- *    미리 구운 EPContext 여야 한다. 원본 ONNX 를 QNN 으로 열면 세션 생성에서 실패하고,
- *    그때는 base 의 원본을 CPU/WebGPU 로 여는 폴백이 받는다.
+ *    미리 구운 EPContext 여야 한다. 원본 ONNX 를 QNN 으로 열면 세션 생성에서 실패한다.
+ *
+ * ⚠️ **지금 운영 경로는 QNN 을 부르지 않는다.** `OrtBackend.openSession` 은 WebGPU 아니면 CPU 이고,
+ *    QNN 은 계측 테스트의 `forcedEp` 로만 열린다. 미리 구운 EPContext 도 아직 싣지 않는다. 그러니
+ *    이 모듈은 지금 퀄컴 기기에 **내려가기만 하고 쓰이지 않는다.** 운영에 넣을 때 EPContext 와
+ *    「QNN 세션 실패 → 원본을 WebGPU/CPU 로」 폴백을 같이 만든다(NM-599).
  */
 abstract class QnnFeatureConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {

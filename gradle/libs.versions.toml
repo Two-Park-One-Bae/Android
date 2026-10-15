@@ -185,8 +185,8 @@ onnxruntime-qnn-plugin = { group = "com.qualcomm.qti", name = "onnxruntime-andro
 # 위 플러그인이 dlopen 하는 QNN 백엔드 자체(`libQnnHtp` · `libQnnSystem` · `libQnnHtpPrepare`)와
 # HTP 세대별 skel/stub. POM 에 의존성이 없어 **직접 물려야** 한다.
 #
-# ⚠️ arm64 기준 비압축 **214MB** 다. 운영에 그대로 넣을 수 없다 — 쓰지 않는 백엔드와
-# 옛 세대 skel 을 `packaging.jniLibs.excludes` 로 덜어낸다(아래 `core/vision/build.gradle.kts`).
+# ⚠️ arm64 기준 비압축 **214MB** 다. 운영에는 이 artifact 를 통째로 넣지 않는다 — 세대별 feature
+# module 이 필요한 `.so` 만 꺼내 싣는다(`QnnFeatureConventionPlugin`, 허용목록 방식).
 qnn-runtime = { group = "com.qualcomm.qti", name = "qnn-runtime", version.ref = "qnnRuntime" }
 # 각인 OCR 전처리(NM-485). 기준 구현(ML `infer.py`)이 OpenCV 라 같은 라이브러리를 쓴다 —
 # CLAHE·형태학·연결요소를 손으로 옮기면 수치가 갈려도 조용히 틀린다.
@@ -196,7 +196,7 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
-# 조건부 전달 모듈(`:qnn`). QNN 런타임 180MB 를 퀄컴 기기에만 내려보낸다.
+# 조건부 전달 모듈(`qnn_core` + 세대별 `qnn_v##`). QNN 런타임을 퀄컴 기기에, 자기 세대 것만 내려보낸다.
 # ⚠️ **버전을 적지 않는다** — AGP 는 build-logic 이 이미 classpath 에 올려 둬서,
 #    버전을 주면 "already on the classpath with an unknown version" 으로 거절당한다.
 android-dynamic-feature = { id = "com.android.dynamic-feature" }

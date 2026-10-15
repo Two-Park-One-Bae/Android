@@ -33,10 +33,6 @@
         <config:device-selector>
             <config:system-on-chip manufacturer="QTI" model="SM8550"/>
         </config:device-selector>
-        <!-- 같은 V73 · 7 Gen 3. 실기기 미확인이라 틀렸으면 other 로 떨어질 뿐이다. -->
-        <config:device-selector>
-            <config:system-on-chip manufacturer="QTI" model="SM7750"/>
-        </config:device-selector>
     </config:device-group>
 
     <!-- Hexagon V75 · Snapdragon 8 Gen 3 — Galaxy S24.

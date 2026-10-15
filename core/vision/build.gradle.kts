@@ -60,11 +60,13 @@ android {
      * `base.apk!/lib/arm64-v8a/...` 를 열 수 없어 `errno 2` 로 실패하고, 그러면 QNN EP 가
      * 노드를 하나도 안 가져가 **전부 CPU 로 돌면서 테스트는 통과한다.**
      *
-     * ⚠️ 설치 용량이 늘어난다. 운영에 QNN 을 넣을 때는 필요한 skel 하나만 런타임에 꺼내
-     * 쓰는 쪽이 낫다 — 지금은 측정이라 통째로 푼다.
+     * ⚠️ **라이브러리 모듈의 packaging 은 이 모듈의 계측 테스트 APK 에만 먹는다.** 운영 AAB 의
+     *    QNN 구성은 `app` 의 같은 설정과 세대별 feature module(`QnnFeatureConventionPlugin` 허용목록)이
+     *    정한다. 운영 용량을 줄이려고 아래 excludes 를 고쳐도 아무것도 안 바뀐다.
      */
     packaging.jniLibs.useLegacyPackaging = true
 
+    // 테스트 APK 용 — 쓰지 않는 백엔드와 옛 세대를 덜어 Test Lab 업로드를 줄인다.
     packaging.jniLibs.excludes += setOf(
         "**/libQnnGpu.so",
         "**/libQnnDsp.so",
