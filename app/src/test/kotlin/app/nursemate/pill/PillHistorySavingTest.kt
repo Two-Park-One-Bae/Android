@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 /** 식별 결과 `완료` 의 기록 저장 — spec §완료 · 공유 · §식별 기록 — 저장. */
@@ -80,6 +81,19 @@ class PillHistorySavingTest {
         saving.save()
         assertEquals(listOf("h1" to listOf("A", "C")), api.saved)
         assertEquals(HistorySave.Saved, state.value.save)
+    }
+
+    @Test
+    fun `키가 없으면 정해서 보내고 다시 시도에도 같은 키를 쓴다`() {
+        state.value = confirmed.copy(historyId = null)
+        api.fail = failure(503)
+        saving.save()
+        val key = state.value.historyId
+        assertNotNull(key)
+
+        api.fail = null
+        saving.save()
+        assertEquals(listOf(key to listOf("A", "C")), api.saved)
     }
 
     @Test

@@ -10,10 +10,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.designsystem.v2.NmV2Menu
 import app.nursemate.core.designsystem.v2.NmV2MenuItem
+import app.nursemate.core.designsystem.v2.NmV2MenuWidth
 import app.nursemate.core.designsystem.v2.NmV2Modal
 
 // 식별 결과(PillResultScreen) 위에 뜨는 것 — ⋮ 메뉴 · 저장 실패 모달.
@@ -21,7 +21,7 @@ import app.nursemate.core.designsystem.v2.NmV2Modal
 /** ⋮ 메뉴 — `수정` · `삭제`. 바깥을 누르면 닫는다(정본 ④ 는 막을 깔지 않는다). */
 @Composable
 internal fun PillCardMenu(topEnd: IntOffset, onEdit: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
-    val menuWidth = with(LocalDensity.current) { MenuWidth.roundToPx() }
+    val menuWidth = with(LocalDensity.current) { NmV2MenuWidth.roundToPx() }
     Box(
         Modifier
             .fillMaxSize()
@@ -76,6 +76,3 @@ internal fun SaveFailedModal(
 }
 
 private const val SAVE_FAILED_TITLE = "식별 결과를 저장하지 못했어요"
-
-/** [NmV2Menu] 너비. */
-private val MenuWidth = 160.dp

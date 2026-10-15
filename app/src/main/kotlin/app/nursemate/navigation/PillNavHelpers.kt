@@ -1,5 +1,6 @@
 package app.nursemate.navigation
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -69,7 +70,10 @@ internal fun NavController.exitPillFlow(viewModel: PillRecognitionViewModel, fro
  * (결과 없음에서 갤러리로 다시 골라도 촬영 화면 위로 되감는다).
  */
 internal fun NavController.pillFlowFromHome(): Boolean =
-    runCatching { getBackStackEntry(NmRoute.PILL_CAPTURE).cameFromHome() }.getOrDefault(false)
+    runCatching { getBackStackEntry(NmRoute.PILL_CAPTURE).cameFromHome() }
+        // 촬영 화면 없이 결과까지 오는 길이 생기면 드러나게 남긴다 — 그때는 알약 탭으로 돌아간다.
+        .onFailure { Log.w("PillNav", "촬영 화면이 스택에 없다 — 알약 탭으로 돌아간다", it) }
+        .getOrDefault(false)
 
 /**
  * 후보에서 세부정보로 — **선택과 독립**이다. 고르기 전에 상세를 먼저 확인할 수 있어야 한다.

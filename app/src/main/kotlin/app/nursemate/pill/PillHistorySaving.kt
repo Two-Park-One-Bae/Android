@@ -2,6 +2,7 @@ package app.nursemate.pill
 
 import app.nursemate.core.data.pill.PillHistoryRejected
 import app.nursemate.core.data.pill.PillHistoryRepository
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -26,12 +27,12 @@ class PillHistorySaving internal constructor(
      */
     fun save() {
         val current = state.value
-        val historyId = current.historyId
         val pillCodes = current.finalPills().map { it.pillCode }
-        if (current.save == HistorySave.Saving || current.save == HistorySave.Saved) return
-        if (historyId == null || pillCodes.isEmpty()) return
+        if (current.save == HistorySave.Saving || current.save == HistorySave.Saved || pillCodes.isEmpty()) return
+        // 키는 식별 시작 때 정한다. 없으면(그 길을 거치지 않은 상태) 여기서 정해 둔다 — `완료` 가 말없이 멈추지 않게.
+        val historyId = current.historyId ?: UUID.randomUUID().toString()
 
-        state.update { it.copy(save = HistorySave.Saving) }
+        state.update { it.copy(historyId = historyId, save = HistorySave.Saving) }
         scope.launch {
             val result = repository.save(historyId, pillCodes)
             state.update {

@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -32,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -59,8 +58,6 @@ import app.nursemate.core.designsystem.v2.NmV2BottomBarButton
 import app.nursemate.core.designsystem.v2.NmV2ButtonKind
 import app.nursemate.core.designsystem.v2.NmV2CardShape
 import app.nursemate.core.designsystem.v2.NmV2Color
-import app.nursemate.core.designsystem.v2.NmV2Menu
-import app.nursemate.core.designsystem.v2.NmV2MenuItem
 import app.nursemate.core.designsystem.v2.NmV2Modal
 import app.nursemate.core.designsystem.v2.NmV2NavBar
 import app.nursemate.core.designsystem.v2.NmV2Surface
@@ -111,10 +108,11 @@ fun PillResultScreen(
     SystemBarIcons(darkIcons = true)
 
     val saving = save == HistorySave.Saving
-    var confirmingExit by remember { mutableStateOf(false) }
-    var confirmingFinish by remember { mutableStateOf(false) }
-    var sharing by remember { mutableStateOf(false) }
-    var deleting by remember { mutableStateOf<String?>(null) }
+    // 시트 · 확인 모달은 화면을 돌려도 남는다.
+    var confirmingExit by rememberSaveable { mutableStateOf(false) }
+    var confirmingFinish by rememberSaveable { mutableStateOf(false) }
+    var sharing by rememberSaveable { mutableStateOf(false) }
+    var deleting by rememberSaveable { mutableStateOf<String?>(null) }
     // 어느 카드의 ⋮ 를 눌렀는가 — 메뉴 오른쪽 위가 놓일 자리와 함께.
     var menuFor by remember { mutableStateOf<String?>(null) }
     var menuTopEnd by remember { mutableStateOf(IntOffset.Zero) }
@@ -137,9 +135,11 @@ fun PillResultScreen(
                     ResultPhoto(ui)
                 }
                 Progress(ui)
+                // 저장 중에는 결과를 고치지 못한다 — 보낸 뒤에 고친 것은 기록에 남지 않고 화면만 닫힌다.
                 ui.cards.forEach { card ->
                     ResultCardRow(
                         card = card,
+                        enabled = !saving,
                         onClick = { onEditPill(card.id) },
                         onDetail = { card.selected?.let(onDetail) },
                         onMenu = { topEnd ->
@@ -148,7 +148,7 @@ fun PillResultScreen(
                         }
                     )
                 }
-                AddPillButton(onAddPill)
+                AddPillButton(enabled = !saving, onClick = onAddPill)
             }
             ResultBottomBar(
                 canFinish = ui.confirmed > 0,
@@ -327,6 +327,7 @@ private fun Progress(ui: PillResultUi) {
 @Composable
 private fun ResultCardRow(
     card: PillResultCard,
+    enabled: Boolean,
     onClick: () -> Unit,
     onDetail: () -> Unit,
     onMenu: (IntOffset) -> Unit
@@ -349,7 +350,7 @@ private fun ResultCardRow(
             Modifier
                 .fillMaxSize()
                 .clip(NmV2CardShape)
-                .clickable(role = Role.Button, onClick = onClick)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .padding(start = 14.dp, end = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -385,7 +386,9 @@ private fun ResultCardRow(
             }
             if (identified) {
                 Box(
-                    Modifier.size(32.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onDetail),
+                    Modifier.size(
+                        32.dp
+                    ).clip(CircleShape).clickable(enabled = enabled, role = Role.Button, onClick = onDetail),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -401,7 +404,7 @@ private fun ResultCardRow(
                     .size(width = 28.dp, height = 32.dp)
                     .onGloballyPositioned { menuTop = it.positionInRoot().round().y + it.size.height }
                     .clip(CircleShape)
-                    .clickable(role = Role.Button) { onMenu(IntOffset(cardRight, menuTop)) },
+                    .clickable(enabled = enabled, role = Role.Button) { onMenu(IntOffset(cardRight, menuTop)) },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -448,7 +451,7 @@ private fun PillResultCard.subtitle(): String? = when (status) {
 
 /** `+ 알약 추가` — 미탐지 누락을 사용자가 직접 메운다(spec NM-187). 볼록한 흰 판 · 모서리 12. */
 @Composable
-private fun AddPillButton(onClick: () -> Unit) {
+private fun AddPillButton(enabled: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(NmRadius.md)
     Row(
         Modifier
@@ -456,7 +459,7 @@ private fun AddPillButton(onClick: () -> Unit) {
             .clip(shape)
             .background(Brush.verticalGradient(listOf(NmTheme.semanticColors.surface, NmV2Color.Raised.neutralBottom)))
             .border(1.dp, NmColor.Neutral.C200, shape)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically

@@ -211,8 +211,11 @@ data class NmV2MenuItem(
     val onClick: () -> Unit
 )
 
+/** [NmV2Menu] 너비 — 메뉴 오른쪽 끝을 앵커에 맞출 때 화면이 쓴다. */
+val NmV2MenuWidth = 160.dp
+
 /**
- * `Menu` — 평면 흰 + 테두리 + 목록 그림자. 너비 160, 한 줄 44.
+ * `Menu` — 평면 흰 + 테두리 + 목록 그림자. 너비 [NmV2MenuWidth], 한 줄 44.
  * 띄우는 자리(팝업 · 앵커)는 화면이 정한다 — 이 컴포넌트는 판만 그린다.
  */
 @Composable
@@ -221,7 +224,7 @@ fun NmV2Menu(items: List<NmV2MenuItem>, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(NmRadius.md)
     Column(
         modifier = modifier
-            .width(160.dp)
+            .width(NmV2MenuWidth)
             .v2OuterShadows(ShadowList, shape)
             .clip(shape)
             .background(colors.surface)
