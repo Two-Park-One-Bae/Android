@@ -46,8 +46,8 @@ import app.nursemate.pill.pillId
 import app.nursemate.pill.sharePillResultPdf
 
 /**
- * 알약 식별 플로우 — 촬영① → 미리보기② → 로딩④ → 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
- * (권한 거부③은 촬영 진입점이 권한 상태를 보고 가른다.)
+ * 알약 탭 — 기록 목록(시작점, NM-555) → 촬영① → 미리보기② → 로딩④ → 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
+ * (권한 거부③은 촬영 진입점이 권한 상태를 보고 가른다.) 홈 `사진 찍기` 도 알약 탭으로 와서 촬영에 올린다.
  *
  * ## 셸이 아니라 여기 있는 이유
  * 화면이 여섯이라 [NurseMateApp] 쪽 그래프에 그대로 두면 함수 하나가 앱 전체 라우팅을 떠안는다.
@@ -55,8 +55,10 @@ import app.nursemate.pill.sharePillResultPdf
  * ## 탭바를 두르지 않는다
  * 정본의 ①~⑦ 프레임에 Tab Bar 가 없다. 촬영부터 결과까지 전부 전체화면 플로우다.
  */
-fun NavGraphBuilder.pillNavGraph(navController: NavController) {
-    navigation(startDestination = NmRoute.PILL_CAPTURE, route = NmRoute.PILL_GRAPH) {
+fun NavGraphBuilder.pillNavGraph(navController: NavController, pillTab: @Composable () -> Unit) {
+    navigation(startDestination = NmRoute.PILL_TAB, route = NmRoute.PILL_GRAPH) {
+        // 알약 탭 — 기록 목록. 탭 바 · 한도 팝업이 셸(NmNavHost)에 있어 그리는 일은 셸이 맡는다.
+        composable(NmRoute.PILL_TAB) { pillTab() }
         capture(navController)
         edit(navController)
         detail(navController)
@@ -77,8 +79,8 @@ private fun NavGraphBuilder.capture(navController: NavController) = composable(N
             viewModel.selectPhoto(uri)
             navController.navigate(NmRoute.PILL_PREVIEW)
         },
-        // 촬영이 알약 탭의 첫 화면이라 뒤로 갈 곳이 없다. 닫으면 홈으로 보낸다.
-        onClose = { navController.switchTab(NmTab.Home) }
+        // 들어온 화면(알약 탭 목록 또는 홈)으로 돌아간다 — spec §재촬영 · 뒤로.
+        onClose = { navController.popBackStack() }
     )
 }
 

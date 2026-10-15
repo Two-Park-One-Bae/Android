@@ -58,6 +58,21 @@ object NmV2Type {
     /** 태그 — 11/500 */
     val tag = style(11, FontWeight.Medium)
 
+    /** 탭 화면 제목(알약 식별) — 24/700 */
+    val screenTitle = style(24, FontWeight.Bold)
+
+    /** 시트 제목(공유) — 17/700 */
+    val sheetTitle = style(17, FontWeight.Bold)
+
+    /** 빈 상태 · 실패 안내 제목 — 17/600 */
+    val stateTitle = style(17, FontWeight.SemiBold)
+
+    /** 목록 날짜 묶음 라벨 · 기록 상세 식별 시각 — 12/600 */
+    val groupLabel = style(12, FontWeight.SemiBold)
+
+    /** 기록 상세 식별 시각 — 13/600 */
+    val metaLabel = chipConfirmed
+
     /** 카드 구역 제목(진행 중인 타이머) — 16/700 */
     val sectionTitle = style(16, FontWeight.Bold)
 
@@ -84,6 +99,9 @@ object NmV2Type {
 
     /** 보조 캡션(초기화 시각) — 11/400 */
     val caption = style(11, FontWeight.Normal)
+
+    /** 상태 배지(`허가 종료`) — 10/600 */
+    val badge = style(10, FontWeight.SemiBold)
 
     /** 탭 바 라벨 — 10 (선택 600 · 나머지 400) */
     val tabSelected = style(10, FontWeight.SemiBold)

@@ -26,6 +26,9 @@ object NmRoute {
 
     /** 알약 식별 플로우. 탭바가 없는 전체화면이라 탭 루트로 감싸지 않는다. */
     const val PILL_GRAPH = "pill"
+
+    /** 알약 탭 — 촬영 버튼 + 식별 기록 목록(NM-555). 알약 그래프의 시작점이다. */
+    const val PILL_TAB = "pill/tab"
     const val PILL_CAPTURE = "pill/capture"
     const val PILL_PREVIEW = "pill/preview"
     const val PILL_LOADING = "pill/loading"
@@ -50,4 +53,15 @@ object NmRoute {
     const val PILL_DETAIL = "pill/detail/{pillCode}?revoked={revoked}"
 
     fun pillDetail(pillCode: String, revoked: Boolean): String = "pill/detail/$pillCode?revoked=$revoked"
+
+    /**
+     * 식별 기록 상세(NM-555). 요약의 식별 시각과 알약 수를 같이 실어 — 조회 전에도 시각을 바로 보이고
+     * 알약 수만큼 자리 표시 행을 둔다(spec §기록 상세 — 조회 중).
+     *
+     * 알약 그래프 밖에 둔다 — 홈 최근 식별 카드에서도 열고, 거기서 뒤로는 홈이어야 한다.
+     */
+    const val PILL_HISTORY = "history/{historyId}?at={at}&count={count}"
+
+    fun pillHistory(historyId: String, identifiedAt: String, pillCount: Int): String =
+        "history/$historyId?at=${android.net.Uri.encode(identifiedAt)}&count=$pillCount"
 }

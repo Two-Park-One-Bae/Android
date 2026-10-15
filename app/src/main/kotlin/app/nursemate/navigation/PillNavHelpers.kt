@@ -29,10 +29,10 @@ internal fun NavController.restartCapture(viewModel: PillRecognitionViewModel) {
 }
 
 /**
- * 알약 플로우를 **끝내고** 홈으로 나간다. 촬영이 그래프 시작점이라 단순 pop 으로는 못 나간다.
+ * 알약 플로우를 **끝내고** 홈으로 나간다. 그래프 시작점이 알약 탭 목록이라 단순 pop 으로는 홈에 못 간다.
  *
- * ⚠️ **스택을 촬영까지 되감은 뒤에 나간다.** [switchTab] 은 탭마다 화면 스택을 저장·복원하므로
- * (`saveState`/`restoreState`), 결과 화면을 띄운 채 나가면 알약 탭을 다시 눌렀을 때 카메라가
+ * ⚠️ **스택을 알약 탭 목록까지 되감은 뒤에 나간다.** [switchTab] 은 탭마다 화면 스택을 저장·복원하므로
+ * (`saveState`/`restoreState`), 결과 화면을 띄운 채 나가면 알약 탭을 다시 눌렀을 때 목록이
  * 아니라 **그 결과 화면이 그대로 복원된다.** 되감기를 [switchTab] 앞에 두어야 한다 — 저장되는
  * 스택은 `popUpTo { saveState = true }` 가 도는 그 시점의 것이다.
  *
@@ -41,7 +41,8 @@ internal fun NavController.restartCapture(viewModel: PillRecognitionViewModel) {
  */
 internal fun NavController.exitToHome(viewModel: PillRecognitionViewModel) {
     viewModel.discardPhoto()
-    popBackStack(NmRoute.PILL_CAPTURE, inclusive = false)
+    // 알약 탭의 시작은 기록 목록이다(NM-555) — 목록까지 되감아야 알약 탭을 다시 눌렀을 때 목록이 보인다.
+    popBackStack(NmRoute.PILL_TAB, inclusive = false)
     switchTab(NmTab.Home)
 }
 

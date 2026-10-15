@@ -25,7 +25,7 @@ import app.nursemate.core.designsystem.v2.NmV2Surface
 import app.nursemate.core.designsystem.v2.NmV2SurfaceStyle
 import app.nursemate.core.designsystem.v2.NmV2Type
 
-/** 홈 최근 식별 카드에 보일 것. 식별 기록(NM-555)이 붙기 전에는 [None] 만 온다. */
+/** 홈 최근 식별 카드에 보일 것(spec home §최근 식별 카드). */
 sealed interface HomeRecent {
     /** 기록이 없다 — `아직 식별 기록이 없어요`. */
     data object None : HomeRecent
@@ -33,22 +33,31 @@ sealed interface HomeRecent {
     /** 불러오지 못했다 — `기록을 불러오지 못했어요`. */
     data object Failed : HomeRecent
 
-    /** 가장 최근 한 건. [time] 은 「오후 2:14」처럼 이미 다듬은 식별 시각이다. */
-    data class Item(val historyId: String, val time: String, val title: String) : HomeRecent
+    /**
+     * 가장 최근 한 건. [time] 은 「오후 2:14」처럼 이미 다듬은 식별 시각이다.
+     * [identifiedAt] · [pillCount] 는 상세로 넘겨 조회 전에도 시각 · 자리 표시 행을 그리게 한다.
+     */
+    data class Item(
+        val historyId: String,
+        val time: String,
+        val title: String,
+        val identifiedAt: String = "",
+        val pillCount: Int = 1
+    ) : HomeRecent
 }
 
 // ── 최근 식별 ────────────────────────────────────────────────────────
 
 /** 가장 최근 기록 한 건. 기록이 없거나 불러오지 못하면 카드를 누르지 않는다. */
 @Composable
-internal fun RecentCard(recent: HomeRecent, onRecent: (String) -> Unit) {
+internal fun RecentCard(recent: HomeRecent, onRecent: (HomeRecent.Item) -> Unit) {
     val colors = NmTheme.semanticColors
     val item = recent as? HomeRecent.Item
     NmV2Surface(NmV2SurfaceStyle.ListCard, Modifier.fillMaxWidth()) {
         Row(
             Modifier
                 .clip(NmV2CardShape)
-                .clickable(enabled = item != null, role = Role.Button) { item?.let { onRecent(it.historyId) } }
+                .clickable(enabled = item != null, role = Role.Button) { item?.let(onRecent) }
                 .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -56,7 +65,7 @@ internal fun RecentCard(recent: HomeRecent, onRecent: (String) -> Unit) {
             Icon(painterResource(NmSymbols.History), null, tint = NmColor.Neutral.C700, modifier = Modifier.size(24.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
-                    if (item != null) "최근 식별 · ${item.time}" else "최근 식별",
+                    if (item != null && item.time.isNotEmpty()) "최근 식별 · ${item.time}" else "최근 식별",
                     style = NmV2Type.rowSubtitle,
                     color = colors.textSecondary
                 )
