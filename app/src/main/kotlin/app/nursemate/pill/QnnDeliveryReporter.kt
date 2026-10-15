@@ -3,6 +3,7 @@ package app.nursemate.pill
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import app.nursemate.BuildConfig
 import app.nursemate.core.vision.QnnDeliveryState
 import app.nursemate.telemetry.AnalyticsEvent
@@ -41,9 +42,12 @@ class QnnDeliveryReporter @Inject constructor(
     /** 디스크를 읽으므로 IO 스레드에서 부른다. */
     fun reportOnce() {
         // SOC_* 는 API 31+ 다. 그 아래 퀄컴 기기는 어차피 기기그룹(system-on-chip)에 안 맞는다.
-        val eligible = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            isQualcomm(Build.SOC_MANUFACTURER) &&
-            isFromPlay(installer())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) reportOnceS()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun reportOnceS() {
+        val eligible = isQualcomm(Build.SOC_MANUFACTURER) && isFromPlay(installer())
         if (!eligible || prefs.getInt(KEY_LAST_VERSION, 0) == BuildConfig.VERSION_CODE) return
 
         val state = QnnDeliveryState.of(File(context.applicationInfo.nativeLibraryDir))
@@ -51,6 +55,7 @@ class QnnDeliveryReporter @Inject constructor(
         prefs.edit().putInt(KEY_LAST_VERSION, BuildConfig.VERSION_CODE).apply()
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     @Suppress("TooGenericExceptionCaught")
     private fun installer(): String? = try {
         context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
