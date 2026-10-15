@@ -109,7 +109,8 @@ class ImprintReader(
         env,
         modelFile,
         cpuNodeNames = cpuNodes,
-        webGpuOptions = webGpuOptions
+        webGpuOptions = webGpuOptions,
+        contextTag = "b$batch"
     ) {
         setIntraOpNumThreads(threads)
 
