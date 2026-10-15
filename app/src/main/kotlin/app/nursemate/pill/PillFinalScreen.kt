@@ -113,8 +113,7 @@ fun PillFinalScreen(
                 NmButtonPrimary(text = "완료", onClick = onDone, modifier = Modifier.weight(1f))
             }
             Text(
-                text = "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
-                    "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
+                text = PILL_DISCLAIMER,
                 style = Disclaimer,
                 color = colors.textTertiary,
                 textAlign = TextAlign.Center,

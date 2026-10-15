@@ -2,18 +2,28 @@ package app.nursemate.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.nursemate.core.data.pill.PillHistoryRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.CareTimer
+import app.nursemate.core.model.PillHistorySummary
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.core.timer.clockTicks
+import app.nursemate.history.homeTime
+import app.nursemate.history.parseIdentifiedAt
+import app.nursemate.history.pillsTitle
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -26,10 +36,50 @@ import kotlinx.coroutines.launch
  * 식별 횟수는 [UsageHolder] 가 앱 전체와 공유한다 — 여기서는 화면이 뜰 때 갱신만 시킨다.
  */
 @HiltViewModel
-class HomeViewModel @Inject constructor(private val usageHolder: UsageHolder, timerRepository: TimerRepository) :
-    ViewModel() {
+class HomeViewModel @Inject constructor(
+    private val usageHolder: UsageHolder,
+    timerRepository: TimerRepository,
+    private val historyRepository: PillHistoryRepository
+) : ViewModel() {
 
     val usage = usageHolder.usage
+
+    private val _recent = MutableStateFlow<HomeRecent>(HomeRecent.Loading)
+    private var recentJob: Job? = null
+
+    /**
+     * 최근 식별 카드 — 가장 최근 기록 한 건(spec home §최근 식별 카드).
+     *
+     * **홈이 보일 때마다**([refreshRecent]) 그리고 기록이 저장 · 삭제될 때 다시 받는다. 받기 전에는 직전 값을
+     * 그대로 둔다 — 돌아올 때마다 빈 상태로 깜빡이지 않게.
+     */
+    val recent: StateFlow<HomeRecent> = _recent.asStateFlow()
+
+    init {
+        viewModelScope.launch { historyRepository.version.drop(1).collect { refreshRecent() } }
+    }
+
+    fun refreshRecent() {
+        // 앞 요청은 버린다 — 홈 복귀와 기록 변경이 겹치면 늦게 온 옛 응답이 새 값을 덮는다.
+        recentJob?.cancel()
+        recentJob = viewModelScope.launch {
+            _recent.value = historyRepository.latest().fold(
+                onSuccess = { summary -> summary?.toHomeRecent() ?: HomeRecent.None },
+                onFailure = { HomeRecent.Failed }
+            )
+        }
+    }
+
+    private fun PillHistorySummary.toHomeRecent(): HomeRecent {
+        val at = parseIdentifiedAt(identifiedAt)
+        return HomeRecent.Item(
+            historyId = historyId,
+            time = at?.let { homeTime(it, LocalDate.now(it.zone)) }.orEmpty(),
+            title = pillsTitle(firstPillName, pillCount),
+            identifiedAt = identifiedAt,
+            pillCount = pillCount
+        )
+    }
 
     /**
      * 타이머 탭 목록 그대로 — 진행 중 · 일시정지 · 만료를 모두 센다(spec home §처치 타이머 카드).

@@ -36,6 +36,9 @@ enum class ApiErrorCode {
     /** 404 — 알약 상세 없음 */
     PILL_DETAIL_NOT_FOUND,
 
+    /** 404 — 식별 기록 없음(다른 기기에서 삭제 · 100건 상한). 들어온 화면으로 돌아가 목록을 다시 불러온다 */
+    PILL_HISTORY_NOT_FOUND,
+
     /** 413 — 업로드 이미지 초과 */
     IMAGE_SIZE_EXCEEDED,
 

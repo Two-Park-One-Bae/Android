@@ -31,7 +31,7 @@ class PillResultShareTest {
     @Test
     fun `품목명 제조사 품목코드를 줄을 나눠 적는다`() {
         // 병원 컴퓨터에 다시 입력하는 자리라 한 줄에 몰아 쓰지 않는다(인터뷰 반영 — iOS 동일).
-        val text = listOf(candidate("197000123", "타이레놀정 500mg", "한국얀센")).toShareText(day)
+        val text = listOf(candidate("197000123", "타이레놀정 500mg", "한국얀센")).map { it.toSharedPill() }.toShareText(day)
 
         assertTrue(text.contains("1. 타이레놀정 500mg"))
         assertTrue(text.contains("   제조사: 한국얀센"))
@@ -40,7 +40,7 @@ class PillResultShareTest {
 
     @Test
     fun `업체명이 비어 있으면 그 줄을 아예 빼놓는다`() {
-        val text = listOf(candidate("1", "게보린정")).toShareText(day)
+        val text = listOf(candidate("1", "게보린정")).map { it.toSharedPill() }.toShareText(day)
 
         assertTrue(!text.contains("제조사:"))
     }
@@ -48,7 +48,7 @@ class PillResultShareTest {
     @Test
     fun `품목명이 비어 있으면 이름 미상으로 적는다`() {
         // 빈 줄로 흘려보내면 몇 번 알약이 빠졌는지 알 수 없다. 품목코드는 아래 줄에 남는다.
-        val text = listOf(candidate("198800119", "")).toShareText(day)
+        val text = listOf(candidate("198800119", "")).map { it.toSharedPill() }.toShareText(day)
 
         assertTrue(text.contains("1. 이름 미상"))
         assertTrue(text.contains("   품목코드: 198800119"))
@@ -58,7 +58,7 @@ class PillResultShareTest {
     fun `고지는 NM-380 정본 문구를 쓴다`() {
         // ⚠️ iOS 는 공유물에만 다른 문장을 쓴다. 심사 대응으로 확정된 문구라 밖으로 나가는
         //    문서일수록 이쪽을 지켜야 한다.
-        val text = listOf(candidate("1", "게보린정")).toShareText(day)
+        val text = listOf(candidate("1", "게보린정")).map { it.toSharedPill() }.toShareText(day)
 
         assertTrue(
             text.trimEnd().endsWith(
@@ -70,7 +70,9 @@ class PillResultShareTest {
 
     @Test
     fun `머리에 제목 날짜 개수를 적는다`() {
-        val text = listOf(candidate("1", "가"), candidate("2", "나"), candidate("3", "다")).toShareText(day)
+        val text = listOf(candidate("1", "가"), candidate("2", "나"), candidate("3", "다")).map {
+            it.toSharedPill()
+        }.toShareText(day)
         val lines = text.lines()
 
         assertEquals("널스메이트 · 알약 식별 결과", lines[0])

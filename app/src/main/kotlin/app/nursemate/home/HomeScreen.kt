@@ -82,7 +82,7 @@ fun HomeScreen(
     onPillCard: () -> Unit,
     onNewTimer: () -> Unit,
     onTimerCard: () -> Unit,
-    onRecent: (historyId: String) -> Unit,
+    onRecent: (HomeRecent.Item) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(

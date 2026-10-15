@@ -32,6 +32,7 @@ import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.model.Ingredient
 import app.nursemate.core.model.PillClassification
 import app.nursemate.core.model.PillDetail
+import app.nursemate.pill.PILL_DISCLAIMER
 import coil3.compose.SubcomposeAsyncImage
 
 /*
@@ -148,8 +149,7 @@ internal fun DetailNotice() {
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.border))
         Text(
             text = "출처: 식품의약품안전처 의약품 제품 허가정보\n" +
-                "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
-                "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
+                PILL_DISCLAIMER,
             style = NoticeText,
             color = colors.textTertiary,
             textAlign = TextAlign.Center,
