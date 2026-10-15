@@ -26,7 +26,7 @@ import javax.inject.Singleton
  *
  * ## 왜 차단목록이 아니라 허용목록인가
  * 처음에는 「퀄컴이면 각인만 CPU」로 짰는데 **범위가 틀렸다.** 2026-10-13 실기기 전수 측정이
- * 보여 준 것은 이렇다.
+ * 보여 준 것은 이렇다(엑시노스 2500·2600 두 줄은 2026-10-14 RTL 실측으로 따로다 — 아래).
  *
  * | 기기 | 검출 | 각인 | 마크 |
  * |---|---|---|---|
@@ -46,9 +46,11 @@ import javax.inject.Singleton
  *
  * ⚠️ **2600 각인은 「안전」이 아니라 「확률을 낮춘」 상태로 켠다.** 배치 144 에서 225회 중 30회
  *    예외 없이 빈 답(한 번은 `EE · 0.609` 처럼 계산이 망가진 값)이 나왔고, 배치를 72 로 내려
- *    1,393회 무결이 됐다(NM-602). 원인을 막은 것은 아니다 — 망가진 값의 점수가 우연히 0.949 를
- *    넘으면 틀린 각인을 채택한다. 운영에서 「각인 못 읽음」 비율이 2600 에서만 튀면 여기서
- *    각인을 빼는 것이 첫 조치다.
+ *    718회 무결이 됐다(NM-602 — 배치 36 의 675회는 따로다). 원인을 막은 것은 아니다 —
+ *    망가진 값의 점수가 우연히 0.949 를 넘으면 틀린 각인을 채택한다. 운영에서 「각인 못 읽음」
+ *    비율이 2600 에서만 튀면 여기서 각인을 빼는 것이 첫 조치다.
+ *    ⚠️ **그 비율을 볼 지표가 아직 없다.** 분석 이벤트에 각인 실패·SoC·EP 차원이 없어서 지금은
+ *       사용자 문의나 다른 경로로만 알 수 있다. 관측을 붙이기 전까지는 이 위험을 알고 켠 것이다.
  *
  * ## 왜 Adreno 의 마크·검출까지 끄나
  * Adreno 740 은 검출·마크가 통과했고 2배 가까이 빠르다. 그런데 **한 번 통과한 것으로는
@@ -182,12 +184,23 @@ class WebGpuPolicy @Inject constructor(@param:ApplicationContext private val con
          * - `s5e9955` = Exynos 2500 · Xclipse 950 (Galaxy Z Flip7). 셋 다 3회 재현, 1.9~2.7배.
          * - `s5e9965` = Exynos 2600 · Xclipse 960 (Galaxy S26/S26+ 국내판). 각인은 위 KDoc 의 ⚠️ 를 볼 것.
          */
-        val ALLOWED: Map<String, Set<String>> = listOf("s5e9945", "s5e9955", "s5e9965").associateWith {
-            setOf(
+        val ALLOWED: Map<String, Set<String>> = mapOf(
+            "s5e9945" to setOf(
+                PillDetector.MODEL_FILE_NAME,
+                ImprintReader.MODEL_FILE_NAME,
+                MarkReader.MODEL_FILE_NAME
+            ),
+            "s5e9955" to setOf(
+                PillDetector.MODEL_FILE_NAME,
+                ImprintReader.MODEL_FILE_NAME,
+                MarkReader.MODEL_FILE_NAME
+            ),
+            // 기기마다 따로 적는다 — 각인만 빼는 핫픽스가 이 줄 하나로 끝나야 한다.
+            "s5e9965" to setOf(
                 PillDetector.MODEL_FILE_NAME,
                 ImprintReader.MODEL_FILE_NAME,
                 MarkReader.MODEL_FILE_NAME
             )
-        }
+        )
     }
 }
