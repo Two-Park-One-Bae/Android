@@ -67,6 +67,10 @@ def base_model(soc: str) -> str:
     return SUFFIX_RE.sub("", soc.lower())
 
 
+# 키를 접미사 없는 소문자로 맞춘다 — `SM7750` · `sm7750-ab` 로 적어도 같은 칩으로 본다.
+SKIPPED = {base_model(k): v for k, v in SKIPPED_SOCS.items()}
+
+
 def from_ai_hub() -> dict[str, set[str]]:
     """{'73': {'sm8550', ...}, ...} — AI Hub 가 아는 세대별 SoC."""
     import qai_hub as hub
@@ -149,23 +153,35 @@ def main() -> int:
             continue
 
         our_socs = {base_model(s) for s in ours.get(generation, set())}
-        missing = {s for s in hub_socs if base_model(s) not in our_socs and base_model(s) not in SKIPPED_SOCS}
-        skipped = {s for s in hub_socs if base_model(s) in SKIPPED_SOCS}
+        # 일부러 뺀 SoC 는 대조 대상에서 먼저 덜어낸다. 그 SoC 의 점검은 아래 전역 점검이 맡는다.
+        checked = {s for s in hub_socs if base_model(s) not in SKIPPED}
+        missing = {s for s in checked if base_model(s) not in our_socs}
         if generation not in ours:
             problems += 1
             print(f"V{generation}: ❌ 그룹이 없다 — 모듈 `qnn_v{generation}` 과 그룹 `qti_v{generation}` 을 만들어야 한다")
-            print(f"        AI Hub 가 아는 SoC: {', '.join(sorted(hub_socs))}")
+            print(f"        AI Hub 가 아는 SoC: {', '.join(sorted(checked))}")
         elif missing:
             problems += 1
             print(f"V{generation}: ❌ 그룹에 빠진 SoC — {', '.join(sorted(missing))}")
+        elif checked:
+            print(f"V{generation}: ✅ {', '.join(sorted(checked))}")
         else:
-            print(f"V{generation}: ✅ {', '.join(sorted(hub_socs - skipped))}")
-        for soc in sorted(skipped):
-            flag = ""
-            if base_model(soc) in our_socs:
-                problems += 1
-                flag = " ⚠️ 그룹에 들어가 있다 — 일부러 뺀 SoC 다"
-            print(f"V{generation}: ↷ 일부러 뺌 — {soc} ({SKIPPED_SOCS[base_model(soc)]}){flag}")
+            print(f"V{generation}: ✅ 그룹은 있지만 AI Hub 와 대조할 SoC 가 없다 — 전부 일부러 뺀 SoC 다")
+
+    # 일부러 뺀 SoC — **세대와 상관없이** 본다. AI Hub 가 다른 세대로 옮기거나 목록에서 빼도,
+    # 우리가 엉뚱한 그룹에 넣어도 놓치지 않는다.
+    hub_generation = {base_model(s): g for g, socs in hub_map.items() for s in socs}
+    all_ours = {base_model(s) for socs in ours.values() for s in socs}
+    for soc, reason in sorted(SKIPPED.items()):
+        where = f"AI Hub V{hub_generation[soc]}" if soc in hub_generation else "AI Hub 목록에 없음"
+        flag = ""
+        if soc in all_ours:
+            problems += 1
+            flag = " ⚠️ 그룹에 들어가 있다 — 일부러 뺀 SoC 다"
+        elif soc not in hub_generation:
+            problems += 1
+            flag = " ⚠️ AI Hub 가 더는 모르는 칩이다 — 이 예외가 아직 필요한지 본다"
+        print(f"↷ 일부러 뺌 — {soc} ({where} · {reason}){flag}")
 
     # 우리가 적었는데 AI Hub 가 모르는 것 — 오타이거나, AI Hub 에 기기가 없을 뿐이거나.
     hub_bases = {base_model(s) for socs in hub_map.values() for s in socs}
