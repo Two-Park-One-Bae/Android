@@ -25,11 +25,11 @@ import app.nursemate.detail.PillDetailViewModel
 import app.nursemate.home.NmTab
 import app.nursemate.pill.AttributePhase
 import app.nursemate.pill.DetectionPhase
+import app.nursemate.pill.HistorySave
 import app.nursemate.pill.PillAnalysisFailedScreen
 import app.nursemate.pill.PillCandidateViewModel
 import app.nursemate.pill.PillCaptureRoute
 import app.nursemate.pill.PillEditScreen
-import app.nursemate.pill.PillFinalScreen
 import app.nursemate.pill.PillLimitAlert
 import app.nursemate.pill.PillLoadingScreen
 import app.nursemate.pill.PillNotFoundScreen
@@ -44,16 +44,19 @@ import app.nursemate.pill.identificationSummary
 import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
 import app.nursemate.pill.sharePillResultPdf
+import app.nursemate.pill.toResultUi
 
 /**
- * 알약 탭 — 기록 목록(시작점, NM-555) → 촬영① → 미리보기② → 로딩④ → 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
+ * 알약 탭 — 기록 목록(시작점, NM-555) → 촬영① → 미리보기② → 로딩④ → 식별 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
+ * 식별 결과가 최종 결과를 겸한다 — `완료` 가 기록을 남기고 들어온 화면으로 나간다(NM-587).
  * (권한 거부③은 촬영 진입점이 권한 상태를 보고 가른다.) 홈 `사진 찍기` 도 알약 탭으로 와서 촬영에 올린다.
  *
  * ## 셸이 아니라 여기 있는 이유
  * 화면이 여섯이라 [NurseMateApp] 쪽 그래프에 그대로 두면 함수 하나가 앱 전체 라우팅을 떠안는다.
  *
- * ## 탭바를 두르지 않는다
- * 정본의 ①~⑦ 프레임에 Tab Bar 가 없다. 촬영부터 결과까지 전부 전체화면 플로우다.
+ * ## 아직 탭 바를 두르지 않는다
+ * V2.1.0 정본은 촬영을 뺀 알약 화면에 모두 탭 바를 둔다(spec §화면 공통). 촬영 ~ 로딩을 V2 로 옮길 때
+ * 함께 붙인다 — 그 전까지는 촬영부터 결과까지 전체화면 플로우다.
  */
 fun NavGraphBuilder.pillNavGraph(navController: NavController, pillTab: @Composable () -> Unit) {
     navigation(startDestination = NmRoute.PILL_TAB, route = NmRoute.PILL_GRAPH) {
@@ -62,7 +65,6 @@ fun NavGraphBuilder.pillNavGraph(navController: NavController, pillTab: @Composa
         capture(navController)
         edit(navController)
         detail(navController)
-        finalResult(navController)
         preview(navController)
         loading(navController)
         result(navController)
@@ -168,41 +170,6 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     )
 }
 
-private fun NavGraphBuilder.finalResult(navController: NavController) = composable(NmRoute.PILL_FINAL) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-
-    // 확정한 후보만, 목록에 보이는 순서 그대로 모은다.
-    val pills = state.finalPills()
-
-    PillFinalScreen(
-        pills = pills,
-        // 뒤로 가면 인식 결과에서 이어서 고칠 수 있다(spec §최종 결과·공유).
-        onBack = { navController.popBackStack() },
-        onDetail = { candidate ->
-            viewModel.analyticsSession.buttonTapped(target = "pill_detail", screen = "final_result")
-            navController.navigate(
-                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
-            )
-        },
-        onCopyText = {
-            viewModel.analyticsSession.shared(method = "copy_text", contentType = "pill_result")
-            context.copyPillResult(pills)
-        },
-        onSavePdf = {
-            viewModel.analyticsSession.shared(method = "save_pdf", contentType = "pill_result")
-            context.sharePillResultPdf(pills)
-        },
-        // ⚠️ 탭만 바꾸면 안 된다 — 탭 스택이 저장돼, 알약 탭을 다시 눌렀을 때 카메라가 아니라
-        // 이 화면이 복원된다. 끝난 플로우는 촬영까지 되감고 나간다([exitToHome]).
-        onDone = {
-            viewModel.analyticsSession.completed(state.identificationSummary())
-            navController.exitToHome(viewModel)
-        }
-    )
-}
-
 private fun NavGraphBuilder.detail(navController: NavController) = composable(
     route = NmRoute.PILL_DETAIL,
     arguments = listOf(
@@ -297,24 +264,55 @@ private fun NavGraphBuilder.loading(navController: NavController) = composable(N
 private fun NavGraphBuilder.result(navController: NavController) = composable(NmRoute.PILL_RESULT) { entry ->
     val viewModel = entry.pillViewModel(navController)
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val fromHome = remember(entry) { navController.pillFlowFromHome() }
 
     // 중도이탈 경과시간의 기준점. 여기까지 와야 "식별 세션"이다.
     LaunchedEffect(Unit) { viewModel.analyticsSession.resultShown() }
 
+    // 남겼으면 들어온 화면으로 — 알약 탭이면 방금 남긴 기록이 목록 맨 위에 보인다(spec §완료 · 공유).
+    LaunchedEffect(state.save) {
+        if (state.save == HistorySave.Saved) {
+            viewModel.analyticsSession.completed(state.identificationSummary())
+            navController.exitPillFlow(viewModel, fromHome)
+        }
+    }
+
     PillResultScreen(
-        state = state,
-        onBack = {
+        ui = state.toResultUi(),
+        save = state.save,
+        onExit = {
             viewModel.analyticsSession.sessionExited(state.identificationSummary())
-            navController.restartCapture(viewModel)
+            navController.exitPillFlow(viewModel, fromHome)
         },
-        onRemovePill = viewModel.corrections::removePill,
         onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
-        onConfirm = { navController.navigate(NmRoute.PILL_FINAL) },
+        onRemovePill = viewModel.corrections::removePill,
         // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
         onAddPill = {
             viewModel.analyticsSession.buttonTapped(target = "add_pill", screen = "identify_result")
             navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId()))
-        }
+        },
+        onDetail = { candidate ->
+            viewModel.analyticsSession.buttonTapped(target = "pill_detail", screen = "identify_result")
+            navController.navigate(
+                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+            )
+        },
+        onCopyText = {
+            viewModel.analyticsSession.shared(method = "copy_text", contentType = "pill_result")
+            context.copyPillResult(state.finalPills())
+        },
+        onSavePdf = {
+            viewModel.analyticsSession.shared(method = "save_pdf", contentType = "pill_result")
+            context.sharePillResultPdf(state.finalPills())
+        },
+        onSave = viewModel.history::save,
+        // 저장하지 못한 채 끝낸다 — 식별은 마쳤으니 완주로 센다.
+        onLeaveUnsaved = {
+            viewModel.analyticsSession.completed(state.identificationSummary())
+            navController.exitPillFlow(viewModel, fromHome)
+        },
+        onDismissSaveFailure = viewModel.history::dismissFailure
     )
 }
 
@@ -337,7 +335,7 @@ private fun NavGraphBuilder.notFound(navController: NavController) = composable(
         },
         // ⑥ 은 결과 화면을 본 적이 없어 세션 이탈로 세지 않는다 — `pill_identify_result`
         // 의 outcome=empty 가 이미 그 시도를 설명한다.
-        onExit = { navController.exitToHome(viewModel) }
+        onExit = { navController.exitPillFlow(viewModel, navController.pillFlowFromHome()) }
     )
 }
 

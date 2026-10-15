@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.DailyLimitReached
+import app.nursemate.core.data.pill.PillHistoryRepository
 import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
@@ -19,6 +20,7 @@ import app.nursemate.telemetry.AppAnalytics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,10 +44,12 @@ import kotlinx.coroutines.withContext
  * 하던 일이 남아 있어야 한다.
  *
  * 대신 **플로우를 끝내거나 버릴 때 부르는 쪽이 [discardPhoto] 로 직접 비운다**
- * (`PillNavHelpers.exitToHome`). 예전에는 이 주석대로 「탭을 벗어나면 정리된다」고 보고
+ * (`PillNavHelpers.exitPillFlow`). 예전에는 이 주석대로 「탭을 벗어나면 정리된다」고 보고
  * 완료 버튼이 탭만 바꿨는데, 그 바람에 알약 탭을 다시 눌러도 카메라가 아니라 지난 결과
  * 화면이 복원됐다.
  */
+// 의존이 일곱이다 — 기록 저장(NM-552)까지 이 플로우의 상태를 함께 쓰므로 나누면 상태가 둘로 갈린다.
+@Suppress("LongParameterList")
 @HiltViewModel
 class PillRecognitionViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -53,6 +57,7 @@ class PillRecognitionViewModel @Inject constructor(
     private val attributeCache: PillAttributeCache,
     private val pillRepository: PillRepository,
     private val usageHolder: UsageHolder,
+    private val historyRepository: PillHistoryRepository,
     appAnalytics: AppAnalytics
 ) : ViewModel() {
 
@@ -138,7 +143,8 @@ class PillRecognitionViewModel @Inject constructor(
 
     private fun startDetectionUnchecked(bitmap: Bitmap) {
         analyticsSession.analysisStarted()
-        _state.update { it.copy(detection = DetectionPhase.Running) }
+        // 기록 키는 식별을 시작할 때 정한다 — 저장을 다시 시도해도 같은 키라 기록이 늘지 않는다(spec §식별 기록 — 저장).
+        _state.update { it.copy(detection = DetectionPhase.Running, historyId = UUID.randomUUID().toString()) }
         viewModelScope.launch {
             runCatching { loadDetector().detect(bitmap) }
                 .onSuccess { result ->
@@ -339,6 +345,9 @@ class PillRecognitionViewModel @Inject constructor(
         }
     }
 
+    /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). */
+    val history = PillHistorySaving(_state, historyRepository, viewModelScope)
+
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
         PillDetector(modelFile.prepare()).also { detector = it }
     }
@@ -398,8 +407,26 @@ data class PillUiState(
      *
      * 아직 안 읽은 알약은 항목이 없다. 검출 직후에는 비어 있고 2초쯤 뒤부터 찬다.
      */
-    val faceReadings: Map<String, FaceReading> = emptyMap()
+    val faceReadings: Map<String, FaceReading> = emptyMap(),
+    /** 식별 기록 키(UUID). 식별을 시작할 때 정한다 — 그 전에는 없다. */
+    val historyId: String? = null,
+    /** 식별 기록 저장 단계 — 식별 결과의 `완료` 가 연다. */
+    val save: HistorySave = HistorySave.Idle
 )
+
+/** 식별 기록 저장 단계(spec §완료 · 공유 · NM-552). */
+sealed interface HistorySave {
+    data object Idle : HistorySave
+
+    /** 응답을 기다리는 중 — `완료` 는 `저장 중…`, `공유` 는 꺼진다. */
+    data object Saving : HistorySave
+
+    /** 남겼다 — 들어온 화면으로 돌아간다. */
+    data object Saved : HistorySave
+
+    /** 못 남겼다. [retryable] 이 false 면(400) `다시 시도` 를 두지 않는다. */
+    data class Failed(val retryable: Boolean) : HistorySave
+}
 
 /**
  * 서버 속성 추출 단계.
@@ -510,7 +537,7 @@ fun PillUiState.pillIds(): List<String> {
     return detected.indices.map(::pillId).filterNot { it in removedPillIds } + manualPillIds
 }
 
-/** 확정한 후보만, 보이는 순서대로. 최종 결과(⑨)가 읽는다. */
+/** 확정한 후보만, 보이는 순서대로. 기록 저장 · 공유가 읽는다. */
 fun PillUiState.finalPills(): List<PillCandidate> = pillIds().mapNotNull { selections[it] }
 
 private fun PillUiState.extracted(pillId: String): PillAttribute? =

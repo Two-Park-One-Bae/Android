@@ -160,13 +160,23 @@ fun NmV2BottomBar(modifier: Modifier = Modifier, content: @Composable ColumnScop
     )
 }
 
-/** 하단 바의 주 버튼 — 캡슐 · 위아래 여백 16. */
+/**
+ * 하단 바의 버튼 — 캡슐 · 위아래 여백 16. 보통 주 버튼 하나지만, 식별 결과처럼 `공유`(보조) · `완료`(주)를
+ * 나란히 둘 때는 [kind] 로 보조를 고른다.
+ */
 @Composable
-fun NmV2BottomBarButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun NmV2BottomBarButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    kind: NmV2ButtonKind = NmV2ButtonKind.Primary
+) {
     NmV2Button(
         text = text,
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
+        kind = kind,
         enabled = enabled,
         shape = CircleShape,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp, vertical = 16.dp)
