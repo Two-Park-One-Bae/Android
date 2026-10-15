@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ 퀄컴 기기 **전부**에 깔리는 QNN 토대.
+  ~
+  ~ 세대 그룹을 전부 적는다 — 세대가 무엇이든 EP 번역기와 libQnnHtp · libQnnSystem 은
+  ~ 똑같이 필요하다. 세대마다 다른 것은 Skel/Stub 뿐이고 그건 qnn_v## 가 들고 온다.
+  ~
+  ~ ⚠️ **세대를 더하면 여기에도 그룹을 추가해야 한다.** 빠뜨리면 그 기기는 Skel 만 받고
+  ~    토대가 없어 QNN 이 아예 안 뜬다.
+  -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:dist="http://schemas.android.com/apk/distribution">
+
+    <dist:module dist:instant="false" dist:title="@string/qnn_module_title">
+        <dist:delivery>
+            <dist:install-time>
+                <dist:conditions>
+                    <dist:device-groups>
+                        <dist:device-group dist:name="qti_v73" />
+                        <dist:device-group dist:name="qti_v75" />
+                        <dist:device-group dist:name="qti_v79" />
+                        <dist:device-group dist:name="qti_v81" />
+                    </dist:device-groups>
+                </dist:conditions>
+            </dist:install-time>
+        </dist:delivery>
+        <dist:fusing dist:include="true" />
+    </dist:module>
+</manifest>

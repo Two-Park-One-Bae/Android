@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Hexagon **V75** 전용 — 8 Gen 3.
+  ~
+  ~ 설치 시점 조건부 전달. Play 가 `qti_v75` 기기그룹에 맞는 기기에만 설치한다.
+  ~ 그룹 정의는 app/src/main/device_targeting_configuration.xml 이다.
+  ~ 어느 그룹에도 안 맞으면 base 만 설치되고, 앱은 WebGPU 또는 CPU 로 돈다.
+  ~
+  ~ ⚠️ dist:instant="false" — 인스턴스 앱에는 안 들어간다.
+  -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:dist="http://schemas.android.com/apk/distribution">
+
+    <dist:module dist:instant="false" dist:title="@string/qnn_module_title">
+        <dist:delivery>
+            <dist:install-time>
+                <dist:conditions>
+                    <dist:device-groups>
+                        <dist:device-group dist:name="qti_v75" />
+                    </dist:device-groups>
+                </dist:conditions>
+            </dist:install-time>
+        </dist:delivery>
+        <dist:fusing dist:include="true" />
+    </dist:module>
+</manifest>

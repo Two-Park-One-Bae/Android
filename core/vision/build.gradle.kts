@@ -33,6 +33,50 @@ android {
      * Test Lab 은 `--use-orchestrator`, 로컬은 이 설정이 같은 일을 한다.
      */
     testOptions.execution = "ANDROIDX_TEST_ORCHESTRATOR"
+
+    /*
+     * QNN 런타임에서 **쓰지 않는 것**을 덜어낸다 — NM-577.
+     *
+     * `qnn-runtime` 이 arm64 비압축 214MB 다. 그중 실제로 필요한 것은 넷뿐이다.
+     *  - `libQnnHtp.so` · `libQnnSystem.so` — 백엔드와 그래프 직렬화
+     *  - `libQnnHtpPrepare.so`(84MB) — **기기에서 ONNX 그래프를 컴파일**할 때만 쓴다.
+     *    `ep.context_file_path` 로 컴파일 결과를 캐시하면 둘째 실행부터는 안 들어가고,
+     *    미리 컴파일한 EPContext 모델을 싣는다면 아예 빼도 된다.
+     *  - `libQnnHtpV##Skel/Stub.so` — HTP 세대별. Skel 은 DSP 쪽에서 돌고 앱이 실어 줘야 한다.
+     *
+     * 덜어내는 것:
+     *  - `libQnnGpu.so`(11.8MB) — QNN 의 OpenCL 백엔드. 우리 GPU 길은 ORT WebGPU 다.
+     *  - `libQnnDsp*.so`(4.3MB) — Hexagon **DSP(v66)**, 스냅드래곤 855 세대. 대상에 없다.
+     *  - `V68`·`V69` skel(25.9MB) — 865 · 888 세대. 대상에 없다.
+     *
+     * 남기는 세대: **V73**(8 Gen 2 · S23) · **V75**(8 Gen 3 · S24) · **V79**(8 Elite · S25) ·
+     * **V81**(그다음). 기기의 `htp_arch` 와 안 맞으면 세션 생성부터 실패하므로 넉넉히 둔다.
+     */
+    /*
+     * `.so` 를 APK **밖으로 풀어** 설치한다 — QNN 이 그걸 요구한다(NM-577).
+     *
+     * AGP 기본은 `useLegacyPackaging=false` 다. 그래도 `dlopen` 은 되는데(ORT 가 그렇게 돈다)
+     * HTP 는 다르다. DSP 쪽 skel(`libQnnHtpV73Skel.so`)은 **cDSP 데몬이 파일 경로로** 연다 —
+     * `base.apk!/lib/arm64-v8a/...` 를 열 수 없어 `errno 2` 로 실패하고, 그러면 QNN EP 가
+     * 노드를 하나도 안 가져가 **전부 CPU 로 돌면서 테스트는 통과한다.**
+     *
+     * ⚠️ **라이브러리 모듈의 packaging 은 이 모듈의 계측 테스트 APK 에만 먹는다.** 운영 AAB 의
+     *    QNN 구성은 `app` 의 같은 설정과 세대별 feature module(`QnnFeatureConventionPlugin` 허용목록)이
+     *    정한다. 운영 용량을 줄이려고 아래 excludes 를 고쳐도 아무것도 안 바뀐다.
+     */
+    packaging.jniLibs.useLegacyPackaging = true
+
+    // 테스트 APK 용 — 쓰지 않는 백엔드와 옛 세대를 덜어 Test Lab 업로드를 줄인다.
+    packaging.jniLibs.excludes += setOf(
+        "**/libQnnGpu.so",
+        "**/libQnnDsp.so",
+        "**/libQnnDspV66Skel.so",
+        "**/libQnnDspV66Stub.so",
+        "**/libQnnHtpV68Skel.so",
+        "**/libQnnHtpV68Stub.so",
+        "**/libQnnHtpV69Skel.so",
+        "**/libQnnHtpV69Stub.so"
+    )
 }
 
 /*
@@ -70,12 +114,22 @@ configurations.configureEach {
 }
 
 dependencies {
-    // 온디바이스 검출 (RF-DETR-Seg-Small).
+    // 온디바이스 추론 — 검출·각인·마크 셋 다 이 런타임으로 돈다.
     //
-    // 프리빌트 Maven 배포본을 쓴다. WebGPU EP가 포함된 커스텀 빌드가 CPU 대비 1.75배
-    // 빠르지만(1550 → 845 ms), 11 MB 바이너리를 저장소에 넣어야 하고 minSdk를 28로
-    // 올려야 해서 채택하지 않았다. 근거는 NM-396 스파이크 참조.
+    // 프리빌트 Maven 배포본에 **CPU · WebGPU · NNAPI · XNNPACK** 이 들어 있다. NM-396 스파이크
+    // 때는 WebGPU 를 쓰려면 소스 빌드가 필요했는데 그 뒤 프리빌트에 들어왔다 — 지금은 WebGPU 가
+    // 운영 경로다(`OrtBackend`). EP 별 실측은 같은 KDoc 의 비교표.
     implementation(libs.onnxruntime.android)
+
+    // 퀄컴 Hexagon NPU(HTP) — **컴파일만 한다.** 실제 `.so` 와 클래스는 조건부 전달 모듈
+    // `:qnn` 이 들고 있고, Play 가 퀄컴 기기에만 설치한다.
+    //
+    // 위 표준 배포본을 그대로 두고 **덧붙는 플러그인 EP** 라서(카탈로그 주석에 근거) base 의
+    // ORT 를 건드리지 않는다 — 그래서 모듈 하나를 더하고 빼는 것으로 갈라진다.
+    //
+    // ⚠️ `compileOnly` 다. 런타임에 없을 수 있으므로 **부르기 전에 [QNN_BUNDLED] 를 본다.**
+    //    그냥 부르면 NoClassDefFoundError 다.
+    compileOnly(libs.onnxruntime.qnn.plugin)
 
     // 각인 OCR 전처리(NM-485) — CLAHE(clip 3.0, 8×8) · morphologyEx(CLOSE) ·
     // connectedComponents · floodFill · warpAffine · resize(INTER_AREA).
@@ -105,7 +159,19 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
 
+    // 측정 하네스는 QNN 을 **실제로** 돌려야 한다. 운영 경로는 `:qnn` 모듈이 받지만 이
+    // 테스트 APK 는 그 모듈을 못 쓰므로(계측 테스트는 base 만 본다) 여기서 직접 문다.
+    // 운영 APK 에는 들어가지 않는다 — androidTest 구성이다.
+    androidTestImplementation(libs.onnxruntime.qnn.plugin)
+    androidTestImplementation(libs.qnn.runtime)
+
     // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
     // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
     androidTestUtil(libs.androidx.test.orchestrator)
+
+    // LiteRT — **계측 테스트에만** 넣는다. 운영 APK 에는 안 들어간다.
+    // ONNX Runtime 을 대체하려는 것이 아니라, WebGPU 가 못 가는 기기(Mali 전멸,
+    // Adreno 각인·검출 사망)에서 OpenCL GPU 델리게이트가 대안이 되는지 재는 용도다.
+    androidTestImplementation(libs.litert)
+    androidTestImplementation(libs.litert.gpu)
 }

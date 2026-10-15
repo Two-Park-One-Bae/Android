@@ -45,6 +45,10 @@ gradlePlugin {
             id = libs.plugins.nursemate.jvm.library.get().pluginId
             implementationClass = "JvmLibraryConventionPlugin"
         }
+        register("qnnFeature") {
+            id = libs.plugins.nursemate.qnn.feature.get().pluginId
+            implementationClass = "QnnFeatureConventionPlugin"
+        }
         register("hilt") {
             id = libs.plugins.nursemate.hilt.get().pluginId
             implementationClass = "HiltConventionPlugin"

@@ -1,6 +1,8 @@
 package app.nursemate.core.vision
 
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.qnnpluginep.getEpName as qnnEpName
+import ai.onnxruntime.qnnpluginep.getLibraryPath as qnnLibraryPath
 import android.content.pm.PackageManager
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -44,10 +46,75 @@ class DeviceProbeTest {
             add("ORT EP     ${providers.getOrElse { "조회 실패: $it" }}")
             add("Vulkan     ${vulkanVersion(context.packageManager)}")
             addAll(glStrings())
+            addAll(qnnLines())
+            addAll(modelLines(context))
         }
 
         // 한 줄씩 찍는다 — logcat 이 긴 줄을 잘라서 묶어 찍으면 GPU 이름이 날아간다.
         lines.forEach { Log.i(TAG, it) }
+    }
+
+    /**
+     * **모델이 실제로 어디에 있는지** 찍는다.
+     *
+     * 모델은 저장소에 없어서(119MB) 기기로 밀어 넣는데, 경로가 한 칸만 어긋나도 테스트가
+     * `assumeTrue` 에서 **조용히 skipped** 된다 — 통과처럼 보인다. Test Lab 은 실기기 할당량이
+     * 하루 5회뿐이라 그렇게 한 번을 날리면 비싸다. 그래서 디렉터리를 그대로 남긴다.
+     */
+    private fun modelLines(context: android.content.Context): List<String> = buildList {
+        val dir = context.getExternalFilesDir(null)
+        add("모델 경로  $dir")
+        val files = dir?.listFiles()
+        when {
+            files == null -> add("모델       디렉터리를 못 읽었다")
+
+            files.isEmpty() -> add("모델       **비어 있다** — 밀어 넣는 경로가 위와 같은지 보라")
+
+            else -> files.sortedBy { it.name }
+                .forEach { add("모델       ${it.name} ${it.length() / 1024 / 1024}MB") }
+        }
+    }
+
+    /**
+     * **QNN 플러그인이 꽂히는가** — 그리고 꽂은 뒤에도 WebGPU 가 남아 있는가(NM-577).
+     *
+     * ## 왜 이 두 줄이 같이 필요한가
+     * `com.microsoft.onnxruntime:onnxruntime-android-qnn` 은 ORT 를 **갈아 끼우는** 배포본이라
+     * 기기에서 재 보니 EP 가 `CPU, QNN` 둘뿐이었다 — WebGPU 를 버려야 QNN 을 얻는 거래였다.
+     * 지금 붙인 `com.qualcomm.qti:onnxruntime-android-qnn` 은 표준 배포본에 **덧붙는 플러그인**
+     * 이라고 되어 있다. 그 말이 맞으면 위 `ORT EP` 줄에 WebGPU 가 그대로 있고, 아래 줄에
+     * QNN 디바이스가 함께 나온다. **둘이 같이 나오는 것이 증거다.**
+     *
+     * ## 플러그인 EP 는 `getAvailableProviders()` 에 안 나온다
+     * 그쪽은 ORT 안에 박힌 EP 목록이다. 플러그인은 `registerExecutionProviderLibrary` 로
+     * 환경에 올려야 비로소 `getEpDevices()` 에 나타난다.
+     *
+     * 단정하지 않는다 — 엑시노스에는 HTP 가 없어 **없는 것이 정상**이다. 기록만 남긴다.
+     */
+    private fun qnnLines(): List<String> = buildList {
+        val env = runCatching { OrtEnvironment.getEnvironment() }.getOrElse {
+            add("QNN       환경을 못 얻었다: $it")
+            return@buildList
+        }
+
+        add("QNN 라이브러리 ${qnnLibraryPath()} · EP 이름 ${qnnEpName()}")
+
+        runCatching { env.registerExecutionProviderLibrary(qnnEpName(), qnnLibraryPath()) }
+            .onFailure {
+                // 등록 실패가 곧 기록이다. `.so` 가 APK 에 안 들어갔거나, 기기의 vendor
+                // 라이브러리(`libcdsprpc.so` 등)를 못 찾은 경우가 여기로 온다.
+                add("QNN 등록   실패 — ${it.message}")
+                return@buildList
+            }
+
+        val devices = runCatching { env.epDevices }.getOrElse {
+            add("QNN 디바이스 조회 실패 — ${it.message}")
+            return@buildList
+        }
+        add("EP 디바이스 ${devices.joinToString { "${it.epName}/${it.device.type}" }}")
+        for (device in devices.filter { it.epName == qnnEpName() }) {
+            add("QNN 디바이스 ${device.device.type} · 벤더 ${device.epVendor} · 메타 ${device.epMetadata}")
+        }
     }
 
     /**

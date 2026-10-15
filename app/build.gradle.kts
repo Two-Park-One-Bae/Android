@@ -56,6 +56,46 @@ fun com.android.build.api.dsl.ApplicationBuildType.airbridge(appName: String?, t
 android {
     namespace = "app.nursemate"
 
+    /*
+     * 조건부 전달 모듈 — **퀄컴 기기에만** 내려간다.
+     *
+     * `qnn-runtime` 이 arm64 비압축 180MB 인데 Hexagon NPU 가 없는 기기에는 한 바이트도
+     * 쓸모가 없다. base 에 넣으면 엑시노스·Dimensity·Tensor 사용자가 쓰지도 않을 180MB 를
+     * 받는다. 어느 기기에 내려줄지는 `src/main/device_targeting_configuration.xml` 이 정하고,
+     * 조건 자체는 `qnn/src/main/AndroidManifest.xml` 의 `<dist:device-groups>` 가 건다.
+     *
+     * ⚠️ 이 메커니즘은 **번들(AAB)에만** 산다. `assembleRelease` 로 뽑은 APK 에는 feature
+     *    모듈이 통째로 들어간다 — 크기를 볼 때는 `bundleRelease` + bundletool 로 본다.
+     */
+    /*
+     * **`.so` 를 실파일로 푼다** — QNN 이 이것 없이는 조용히 CPU 로 돈다.
+     *
+     * AGP 기본값(`extractNativeLibs=false`)은 `.so` 를 APK 안에 비압축으로 두고 링커가 거기서
+     * 바로 읽는다. 디스크에 파일이 생기지 않으므로 `applicationInfo.nativeLibraryDir` 이 **빈
+     * 디렉터리**다. 2026-10-14 Test Lab(dm1q·SM8550)에서 확인했다 — `libDir 안 0개`.
+     *
+     * 그런데 HTP 는 DSP 쪽 skel 을 **FastRPC 로 파일에서** 올린다. ORT 는 그 경로를
+     * `backend_path` 의 디렉터리에서 만들어 `ADSP_LIBRARY_PATH` 에 넣는데
+     * ([OrtBackend.qnnNativeLibDir]), 그 디렉터리가 비어 있으면 `cannot open
+     * libQnnHtpV73Skel.so, errno 2` 로 떨어지고 **EP 가 노드를 하나도 안 가져간다.**
+     * 세션은 열리고 답도 맞아서 겉보기엔 성공이다 — 느린 것만이 증거다.
+     *
+     * ⚠️ 대가는 **설치 용량**이다. 압축본(APK 안)과 푼 사본이 둘 다 디스크를 쓴다. 대신
+     *    다운로드는 줄어든다 — 비압축 저장이 아니라 압축돼 전송되기 때문이다.
+     */
+    packaging { jniLibs { useLegacyPackaging = true } }
+
+    dynamicFeatures += setOf(":qnn_core", ":qnn_v73", ":qnn_v75", ":qnn_v79", ":qnn_v81")
+
+    /*
+     * 어느 기기에 `:qnn` 을 내려줄지 — **경로를 명시해야 한다.**
+     *
+     * `src/main/device_targeting_configuration.xml` 에 두기만 하면 AGP 가 **조용히 무시한다.**
+     * 처음에 그렇게 뒀더니 번들은 멀쩡히 빌드되는데 `BUNDLE-METADATA` 에 설정이 안 들어갔고,
+     * 그러면 조건이 없는 셈이라 **180MB 가 전 기기에 깔린다.** 빌드가 알려 주지 않는다.
+     */
+    bundle.deviceTargetingConfig = file("src/main/device_targeting_configuration.xml")
+
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
@@ -182,6 +222,12 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+
+    // 조건부 feature module 이 실제로 설치됐는지는 **설치된 앱에서만** 볼 수 있다 —
+    // `QnnModuleProbeTest` 가 `nativeLibraryDir` 과 splitNames 를 찍는다.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
 
 // R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
