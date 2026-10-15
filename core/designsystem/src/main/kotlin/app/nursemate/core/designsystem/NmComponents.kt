@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
  * `surface` / radius 14 / 패딩 16×14 / 아이콘 박스 40(r10)+아이콘 20 /
  * 제목 14·600 / 부제 12·400 `text-tertiary` / chevron 18.
  *
- * ⚠️ **홈의 기능 카드는 이것이 아니다** — 더 크고 캡션 자리가 따로 있다. [NmFeatureCard] 를 쓸 것.
+ * ⚠️ V2.1.0 화면은 이것이 아니라 `v2.NmV2ListRow` 를 쓴다(NM-608).
  *
  * @param titleColor 제목 색. 기본은 `text-primary` 다. 파괴적인 항목(설정의 계정 삭제)만
  *                   `error-600` 으로 올린다 — 정본이 그 행만 색으로 구분한다.
@@ -94,7 +94,10 @@ fun NmListRow(
 }
 
 /**
- * 홈의 기능 카드 — 디자인 `홈 화면 / Feature Cards`.
+ * MVP 홈의 기능 카드 — 디자인 `홈 화면 / Feature Cards`.
+ *
+ * ⚠️ **홈은 V2.1.0 에서 더 이상 이것을 쓰지 않는다**(NM-610 — 가로 두 장 · 숫자 + 버튼 카드로 바뀌었다).
+ *    지금은 디자인 갤러리(debug)만 쓴다. 새 화면에 쓰지 말 것.
  *
  * `surface` / radius 20 / 패딩 20 / gap 16 / 아이콘 박스 56(r16)+아이콘 28 /
  * 제목 16·600 / 설명 13·400 `text-secondary` / 캡션 12·600 / chevron 18.
@@ -166,7 +169,8 @@ fun NmFeatureCard(
  * 상태를 짧게 보여주는 칩 — 디자인 `Component / Chip`.
  *
  * radius 20 / 패딩 14×8 / gap 6 / 아이콘 14 / 라벨 13·500 / **테두리 1dp**.
- * 기본은 primary 계열이고, 홈의 "활성 타이머"처럼 secondary로 쓰려면 색 셋을 넘긴다.
+ * 기본은 primary 계열이고, secondary로 쓰려면 색 셋을 넘긴다. MVP 홈의 "활성 타이머" 칩이 썼다 —
+ * V2.1.0 홈(NM-610)은 진행 중인 타이머 카드로 바뀌어 더 이상 쓰지 않는다.
  *
  * > iOS `DSChip`은 기본 프리셋이 primary가 아니라 info라 하늘색 대신 파랑으로 나온다.
  * > 정본은 primary이므로 여기서는 primary를 기본값으로 둔다.

@@ -228,6 +228,9 @@ dependencies {
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    // V2.1.0 화면 캡처(V210HomeCaptureTest) — 정본과 나란히 보는 용도다. 액티비티는 debug 의 DesignGalleryActivity 를 쓴다.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
 // R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
