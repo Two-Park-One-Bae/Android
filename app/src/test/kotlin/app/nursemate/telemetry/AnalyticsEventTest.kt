@@ -67,7 +67,8 @@ class AnalyticsEventTest {
         AnalyticsEvent.TimerCancel(category = "처치", elapsedSec = 120, remainingSec = 780),
         AnalyticsEvent.PresetCreate(label = "항생제", category = "투약", durationSec = 1_800),
         AnalyticsEvent.PresetEdit(label = "항생제", category = "투약", durationSec = 1_800),
-        AnalyticsEvent.PresetDelete(label = "항생제", category = "투약", durationSec = 1_800)
+        AnalyticsEvent.PresetDelete(label = "항생제", category = "투약", durationSec = 1_800),
+        AnalyticsEvent.QnnDelivery(socModel = "SM8650", delivered = "core+skel")
     )
 
     // ─────────────────────────── GA4 규격 ───────────────────────────
@@ -148,7 +149,13 @@ class AnalyticsEventTest {
             "timer_start", "timer_complete", "timer_cancel",
             "preset_create", "preset_edit", "preset_delete"
         )
-        assertEquals(ios, catalog.map { it.name }.toSet())
+        assertEquals(ios, catalog.map { it.name }.toSet() - AnalyticsEvent.ANDROID_ONLY)
+    }
+
+    @Test
+    fun `Android 전용 이벤트는 카탈로그에 실제로 있다`() {
+        // 예외 목록에 없는 이름을 적어 두면 대조가 조용히 느슨해진다.
+        assertEquals(AnalyticsEvent.ANDROID_ONLY, AnalyticsEvent.ANDROID_ONLY intersect catalog.map { it.name }.toSet())
     }
 
     @Test
