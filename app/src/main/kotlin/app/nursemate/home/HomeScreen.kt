@@ -1,16 +1,19 @@
 package app.nursemate.home
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -25,14 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,18 +49,18 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.designsystem.v2.NmV2CardShape
 import app.nursemate.core.designsystem.v2.NmV2Color
+import app.nursemate.core.designsystem.v2.NmV2ProgressRing
 import app.nursemate.core.designsystem.v2.NmV2Surface
 import app.nursemate.core.designsystem.v2.NmV2SurfaceStyle
 import app.nursemate.core.designsystem.v2.NmV2Tag
-import app.nursemate.core.designsystem.v2.NmV2TagTone
 import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.designsystem.v2.NmV2Wordmark
 import app.nursemate.core.model.CareTimer
-import app.nursemate.core.model.TimerCategory
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.Usage
 import app.nursemate.core.model.formatDuration
 import app.nursemate.core.model.formatRemaining
+import app.nursemate.timer.v2Tone
 
 /**
  * 홈 — 정본 `DESIGN.pen` 「홈 · V2.1.0 (NM-585)」 · `spec/feature/home/README.md`.
@@ -73,7 +76,7 @@ import app.nursemate.core.model.formatRemaining
 fun HomeScreen(
     usage: Usage?,
     timers: List<CareTimer>,
-    now: Long,
+    now: () -> Long,
     recent: HomeRecent,
     onTakePhoto: () -> Unit,
     onPillCard: () -> Unit,
@@ -91,11 +94,12 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         NmV2Wordmark(Modifier.padding(top = 12.dp, bottom = 8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // 두 장은 늘 같은 높이다 — 큰 글꼴에서 한쪽이 자라면 다른 쪽도 따라 자란다.
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PillTile(usage, onTakePhoto, onPillCard, Modifier.weight(1f))
             TimerTile(timers.size, onNewTimer, onTimerCard, Modifier.weight(1f))
         }
-        TimersCard(homeTimerOrder(timers, now), now, onTimerCard)
+        TimersCard(timers, now, onTimerCard)
         RecentCard(recent, onRecent)
     }
 }
@@ -118,8 +122,9 @@ private fun PillTile(usage: Usage?, onTakePhoto: () -> Unit, onCard: () -> Unit,
         label = "오늘 남은 횟수",
         value = usage?.remaining?.toString() ?: "–",
         valueColor = if (exhausted) NmColor.Error.C600 else NmTheme.semanticColors.textPrimary,
-        // 한도는 모를 때도 15 가 아니라 받은 값만 쓴다 — 모르면 단위를 비우지 않고 정본처럼 `/15` 자리를 둔다.
-        unit = "/${usage?.limit ?: DEFAULT_LIMIT}",
+        // 모르면 숫자만 `–` 로 두고 한도도 지어내지 않는다 — 정본 ⑥ 은 `/15` 를 그렸지만 그건 이 계정의
+        // 한도일 뿐이다(개발 계정은 1,000,000). 없는 값을 보이면 한도를 잘못 알린다.
+        unit = usage?.let { "/${it.limit}" },
         caption = if (exhausted) "내일 00:00 초기화" else "매일 00:00 초기화",
         captionColor = if (exhausted) NmColor.Error.C600 else NmTheme.semanticColors.textTertiary,
         buttonText = "사진 찍기",
@@ -162,7 +167,7 @@ private fun FeatureTile(
     label: String,
     value: String,
     valueColor: Color,
-    unit: String,
+    unit: String?,
     caption: String?,
     captionColor: Color,
     buttonText: String,
@@ -173,7 +178,7 @@ private fun FeatureTile(
     modifier: Modifier
 ) {
     val colors = NmTheme.semanticColors
-    NmV2Surface(NmV2SurfaceStyle.Card, modifier.height(TileHeight)) {
+    NmV2Surface(NmV2SurfaceStyle.Card, modifier.fillMaxHeight().heightIn(min = TileHeight)) {
         Column(
             Modifier
                 .clip(NmV2CardShape)
@@ -203,14 +208,16 @@ private fun FeatureTile(
  *    정본의 단위 아래 여백 7 은 두 글자의 기준선을 맞춘 결과라 한 줄 글자의 기준선 정렬로 같다.
  */
 @Composable
-private fun MetricText(value: String, valueColor: Color, unit: String) {
+private fun MetricText(value: String, valueColor: Color, unit: String?) {
     val unitColor = NmTheme.semanticColors.textSecondary
     val text = remember(value, valueColor, unit, unitColor) {
         buildAnnotatedString {
             withStyle(SpanStyle(color = valueColor)) { append(value) }
-            withStyle(
-                SpanStyle(color = unitColor, fontSize = UNIT_EM.em, fontWeight = NmV2Type.metricUnit.fontWeight)
-            ) { append("\u2009$unit") }
+            if (unit != null) {
+                withStyle(
+                    SpanStyle(color = unitColor, fontSize = UNIT_EM.em, fontWeight = NmV2Type.metricUnit.fontWeight)
+                ) { append("\u2009$unit") }
+            }
         }
     }
     BasicText(
@@ -241,7 +248,22 @@ private fun TileButton(text: String, @DrawableRes icon: Int, enabled: Boolean, o
             .clip(shape)
             .background(fill)
             .border(1.dp, NmColor.Neutral.C200, shape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            // ⚠️ 비활성이어도 누름을 **삼킨다** — 안 그러면 카드의 클릭으로 새어 한도 팝업이 뜬다
+            //    (spec home: 0회는 `사진 찍기` 비활성 · 팝업 없음).
+            .then(
+                if (enabled) {
+                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                } else {
+                    // 자기 노드로 묶어야 화면 읽기 프로그램이 「비활성 버튼」으로 읽는다 — 안 묶으면 글자가
+                    // 카드 노드에 합쳐져 카드의 일부로 읽히고 눌린다.
+                    Modifier
+                        .semantics(mergeDescendants = true) {
+                            role = Role.Button
+                            disabled()
+                        }
+                        .pointerInput(Unit) { detectTapGestures {} }
+                }
+            )
             .padding(horizontal = 12.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
@@ -258,7 +280,10 @@ private fun TileButton(text: String, @DrawableRes icon: Int, enabled: Boolean, o
  * 타이머가 없으면 `진행 중인 타이머가 없어요` 이고 카드를 누르지 않는다.
  */
 @Composable
-private fun TimersCard(ordered: List<CareTimer>, now: Long, onClick: () -> Unit) {
+private fun TimersCard(timers: List<CareTimer>, now: () -> Long, onClick: () -> Unit) {
+    // 시각은 여기서만 읽는다 — 1초마다 이 카드만 다시 그린다(화면 전체가 아니라).
+    val at = now()
+    val ordered = homeTimerOrder(timers, at)
     val colors = NmTheme.semanticColors
     NmV2Surface(NmV2SurfaceStyle.Card, Modifier.fillMaxWidth()) {
         Column(
@@ -284,7 +309,7 @@ private fun TimersCard(ordered: List<CareTimer>, now: Long, onClick: () -> Unit)
                     modifier = Modifier.padding(top = 8.dp, bottom = 14.dp)
                 )
             } else {
-                ordered.take(MAX_ROWS).forEach { TimerRow(it, now) }
+                ordered.take(MAX_ROWS).forEach { TimerRow(it, at) }
             }
         }
     }
@@ -311,7 +336,7 @@ private fun TimerRow(timer: CareTimer, now: Long) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 만료는 원이 다 찬다(정본 ④ — 각도 없이 채운 원).
-        ProgressRing(if (expired) 1f else timer.ringFractionAt(now), accent)
+        NmV2ProgressRing(if (expired) 1f else timer.ringFractionAt(now), accent)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -322,7 +347,7 @@ private fun TimerRow(timer: CareTimer, now: Long) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                NmV2Tag(timer.category.label, tone = timer.category.tone)
+                NmV2Tag(timer.category.label, tone = timer.category.v2Tone)
             }
             val duration = formatDuration(timer.durationSeconds)
             Text(
@@ -335,38 +360,6 @@ private fun TimerRow(timer: CareTimer, now: Long) {
     }
 }
 
-/**
- * 진행 원 44 — 바탕 `neutral-100`, 남은 비율만큼 12시에서 시계 방향으로 채운다.
- * 정본의 음수 sweep 은 Pencil 각도(반시계가 +) 기준이라 Compose 에서는 양수다 — 타이머 탭 카드와 같다.
- */
-@Composable
-private fun ProgressRing(fraction: Float, color: Color) {
-    val track = NmColor.Neutral.C100
-    Canvas(Modifier.size(RingSize)) {
-        // 정본 innerRadius 0.82 → 두께는 반지름의 18%.
-        val stroke = size.minDimension / 2f * (1f - RING_INNER)
-        val inset = stroke / 2f
-        val arcSize = Size(size.width - stroke, size.height - stroke)
-        drawArc(track, 0f, FULL_CIRCLE, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
-        drawArc(
-            color,
-            START_ANGLE,
-            FULL_CIRCLE * fraction,
-            false,
-            Offset(inset, inset),
-            arcSize,
-            style = Stroke(stroke, cap = StrokeCap.Butt)
-        )
-    }
-}
-
-private val TimerCategory.tone: NmV2TagTone
-    get() = when (this) {
-        TimerCategory.TEST -> NmV2TagTone.Info
-        TimerCategory.MEDICATION -> NmV2TagTone.Primary
-        TimerCategory.TREATMENT -> NmV2TagTone.Secondary
-    }
-
 /** 단위 크기 — 정본 14 / 숫자 34. */
 private const val UNIT_EM = 14f / 34f
 
@@ -375,13 +368,6 @@ private const val METRIC_MIN_SP = 16
 
 /** 기능 카드 높이 — 정본 204. 두 장이 늘 같은 높이여야 한다. */
 private val TileHeight = 204.dp
-private val RingSize = 44.dp
-private const val RING_INNER = 0.82f
-private const val START_ANGLE = -90f
-private const val FULL_CIRCLE = 360f
 
 /** 진행 중인 타이머 카드에 보이는 줄 수. */
 private const val MAX_ROWS = 3
-
-/** 한도를 아직 모를 때 단위 자리에 쓰는 값 — 서버 기본 한도(spec 식별 횟수 제한). */
-private const val DEFAULT_LIMIT = 15

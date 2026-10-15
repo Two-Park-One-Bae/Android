@@ -6,12 +6,17 @@ import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.core.timer.clockTicks
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -34,13 +39,16 @@ class HomeViewModel @Inject constructor(private val usageHolder: UsageHolder, ti
     val timers: StateFlow<List<CareTimer>> = timerRepository.timers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MILLIS), emptyList())
 
-    /** 남은 시간을 초 단위로 줄이려고 1초마다 흐르는 시각. 화면이 안 보이면 멈춘다. */
-    val now: StateFlow<Long> = flow {
-        while (true) {
-            emit(System.currentTimeMillis())
-            delay(TICK_MS)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MILLIS), System.currentTimeMillis())
+    /**
+     * 남은 시간을 초 단위로 줄이려고 흐르는 시각. **타이머가 있을 때만** 1초마다 흐른다 — 없으면
+     * 한 번만 낸다. StateFlow 로 붙잡지 않는다 — 화면에 돌아왔을 때 붙잡아 둔 옛 시각으로 첫 장을
+     * 그리지 않게, 모으는 쪽이 지금 시각을 처음값으로 쓴다.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val now: Flow<Long> = timerRepository.timers
+        .map { it.isNotEmpty() }
+        .distinctUntilChanged()
+        .flatMapLatest { ticking -> if (ticking) clockTicks() else flowOf(System.currentTimeMillis()) }
 
     /** 한도에 걸렸다고 확인된 경우에만 true. 조회에 실패해 모르는 상태면 막지 않는다. */
     fun blocked(): Boolean = usageHolder.blocked
@@ -52,7 +60,6 @@ class HomeViewModel @Inject constructor(private val usageHolder: UsageHolder, ti
     private companion object {
         /** 화면 회전처럼 짧게 끊기는 구독은 다시 잇는다. */
         const val SUBSCRIBE_TIMEOUT_MILLIS = 5_000L
-        const val TICK_MS = 1_000L
     }
 }
 

@@ -164,9 +164,6 @@ private fun NmNavHost(
         onPauseOrDispose {}
     }
     var pillTabLimitReached by remember { mutableStateOf(false) }
-    // 홈 `새 타이머` — 타이머 탭으로 가서 프리셋 시트를 연다(spec home §누르는 곳). 시트 상태는
-    // 타이머 화면 ViewModel 이 쥐고 있어 탭을 건너 요청만 넘긴다.
-    var openPresetSheet by remember { mutableStateOf(false) }
 
     // 첫 화면은 진입 상태로 **한 번만** 정한다. 이후 변화는 아래 LaunchedEffect 가 처리한다 —
     // startDestination 을 상태에 묶으면 값이 바뀔 때 NavHost 가 통째로 다시 만들어진다.
@@ -248,7 +245,9 @@ private fun NmNavHost(
 
         composable(NmRoute.HOME) {
             val timers by homeViewModel.timers.collectAsStateWithLifecycle()
-            val now by homeViewModel.now.collectAsStateWithLifecycle()
+            // 시각은 State 째 넘겨 타이머 카드 안에서만 읽힌다 — 여기서 값을 읽으면 1초마다 탭 루트 전체가
+            // 다시 그려진다. 처음값은 지금 시각이다(돌아왔을 때 옛 시각으로 한 장 그리지 않게).
+            val now = homeViewModel.now.collectAsStateWithLifecycle(initialValue = System.currentTimeMillis())
 
             TabRoot(
                 navController = navController,
@@ -263,7 +262,7 @@ private fun NmNavHost(
                 HomeScreen(
                     usage = homeUsage,
                     timers = timers,
-                    now = now,
+                    now = { now.value },
                     // 식별 기록(NM-555)이 붙을 때까지 자리만 둔다 — spec home §최근 식별 카드.
                     recent = HomeRecent.None,
                     // 0회면 버튼이 비활성이라 여기 오지 않는다(spec home — 팝업 없음).
@@ -274,8 +273,11 @@ private fun NmNavHost(
                         if (homeViewModel.blocked()) pillTabLimitReached = true else navController.switchTab(NmTab.Pill)
                     },
                     onNewTimer = {
-                        openPresetSheet = true
                         navController.switchTab(NmTab.Timer)
+                        // 요청을 **타이머 화면 자신의 항목**에 싣는다. 이동이 안 됐으면 항목이 없어 아무 일도
+                        // 없다 — 전역 플래그로 두면 남아 있다가 나중에 타이머 탭을 열 때 시트가 저절로 뜬다.
+                        runCatching { navController.getBackStackEntry(NmRoute.TIMER) }
+                            .getOrNull()?.savedStateHandle?.set(OPEN_PRESET_SHEET, true)
                     },
                     onTimerCard = { navController.switchTab(NmTab.Timer) },
                     onRecent = {}
@@ -285,7 +287,9 @@ private fun NmNavHost(
 
         pillNavGraph(navController)
 
-        composable(NmRoute.TIMER) {
+        composable(NmRoute.TIMER) { entry ->
+            val openPresetSheet by entry.savedStateHandle.getStateFlow(OPEN_PRESET_SHEET, false)
+                .collectAsStateWithLifecycle()
             TabRoot(
                 navController = navController,
                 tab = NmTab.Timer,
@@ -299,7 +303,7 @@ private fun NmNavHost(
                     startPresetId = startPresetId,
                     onStartPresetHandled = onStartPresetHandled,
                     openPresetSheet = openPresetSheet,
-                    onPresetSheetOpened = { openPresetSheet = false }
+                    onPresetSheetOpened = { entry.savedStateHandle[OPEN_PRESET_SHEET] = false }
                 )
             }
         }
@@ -459,6 +463,9 @@ internal fun NavController.switchTab(tab: NmTab) {
         restoreState = true
     }
 }
+
+/** 홈 `새 타이머` → 타이머 탭 프리셋 시트 요청. 타이머 항목의 savedStateHandle 키다. */
+private const val OPEN_PRESET_SHEET = "openPresetSheet"
 
 internal val NmTab.route: String
     get() = when (this) {

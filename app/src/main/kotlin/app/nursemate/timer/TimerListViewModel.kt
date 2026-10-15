@@ -7,18 +7,17 @@ import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.core.timer.clockTicks
 import app.nursemate.telemetry.AnalyticsEvent
 import app.nursemate.telemetry.AppAnalytics
 import app.nursemate.timer.alarm.TimerPermissions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -48,9 +47,8 @@ class TimerListViewModel @Inject constructor(
     val presets: StateFlow<List<TimerPreset>> = presetRepository.presets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
-    /** 남은 시간 계산의 기준 시각. 1초마다 갱신돼 화면을 다시 그린다. */
-    private val _now = MutableStateFlow(System.currentTimeMillis())
-    val now: StateFlow<Long> = _now.asStateFlow()
+    /** 남은 시간 계산의 기준 시각. 1초마다 갱신돼 화면을 다시 그린다 — 홈과 같은 [clockTicks]. */
+    val now: StateFlow<Long> = clockTicks().stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis())
 
     /** 메모를 인라인으로 펼친 타이머. 카드가 확장된다. */
     private val _memoEditing = MutableStateFlow<String?>(null)
@@ -62,15 +60,6 @@ class TimerListViewModel @Inject constructor(
 
     /** 시작 관문 — 권한·울림 방식 최초 선택. 화면이 시트를 띄우고 OS 절차를 밟는다. */
     val startGate = TimerStartGate(repository, permissions, viewModelScope)
-
-    init {
-        viewModelScope.launch {
-            while (isActive) {
-                _now.value = System.currentTimeMillis()
-                delay(TICK_MS)
-            }
-        }
-    }
 
     fun setPresetSheet(open: Boolean) {
         _presetSheetOpen.value = open
