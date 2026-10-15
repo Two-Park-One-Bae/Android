@@ -7,6 +7,8 @@ import android.graphics.Bitmap
 import app.nursemate.core.vision.OrtBackend
 import java.io.Closeable
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -27,8 +29,8 @@ import org.opencv.imgproc.Imgproc
  * 나와야 한다(DoD). 전처리는 [ImprintPreprocess], 디코딩은 [ImprintDecoding] 에 있고 여기서는
  * 둘을 잇고 추론만 한다.
  *
- * ## 한 번에 144장을 돌린다
- * 회전 24 × 배율 6 이다. 방향 추정기는 기각됐다 — 여러 방향을 읽고 모델이 스스로 매긴 확률로
+ * ## 후보 144장을 읽는다
+ * 회전 24 × 배율 6 이다. `session.run` 은 [batch] 장씩 나눠 부른다(기본 72 — 사정은 그 매개변수). 방향 추정기는 기각됐다 — 여러 방향을 읽고 모델이 스스로 매긴 확률로
  * 고르는 편이 낫고, 자체 모델이라 그 확률이 보정돼 있다. 회전을 한 배치로 묶으므로 방향 수를
  * 늘려도 비용이 거의 안 는다.
  *
@@ -58,10 +60,45 @@ class ImprintReader(
     modelFile: File,
     threads: Int = DEFAULT_THREADS,
     cpuNodes: String? = RNN_ON_CPU,
-    webGpuOptions: Map<String, String> = emptyMap()
+    webGpuOptions: Map<String, String> = emptyMap(),
+    /**
+     * `session.run` 한 번에 넣는 장수. **144 를 한 번에 넣으면 WebGPU 가 빈 답을 낸다.**
+     *
+     * ## 왜 72 인가
+     * 엑시노스 2600 에서 배치 144 가 **225회 중 30회**(13.3%) `각인=null · 점수 0.0` 을 냈다.
+     * 예외도 크래시도 logcat 오류도 없다 — 앱은 「못 읽었다」로 처리하고 넘어간다. 한 번은
+     * `pair=EE · 0.609` 로 **계산이 망가진 값**이 나왔다. 채택 임계 0.949 를 못 넘어 null 이
+     * 됐을 뿐, 넘었으면 틀린 각인을 그대로 채택했을 것이다.
+     *
+     * 세 모델의 배치와 실패율이 같은 순서였다 — 검출 1→0/6, 마크 8→0/39, 각인 **144→3/39**.
+     *
+     * | 배치 | 결과 |
+     * |---|---|
+     * | 144 | 225회 중 30 실패 · 기기가 43°C 넘으면 6~8% → **16~20%** |
+     * | **72** | **718회 중 0** · 55분 연속 부하에서 온도가 45.9 → 42.9°C 로 **하강** |
+     * | 36 | 675회 중 0 |
+     *
+     * 한 번에 GPU 로 가는 양이 절반이라 피크 부하도 절반이다. 정확도와 발열에 같은 방향으로
+     * 듣는다.
+     *
+     * ## 답은 바뀌지 않는다
+     * 쪼개도 **후보 144개를 다 쓴다** — 출력 `[32, 144, 37]` 의 N 축으로 이어 붙인다. 점수가
+     * 끝자리까지 같은 것을 확인했다(WebGPU 0.96988875).
+     *
+     * 대가는 `session.run` 횟수다. 배치 36 이 기준보다 11% 느렸다(2366 대 2134ms).
+     *
+     * ⚠️ [ImprintPreprocess.SAMPLES] 의 약수여야 한다 — 세션이 배치를 못박고 열리므로
+     *    나머지 청크를 다른 모양으로 넣을 수 없다.
+     */
+    private val batch: Int = DEFAULT_BATCH
 ) : Closeable {
 
     init {
+        // 세션을 열기 **전에** 거른다 — 연 뒤에 던지면 생성자가 끝나지 않아 아무도 close() 를
+        // 못 부르고 네이티브 세션(QNN 이면 컴파일 결과까지)이 샌다.
+        require(batch > 0 && ImprintPreprocess.SAMPLES % batch == 0) {
+            "batch 는 ${ImprintPreprocess.SAMPLES} 의 양의 약수여야 한다 — 받은 값 $batch"
+        }
         // 네이티브 로딩은 여기서 한 번만 한다. 앱 시작에 걸면 각인을 쓰지 않는 사용자도 비용을 낸다.
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
     }
@@ -72,7 +109,8 @@ class ImprintReader(
         env,
         modelFile,
         cpuNodeNames = cpuNodes,
-        webGpuOptions = webGpuOptions
+        webGpuOptions = webGpuOptions,
+        contextTag = "b$batch"
     ) {
         setIntraOpNumThreads(threads)
 
@@ -80,7 +118,7 @@ class ImprintReader(
          * **배치 차원을 못박는다** — QNN 이 이것 없이는 그래프를 거의 못 받는다 (NM-577).
          *
          * 모델 입력이 `image: [batch, 1, 128, 128]` 로 **`batch` 가 심볼릭**이다. 그런데 이
-         * 리더는 늘 144장을 넣는다 — 바뀔 여지가 없다.
+         * 리더는 늘 [batch] 장씩 넣는다 — 세션이 열린 뒤에는 바뀔 여지가 없다.
          *
          * 심볼릭으로 두면 HTP 가 이렇게 거절한다(2026-10-13 Adreno 740 logcat).
          * ```
@@ -88,15 +126,25 @@ class ImprintReader(
          * W Unable to get producer node for OrtValueInfo '/rnn/Shape_output_0'
          * ```
          * 그러면 QNN EP 가 노드를 거의 안 가져가고 **CPU 로 돌면서 세션은 열리고 답도 맞는다.**
-         * 느린 것만이 증거다(각인 5368ms — AI Hub 가 같은 칩에서 잰 값은 234ms).
+         * 느린 것만이 증거다(각인 5368ms — AI Hub 가 같은 칩에서 배치 144 로 잰 값은 234ms).
          *
          * CPU·WebGPU 에도 해롭지 않다 — 모양이 확정되면 ORT 가 추론·상수접기를 더 할 수 있다.
          */
-        setSymbolicDimensionValue(OrtBackend.BATCH_DIM, ImprintPreprocess.SAMPLES.toLong())
+        setSymbolicDimensionValue(OrtBackend.BATCH_DIM, batch.toLong())
     }
 
     /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
     private val input = FloatArray(ImprintPreprocess.SAMPLES * PLANE)
+
+    /**
+     * [input] 을 한 번에 옮겨 둘 **direct** 버퍼. 힙 배열을 `FloatBuffer.wrap` 으로 넘기면 ORT 가
+     * 청크마다 direct 버퍼를 새로 잡고 복사한다 — 알약 셋이면 4.7MB 를 여섯 번이다. 하나를 두고
+     * 청크는 그 조각만 넘긴다.
+     */
+    private val inputDirect: FloatBuffer = ByteBuffer
+        .allocateDirect(input.size * Float.SIZE_BYTES)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
 
     /** [input] 을 공유하므로 동시 호출을 직렬화한다. */
     private val lock = Mutex()
@@ -156,14 +204,33 @@ class ImprintReader(
         )
     }
 
-    /** @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). */
+    /**
+     * @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). N 은 늘
+     *         [ImprintPreprocess.SAMPLES] 다. [batch] 가 그보다 작으면 나눠 돌린 뒤 **N 축으로
+     *         이어 붙인다** — 디코딩은 후보가 몇 번에 나눠 왔는지 알 필요가 없다.
+     */
     private fun runSession(): Array<Array<FloatArray>> {
-        val shape = longArrayOf(ImprintPreprocess.SAMPLES.toLong(), 1, SIDE_L, SIDE_L)
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
-            session.run(mapOf(INPUT_NAME to tensor)).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                return (result[0].value as Array<Array<FloatArray>>)
-            }
+        val shape = longArrayOf(batch.toLong(), 1, SIDE_L, SIDE_L)
+        inputDirect.clear()
+        inputDirect.put(input).flip()
+        val chunks = ArrayList<Array<Array<FloatArray>>>(ImprintPreprocess.SAMPLES / batch)
+        for (start in 0 until ImprintPreprocess.SAMPLES step batch) {
+            val slice = inputDirect.duplicate().apply {
+                position(start * PLANE)
+                limit((start + batch) * PLANE)
+            }.slice()
+            OnnxTensor.createTensor(env, slice, shape)
+                .use { tensor ->
+                    session.run(mapOf(INPUT_NAME to tensor)).use { result ->
+                        @Suppress("UNCHECKED_CAST")
+                        chunks += result[0].value as Array<Array<FloatArray>>
+                    }
+                }
+        }
+        if (chunks.size == 1) return chunks[0]
+        // 시간축 T 는 청크마다 같다 — 배치와 무관한 모델 상수다.
+        return Array(chunks[0].size) { t ->
+            Array(ImprintPreprocess.SAMPLES) { n -> chunks[n / batch][t][n % batch] }
         }
     }
 
