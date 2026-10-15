@@ -55,6 +55,8 @@ import app.nursemate.core.model.TimerState
 fun TimerListRoute(
     startPresetId: String? = null,
     onStartPresetHandled: () -> Unit = {},
+    openPresetSheet: Boolean = false,
+    onPresetSheetOpened: () -> Unit = {},
     viewModel: TimerListViewModel = hiltViewModel()
 ) {
     val timers by viewModel.timers.collectAsStateWithLifecycle()
@@ -67,6 +69,13 @@ fun TimerListRoute(
     val editing by editor.editing.collectAsStateWithLifecycle()
     val presetForm by editor.form.collectAsStateWithLifecycle()
     val deletingPreset by editor.deleting.collectAsStateWithLifecycle()
+
+    // 홈 `새 타이머` 로 들어오면 프리셋 시트를 연다 — 타이머 탭 추가 버튼과 같은 시트다(spec home).
+    LaunchedEffect(openPresetSheet) {
+        if (!openPresetSheet) return@LaunchedEffect
+        onPresetSheetOpened()
+        viewModel.setPresetSheet(true)
+    }
 
     // 프리셋 목록을 읽기 전에는 id 를 맞춰 볼 수 없다. 빈 목록은 "아직 안 읽혔다"와 구분되지
     // 않지만, 정말 비어 있으면 시작할 프리셋 자체가 없어 어느 쪽이든 할 일이 같다.

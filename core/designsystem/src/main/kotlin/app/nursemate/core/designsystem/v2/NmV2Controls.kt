@@ -108,10 +108,11 @@ fun NmV2Chip(label: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** 태그 색. 기본은 처치(청록). 프리셋 행의 검사는 [Info]. */
+/** 태그 색 — 타이머 분류와 짝이다. 처치 [Secondary](청록) · 검사 [Info] · 투약 [Primary]. */
 enum class NmV2TagTone(val container: Color, val content: Color) {
     Secondary(NmColor.Secondary.C50, NmColor.Secondary.C700),
-    Info(NmColor.Info.C50, NmColor.Info.C700)
+    Info(NmColor.Info.C50, NmColor.Info.C700),
+    Primary(NmColor.Primary.C50, NmColor.Primary.C700)
 }
 
 /** `Tag` — 분류 표시. */

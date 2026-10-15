@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import app.nursemate.core.designsystem.NmTheme
@@ -44,18 +45,18 @@ fun NmTabScaffold(
     selected: NmTab,
     onSelect: (NmTab) -> Unit,
     modifier: Modifier = Modifier,
+    background: Color = NmTheme.semanticColors.bgApp,
     overlay: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = NmTheme.semanticColors
-    // 밝은 bg-app 위라 시스템 바 아이콘은 어둡게.
+    // 밝은 바탕 위라 시스템 바 아이콘은 어둡게.
     SystemBarIcons(darkIcons = true)
 
     // 탭바가 차지하는 높이. 화면이 키보드를 피할 때 **이미 빠져 있는 몫**이라 빼 줘야 한다.
     var barHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
 
-    Box(modifier = modifier.fillMaxSize().background(colors.bgApp)) {
+    Box(modifier = modifier.fillMaxSize().background(background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier

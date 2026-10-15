@@ -58,6 +58,33 @@ object NmV2Type {
     /** 태그 — 11/500 */
     val tag = style(11, FontWeight.Medium)
 
+    /** 카드 구역 제목(진행 중인 타이머) — 16/700 */
+    val sectionTitle = style(16, FontWeight.Bold)
+
+    /** 기능 카드 제목 — 15/700 */
+    val tileTitle = style(15, FontWeight.Bold)
+
+    /** 기능 카드 숫자 — 34/700 */
+    val metric = style(34, FontWeight.Bold)
+
+    /** 기능 카드 숫자 단위(`/15` · `개`) — 14/600 */
+    val metricUnit = style(14, FontWeight.SemiBold)
+
+    /** 남은 시간 — 20/700 */
+    val clock = style(20, FontWeight.Bold)
+
+    /** 카드 안 작은 버튼 — 13/700 */
+    val smallButton = style(13, FontWeight.Bold)
+
+    /** 글자 링크(`전체 보기`) — 13/600 */
+    val link = chipConfirmed
+
+    /** 빈 상태 문구 — 13/400 */
+    val empty = cardBody
+
+    /** 보조 캡션(초기화 시각) — 11/400 */
+    val caption = style(11, FontWeight.Normal)
+
     /** 탭 바 라벨 — 10 (선택 600 · 나머지 400) */
     val tabSelected = style(10, FontWeight.SemiBold)
     val tab = style(10, FontWeight.Normal)
