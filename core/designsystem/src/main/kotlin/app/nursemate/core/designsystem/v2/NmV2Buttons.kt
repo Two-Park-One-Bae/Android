@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 
 /**
@@ -56,7 +57,7 @@ enum class NmV2ButtonKind {
 }
 
 /** 버튼 모서리 12. */
-val NmV2ButtonShape = RoundedCornerShape(NmV2Radius.md)
+val NmV2ButtonShape = RoundedCornerShape(NmRadius.md)
 
 private val ButtonPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
 

@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 
 /*
@@ -121,7 +122,7 @@ fun NmV2Tag(label: String, modifier: Modifier = Modifier, tone: NmV2TagTone = Nm
         style = NmV2Type.tag,
         color = tone.content,
         modifier = modifier
-            .background(tone.container, RoundedCornerShape(NmV2Radius.sm))
+            .background(tone.container, RoundedCornerShape(NmRadius.sm))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }
@@ -146,7 +147,7 @@ fun NmV2TextField(
     val colors = NmTheme.semanticColors
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(NmV2Radius.md)
+    val shape = RoundedCornerShape(NmRadius.md)
     val fieldModifier = when {
         !enabled -> Modifier.background(NmColor.Neutral.C100, shape)
         isError -> Modifier.background(colors.surface, shape).border(1.5.dp, NmColor.Error.C500, shape)
@@ -181,7 +182,7 @@ fun NmV2TextField(
 /** `Banner` — 평면 살구(`caution-50` 면 + `caution-300` 테두리). */
 @Composable
 fun NmV2Banner(text: String, modifier: Modifier = Modifier, @DrawableRes icon: Int = NmSymbols.Warning) {
-    val shape = RoundedCornerShape(NmV2Radius.md)
+    val shape = RoundedCornerShape(NmRadius.md)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -216,7 +217,7 @@ data class NmV2MenuItem(
 @Composable
 fun NmV2Menu(items: List<NmV2MenuItem>, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
-    val shape = RoundedCornerShape(NmV2Radius.md)
+    val shape = RoundedCornerShape(NmRadius.md)
     Column(
         modifier = modifier
             .width(160.dp)

@@ -15,7 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -45,14 +46,19 @@ fun NmV2ButtonFloating(
             .size(56.dp)
             .v2OuterShadows(listOf(V2Shadow(NmV2Color.Raised.primaryShadow, y = 8.dp, blur = 20.dp)), CircleShape)
             .clip(CircleShape)
-            .drawBehind {
-                drawRect(
-                    Brush.verticalGradient(listOf(NmV2Color.Glass.tintPrimaryTop, NmV2Color.Glass.tintPrimaryBottom))
+            .drawWithCache {
+                val tint = Brush.verticalGradient(
+                    listOf(NmV2Color.Glass.tintPrimaryTop, NmV2Color.Glass.tintPrimaryBottom)
                 )
+                onDrawBehind {
+                    // 물든 면이 85~92% 라 아래 바깥 그림자가 비친다 — 흰 바탕을 먼저 깐다(NmV2Surface 와 같은 이유).
+                    drawRect(NmColor.Neutral.C0)
+                    drawRect(tint)
+                }
             }
             .v2InnerShadows(listOf(V2Shadow(NmV2Color.Raised.highlight, y = 1.dp, blur = 1.dp)), CircleShape)
-            .border(NmV2Glass.strokeWidthSmall, glassStrokeBrush(), CircleShape)
-            .clickable(role = Role.Button, onClickLabel = contentDescription, onClick = onClick),
+            .border(NmV2Glass.strokeWidthSmall, GlassStrokeBrush, CircleShape)
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -124,15 +130,17 @@ fun NmV2IconButtonGlass(
                     CircleShape
                 )
                 .clip(CircleShape)
-                .drawBehind {
-                    drawRect(NmV2Color.Glass.strokeClear)
-                    drawRect(
-                        Brush.radialGradient(
-                            listOf(NmV2Color.Glass.sheen, Color.Transparent),
-                            center = androidx.compose.ui.geometry.Offset(size.width * 0.3f, size.height * 0.2f),
-                            radius = size.width * 0.35f
-                        )
+                .drawWithCache {
+                    val sheen = Brush.radialGradient(
+                        listOf(NmV2Color.Glass.sheen, Color.Transparent),
+                        center = Offset(size.width * 0.3f, size.height * 0.2f),
+                        radius = size.width * 0.35f
                     )
+                    // 사진 위에 놓이는 유리라 일부러 비친다. 흰 바탕을 깔지 않는다.
+                    onDrawBehind {
+                        drawRect(NmV2Color.Glass.strokeClear)
+                        drawRect(sheen)
+                    }
                 }
                 .v2InnerShadows(listOf(V2Shadow(NmV2Color.Glass.highlight, y = 1.dp, blur = 1.dp)), CircleShape)
                 .border(

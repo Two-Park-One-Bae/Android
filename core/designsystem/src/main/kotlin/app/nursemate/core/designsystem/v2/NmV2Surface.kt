@@ -138,14 +138,14 @@ internal val GlassStrokeStops = arrayOf(
     1f to NmV2Color.Glass.strokeWhite
 )
 
-internal fun glassStrokeBrush(): Brush = Brush.linearGradient(colorStops = GlassStrokeStops)
+internal val GlassStrokeBrush: Brush = Brush.linearGradient(colorStops = GlassStrokeStops)
 
 /** 유리 면 — 위에서 아래로 밝기가 줄고, 왼위에 둥근 빛, 카드에는 사선 광택 띠. */
 private fun Modifier.glassFill(sheen: Boolean): Modifier = drawWithCache {
     val vertical = Brush.verticalGradient(listOf(NmV2Color.Glass.fillTop, NmV2Color.Glass.fillBottom))
     // 정본 radial 은 크기 0.9 × 0.9(타원), 중심 (0.08, 0.05). 원으로 그리고 세로를 눌러 타원을 만든다.
     val radius = size.width * 0.45f
-    val ratio = if (size.width > 0f) size.height / size.width else 1f
+    val ratio = highlightRatio(size.width, size.height)
     val center = Offset(size.width * 0.08f, size.height * 0.05f / ratio)
     val highlight = Brush.radialGradient(
         listOf(NmV2Color.Glass.highlight, Color.Transparent),
@@ -178,9 +178,15 @@ private fun Modifier.glassFill(sheen: Boolean): Modifier = drawWithCache {
     }
 }
 
+/**
+ * 둥근 빛을 타원으로 누를 비율(세로/가로). 한쪽이 0 이면 1 로 둔다 — 0 으로 나누면 중심이 NaN 이 되고
+ * 눌림 행렬이 특이해진다(내용이 비어 높이 0 인 첫 측정).
+ */
+private fun highlightRatio(width: Float, height: Float): Float = if (width > 0f && height > 0f) height / width else 1f
+
 /** 상태 면 — 옅은 상태색 위에 왼위 둥근 빛 하나(70% 흰). */
 private fun Modifier.tintFill(base: Color): Modifier = drawWithCache {
-    val ratio = if (size.width > 0f) size.height / size.width else 1f
+    val ratio = highlightRatio(size.width, size.height)
     val highlight = Brush.radialGradient(
         listOf(TintHighlight, Color.Transparent),
         center = Offset(size.width * 0.08f, size.height * 0.05f / ratio),
@@ -210,10 +216,10 @@ private fun Modifier.v2SurfaceLayer(style: NmV2SurfaceStyle, shape: Shape): Modi
     val clipped = clip(shape)
     return when (style) {
         NmV2SurfaceStyle.Card -> clipped.glassFill(sheen = true).v2InnerShadows(InnerCard, shape)
-            .border(NmV2Glass.strokeWidth, glassStrokeBrush(), shape)
+            .border(NmV2Glass.strokeWidth, GlassStrokeBrush, shape)
 
         NmV2SurfaceStyle.ListCard -> clipped.glassFill(sheen = false).v2InnerShadows(InnerList, shape)
-            .border(NmV2Glass.strokeWidth, glassStrokeBrush(), shape)
+            .border(NmV2Glass.strokeWidth, GlassStrokeBrush, shape)
 
         NmV2SurfaceStyle.CardSelected -> clipped.glassFill(sheen = true).v2InnerShadows(InnerCard, shape)
             .border(2.dp, NmColor.Primary.C500, shape)

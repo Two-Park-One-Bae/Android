@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -61,9 +62,10 @@ fun NmV2NavBar(
             if (onBack != null) {
                 Box(
                     Modifier
-                        .size(TouchTarget)
+                        // 칸은 26 이지만 누르는 영역은 48 — `size` 는 부모 26 에 눌리므로 `requiredSize` 로 넘친다.
+                        .requiredSize(TouchTarget)
                         .clip(CircleShape)
-                        .clickable(role = Role.Button, onClickLabel = backLabel, onClick = onBack),
+                        .clickable(role = Role.Button, onClick = onBack),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

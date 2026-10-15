@@ -71,14 +71,13 @@ object NmV2Color {
     val cameraBg = Color(0xFF000000)
 }
 
-/** 모서리. 기존 `radius-sm/md/lg/xl`(8 · 12 · 16 · 24)에 V2.1.0 이 4 · 20 · 28 · 999 를 더했다. */
+/**
+ * V2.1.0 이 더한 모서리 4 · 20 · 28 · 999. 기존 8 · 12 · 16 · 24 는
+ * [app.nursemate.core.designsystem.NmRadius] 를 그대로 쓴다 — 같은 값을 두 곳에 두지 않는다.
+ */
 object NmV2Radius {
     val xs = 4.dp
-    val sm = 8.dp
-    val md = 12.dp
-    val lg = 16.dp
     val card = 20.dp
-    val xl = 24.dp
     val x2l = 28.dp
     val full = 999.dp
 }

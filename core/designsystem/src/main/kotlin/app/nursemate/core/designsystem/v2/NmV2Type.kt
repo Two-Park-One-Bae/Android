@@ -13,8 +13,19 @@ import app.nursemate.core.designsystem.PretendardFamily
  * 그려져 있지만 앱은 MVP 부터 Pretendard 를 쓴다 — 바꾸지 않는다, NM-580 「글꼴」).
  */
 object NmV2Type {
-    private fun style(size: Int, weight: FontWeight) =
-        TextStyle(fontFamily = PretendardFamily, fontSize = size.sp, fontWeight = weight)
+    /**
+     * 줄 높이는 글자 크기의 1.4배로 둔다. 정본 텍스트 노드에는 줄 높이가 없어 글꼴 기본값으로 그려지는데,
+     * 그 값은 글꼴마다 다르다(Noto Sans KR · Pretendard). 기존 컴포넌트가 같은 비율을 쓴다
+     * — `NmBanner` 13/18.
+     */
+    private fun style(size: Int, weight: FontWeight) = TextStyle(
+        fontFamily = PretendardFamily,
+        fontSize = size.sp,
+        fontWeight = weight,
+        lineHeight = (size * LINE_HEIGHT_RATIO).sp
+    )
+
+    private const val LINE_HEIGHT_RATIO = 1.4f
 
     /** 버튼 · 카드 제목 · 모달 제목 — 16/600 */
     val button = style(16, FontWeight.SemiBold)

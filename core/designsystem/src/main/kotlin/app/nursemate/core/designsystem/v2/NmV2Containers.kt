@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -32,7 +33,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.R
 
@@ -77,13 +80,14 @@ fun NmV2ListRow(
     val colors = NmTheme.semanticColors
     NmV2Surface(
         style = NmV2SurfaceStyle.ListCard,
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(NmV2CardShape)
-            .clickable(role = Role.Button, onClick = onClick)
+        modifier = modifier.fillMaxWidth()
     ) {
+        // 누름 영역은 면 안쪽에 건다 — 바깥 Modifier 에 clip 을 걸면 목록 그림자까지 잘린다.
         Row(
-            Modifier.padding(16.dp),
+            Modifier
+                .clip(NmV2CardShape)
+                .clickable(role = Role.Button, onClick = onClick)
+                .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -130,7 +134,7 @@ fun NmV2PresetRow(
     val colors = NmTheme.semanticColors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val shape = RoundedCornerShape(NmV2Radius.md)
+    val shape = RoundedCornerShape(NmRadius.md)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -171,10 +175,16 @@ fun NmV2Modal(
     onDismiss: () -> Unit = onDismissRequest,
     confirmKind: NmV2ButtonKind = NmV2ButtonKind.Primary
 ) {
-    Dialog(onDismissRequest = onDismissRequest) {
-        NmV2ModalPanel(title, confirmText, onConfirm, message, dismissText, onDismiss, confirmKind)
+    // 창을 판 크기로 두면 판 그림자(y14 · 흐림34)가 창 경계에서 잘린다. 기본 폭을 끄고 그림자 자리만큼 여백을 둔다.
+    Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.padding(ModalShadowRoom)) {
+            NmV2ModalPanel(title, confirmText, onConfirm, message, dismissText, onDismiss, confirmKind)
+        }
     }
 }
+
+/** 모달 판 그림자가 들어갈 창 여백 — 흐림 34 + y 14. */
+private val ModalShadowRoom = 48.dp
 
 /** [NmV2Modal] 의 판만. 미리보기 · 캡처용으로 따로 둔다. */
 @Composable
@@ -189,15 +199,16 @@ fun NmV2ModalPanel(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    val shape = RoundedCornerShape(NmV2Radius.xl)
+    val shape = RoundedCornerShape(NmRadius.xl)
     Column(
         modifier = modifier
             .width(300.dp)
             .v2OuterShadows(ShadowCard, shape)
             .clip(shape)
+            .background(NmColor.Neutral.C0)
             .background(NmV2Color.Glass.fallback)
             .v2InnerShadows(listOf(V2Shadow(NmV2Color.Glass.innerEdge, y = 1.dp, blur = 1.dp)), shape)
-            .border(NmV2Glass.strokeWidthSmall, glassStrokeBrush(), shape)
+            .border(NmV2Glass.strokeWidthSmall, GlassStrokeBrush, shape)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally

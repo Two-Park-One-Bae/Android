@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -41,13 +42,16 @@ class V2GalleryCaptureTest {
     private fun capture(name: String, content: @Composable () -> Unit) {
         rule.setContent {
             NurseMateTheme {
-                Box(Modifier.testTag(TAG).background(Color.White).padding(24.dp).wrapContentSize()) { content() }
+                // 여백은 카드 그림자(y14 + 흐림34)가 다 들어가도록 56 이다 — 잘리면 그림자를 대조할 수 없다.
+                Box(Modifier.testTag(TAG).background(Color.White).padding(56.dp).wrapContentSize()) { content() }
             }
         }
-        val bitmap = rule.onNodeWithTag(TAG).captureToImage().asAndroidBitmap()
-        val dir =
-            File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "v2gallery")
-        dir.mkdirs()
+        save(rule.onNodeWithTag(TAG).captureToImage().asAndroidBitmap(), name)
+    }
+
+    private fun save(bitmap: Bitmap, name: String) {
+        val root = InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null)
+        val dir = File(root, "v2gallery").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
@@ -167,6 +171,23 @@ class V2GalleryCaptureTest {
                 }
             }
         }
+    }
+
+    /** 실제 [NmV2Modal] 창 — 판 그림자가 창 경계에서 잘리지 않는지 본다. */
+    @Test fun modalDialog() {
+        rule.setContent {
+            NurseMateTheme {
+                NmV2Modal(
+                    title = "이 프리셋을 삭제할까요?",
+                    confirmText = "삭제",
+                    onConfirm = {},
+                    onDismissRequest = {},
+                    dismissText = "취소",
+                    confirmKind = NmV2ButtonKind.Destructive
+                )
+            }
+        }
+        save(rule.onNode(isDialog()).captureToImage().asAndroidBitmap(), "07_modal_dialog")
     }
 
     /** 누름 상태를 손가락 없이 그린다 — 볼록 면을 평면으로 바꾼 모양이 맞는지 본다. */
