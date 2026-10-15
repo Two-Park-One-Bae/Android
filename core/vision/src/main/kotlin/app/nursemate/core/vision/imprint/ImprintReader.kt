@@ -7,6 +7,8 @@ import android.graphics.Bitmap
 import app.nursemate.core.vision.OrtBackend
 import java.io.Closeable
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -27,8 +29,8 @@ import org.opencv.imgproc.Imgproc
  * 나와야 한다(DoD). 전처리는 [ImprintPreprocess], 디코딩은 [ImprintDecoding] 에 있고 여기서는
  * 둘을 잇고 추론만 한다.
  *
- * ## 한 번에 144장을 돌린다
- * 회전 24 × 배율 6 이다. 방향 추정기는 기각됐다 — 여러 방향을 읽고 모델이 스스로 매긴 확률로
+ * ## 후보 144장을 읽는다
+ * 회전 24 × 배율 6 이다. `session.run` 은 [batch] 장씩 나눠 부른다(기본 72 — 사정은 그 매개변수). 방향 추정기는 기각됐다 — 여러 방향을 읽고 모델이 스스로 매긴 확률로
  * 고르는 편이 낫고, 자체 모델이라 그 확률이 보정돼 있다. 회전을 한 배치로 묶으므로 방향 수를
  * 늘려도 비용이 거의 안 는다.
  *
@@ -92,6 +94,11 @@ class ImprintReader(
 ) : Closeable {
 
     init {
+        // 세션을 열기 **전에** 거른다 — 연 뒤에 던지면 생성자가 끝나지 않아 아무도 close() 를
+        // 못 부르고 네이티브 세션(QNN 이면 컴파일 결과까지)이 샌다.
+        require(batch > 0 && ImprintPreprocess.SAMPLES % batch == 0) {
+            "batch 는 ${ImprintPreprocess.SAMPLES} 의 양의 약수여야 한다 — 받은 값 $batch"
+        }
         // 네이티브 로딩은 여기서 한 번만 한다. 앱 시작에 걸면 각인을 쓰지 않는 사용자도 비용을 낸다.
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
     }
@@ -110,7 +117,7 @@ class ImprintReader(
          * **배치 차원을 못박는다** — QNN 이 이것 없이는 그래프를 거의 못 받는다 (NM-577).
          *
          * 모델 입력이 `image: [batch, 1, 128, 128]` 로 **`batch` 가 심볼릭**이다. 그런데 이
-         * 리더는 늘 144장을 넣는다 — 바뀔 여지가 없다.
+         * 리더는 늘 [batch] 장씩 넣는다 — 세션이 열린 뒤에는 바뀔 여지가 없다.
          *
          * 심볼릭으로 두면 HTP 가 이렇게 거절한다(2026-10-13 Adreno 740 logcat).
          * ```
@@ -118,21 +125,25 @@ class ImprintReader(
          * W Unable to get producer node for OrtValueInfo '/rnn/Shape_output_0'
          * ```
          * 그러면 QNN EP 가 노드를 거의 안 가져가고 **CPU 로 돌면서 세션은 열리고 답도 맞는다.**
-         * 느린 것만이 증거다(각인 5368ms — AI Hub 가 같은 칩에서 잰 값은 234ms).
+         * 느린 것만이 증거다(각인 5368ms — AI Hub 가 같은 칩에서 배치 144 로 잰 값은 234ms).
          *
          * CPU·WebGPU 에도 해롭지 않다 — 모양이 확정되면 ORT 가 추론·상수접기를 더 할 수 있다.
          */
         setSymbolicDimensionValue(OrtBackend.BATCH_DIM, batch.toLong())
     }
 
-    init {
-        require(ImprintPreprocess.SAMPLES % batch == 0) {
-            "batch 는 ${ImprintPreprocess.SAMPLES} 의 약수여야 한다 — 받은 값 $batch"
-        }
-    }
-
     /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
     private val input = FloatArray(ImprintPreprocess.SAMPLES * PLANE)
+
+    /**
+     * [input] 을 한 번에 옮겨 둘 **direct** 버퍼. 힙 배열을 `FloatBuffer.wrap` 으로 넘기면 ORT 가
+     * 청크마다 direct 버퍼를 새로 잡고 복사한다 — 알약 셋이면 4.7MB 를 여섯 번이다. 하나를 두고
+     * 청크는 그 조각만 넘긴다.
+     */
+    private val inputDirect: FloatBuffer = ByteBuffer
+        .allocateDirect(input.size * Float.SIZE_BYTES)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
 
     /** [input] 을 공유하므로 동시 호출을 직렬화한다. */
     private val lock = Mutex()
@@ -199,9 +210,15 @@ class ImprintReader(
      */
     private fun runSession(): Array<Array<FloatArray>> {
         val shape = longArrayOf(batch.toLong(), 1, SIDE_L, SIDE_L)
+        inputDirect.clear()
+        inputDirect.put(input).flip()
         val chunks = ArrayList<Array<Array<FloatArray>>>(ImprintPreprocess.SAMPLES / batch)
         for (start in 0 until ImprintPreprocess.SAMPLES step batch) {
-            OnnxTensor.createTensor(env, FloatBuffer.wrap(input, start * PLANE, batch * PLANE), shape)
+            val slice = inputDirect.duplicate().apply {
+                position(start * PLANE)
+                limit((start + batch) * PLANE)
+            }.slice()
+            OnnxTensor.createTensor(env, slice, shape)
                 .use { tensor ->
                     session.run(mapOf(INPUT_NAME to tensor)).use { result ->
                         @Suppress("UNCHECKED_CAST")

@@ -123,7 +123,10 @@ class ImprintVariantTest {
      * 144 는 `ROTATIONS(24) × ZOOMS(6)` TTA 다. 쪼개도 **후보 144개를 다 쓰므로 답이 같아야
      * 한다** — 그래서 다른 변형과 똑같이 0.969883 을 단정한다. 빈 답이 사라지면 배치가 원인이다.
      *
-     * ⚠️ **한 번으로는 못 가린다.** 기준 설정도 36번 중 33번은 멀쩡했다. 회차를 벌어야 한다.
+     * ⚠️ **이 테스트는 고쳐졌는지를 증명하지 않는다** — 한 번 읽고 끝이다. 실패가 확률적이라
+     *    (배치 144 에서 225회 중 30회) 한 번 통과는 아무것도 말하지 않는다. 여기서 보는 것은
+     *    **쪼개 돌린 뒤 이어 붙인 답이 같은가**뿐이다. 빈 답이 사라졌다는 근거는 반복 측정이다 —
+     *    배치 72 를 718회, 36 을 675회 돌려 실패 0 ([ImprintReader] 의 `batch` KDoc).
      */
     @Test
     fun `F_WebGPU_배치36`() {
@@ -149,7 +152,8 @@ class ImprintVariantTest {
         label: String,
         cpuNodes: String? = ImprintReader.RNN_ON_CPU,
         options: Map<String, String> = emptyMap(),
-        batch: Int = ImprintPreprocess.SAMPLES
+        // 운영값으로 잰다. 144 는 엑시노스 2600 WebGPU 에서 빈 답을 내는 설정이다(NM-602).
+        batch: Int = ImprintReader.DEFAULT_BATCH
     ) {
         val started = System.nanoTime()
         val result = ImprintReader(model, cpuNodes = cpuNodes, webGpuOptions = options, batch = batch)
