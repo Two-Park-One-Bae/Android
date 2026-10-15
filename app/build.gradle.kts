@@ -85,7 +85,7 @@ android {
      */
     packaging { jniLibs { useLegacyPackaging = true } }
 
-    dynamicFeatures += setOf(":qnn_core", ":qnn_v73", ":qnn_v75", ":qnn_v79", ":qnn_v81")
+    dynamicFeatures += setOf(":qnn_core", ":qnn_v69", ":qnn_v73", ":qnn_v75", ":qnn_v79", ":qnn_v81")
 
     /*
      * 어느 기기에 `:qnn` 을 내려줄지 — **경로를 명시해야 한다.**

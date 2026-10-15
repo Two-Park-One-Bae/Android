@@ -21,7 +21,7 @@ import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.register
 
 /**
- * QNN 조건부 전달 모듈을 만든다 — `qnn_core` 하나와 세대별 `qnn_v73` · `qnn_v75` · `qnn_v79`.
+ * QNN 조건부 전달 모듈을 만든다 — `qnn_core` 하나와 세대별 `qnn_v69` · `qnn_v73` · `qnn_v75` · `qnn_v79` · `qnn_v81`.
  *
  * ## 왜 세대마다 모듈을 따로 두나
  * QNN 백엔드에서 덩치는 **세대별 Skel** 이다(세대당 16MB). 기기는 자기 세대 하나만 쓰는데

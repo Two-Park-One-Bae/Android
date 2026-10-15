@@ -34,6 +34,7 @@ ASSETS = REPO / "app/src/main/assets"
 # 세대 → AI Hub 기기. `scripts/qnn_chipsets.py` 가 대조하는 그 세대들이다.
 # Family 기기를 쓰면 AI Hub 가 그 계열의 대표 칩셋으로 컴파일한다.
 DEVICES = {
+    "69": "Samsung Galaxy S22 (Family)",
     "73": "Samsung Galaxy S23 (Family)",
     "75": "Samsung Galaxy S24 (Family)",
     "79": "Samsung Galaxy S25 (Family)",
