@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.imprint.ImprintDecoding
 import app.nursemate.core.vision.imprint.ImprintPreprocess
 import app.nursemate.core.vision.imprint.ImprintReader
 import app.nursemate.core.vision.mark.MarkPreprocess
@@ -171,9 +172,24 @@ class EpMatrixTest {
     /**
      * 기준값은 `ImprintReaderParityTest` 와 같다 — `sample_crop` → `YS`, 0.969883.
      *
+     * 언제나 **best_pair 가 YS** 인지(읽기)와 **답이 점수와 맞는지**(점수가 채택 임계 이상이면 `YS`,
+     * 아래면 `null`)를 본다. 그 위에 EP 에 따라 하나를 더 본다.
+     *
+     * | EP | 더 보는 것 |
+     * |---|---|
+     * | QNN 이 아닌 EP · 기준 모델 | 점수가 [expectedScore] ± 1e-4 — 즉 채택돼 `YS` |
+     * | [QNN_MEASURED] · 기준 모델 | 점수가 [QNN_IMPRINT_FLOOR] 이상 — 무너지는 쪽만 잡는다 |
+     * | 그 밖(QNN fp16 · 변형 모델) | 없음 — 실측한 적이 없어 기댈 값이 없다 |
+     *
+     * ## 왜 QNN 은 채택을 단정하지 않나
+     * HTP 는 이 한 장을 0.944 로 읽어 임계 0.949 아래로 떨어뜨린다 — V69 0.9441 · V73 0.9436 ·
+     * V75 0.9438 로 세대와 무관하다. 그런데 감사셋 331면 전수에서는 CPU 와 차이가 없었다
+     * ([OrtBackend] KDoc 「QNN 도 같은 331면으로 쟀다」). 이 한 장이 하필 임계 바로 위라 뒤집힌
+     * 것이다. 채택을 단정하면 QNN 측정마다 빨갛게 떠서 진짜 회귀를 가린다. 하한만 두므로 `cpu(/stn/)`
+     * 같은 개선으로 채택되면 그대로 통과한다.
+     *
      * @param model 돌릴 각인 모델. 기본은 운영과 같은 것이고, 변형을 댈 때만 바꾼다.
-     * @param expectedScore 기준 모델의 기록값. 변형은 수치가 달라도 되므로 `null` 로 끈다 —
-     *                      그때 보는 것은 **점수가 [ImprintDecoding.ADOPT_THRESHOLD] 를 넘는지**다.
+     * @param expectedScore 기준 모델의 기록값. 변형은 수치가 달라도 되므로 `null` 로 끈다.
      */
     private fun imprint(ep: Ep, model: File = imprintModel, label: String = "각인", expectedScore: Float? = 0.969883f) {
         assumeTrue("${model.name} 이 없어 건너뛴다", model.isFile && model.length() > 0)
@@ -199,8 +215,20 @@ class EpMatrixTest {
             // best_pair 를 먼저 본다 — **읽기가 맞았는지**와 **채택이 됐는지**는 다른 문제다.
             // QNN 이 pair YS 를 맞게 고르고도 점수 0.9436 으로 채택에서 떨어진 자리다.
             assertEquals("[$ep] $label best_pair", "YS", result.pair)
-            assertEquals("[$ep] $label", "YS", result.imprint)
-            expectedScore?.let { assertEquals("[$ep] $label 점수", it, result.score, 1e-4f) }
+            val adopted = result.score >= ImprintDecoding.ADOPT_THRESHOLD
+            assertEquals("[$ep] $label 답이 점수와 맞는다", if (adopted) "YS" else null, result.imprint)
+            when {
+                expectedScore == null -> Unit
+
+                ep in QNN_EPS -> if (ep in QNN_MEASURED) {
+                    assertTrue(
+                        "[$ep] $label 점수 ${result.score} 가 HTP 하한 $QNN_IMPRINT_FLOOR 아래로 무너졌다",
+                        result.score >= QNN_IMPRINT_FLOOR
+                    )
+                }
+
+                else -> assertEquals("[$ep] $label 점수", expectedScore, result.score, 1e-4f)
+            }
         }
     }
 
@@ -298,5 +326,23 @@ class EpMatrixTest {
 
         /** `MarkReaderParityTest` 와 같은 값. 실측 최대 1.29e-3 에 4배 여유다. */
         const val PRESENCE_TOLERANCE = 5e-3f
+
+        /** QNN(HTP) 계열 EP. [OrtBackend] 가 `applyQnnEp` 로 보내는 것들이다. */
+        val QNN_EPS = setOf(Ep.QNN, Ep.QNN_FP32, Ep.QNN_FP16, Ep.QNN_STN_CPU, Ep.QNN_RNN_CPU, Ep.QNN_CACHED)
+
+        /**
+         * 이 고정물 점수를 실측한 QNN 설정 — 모두 `enable_htp_fp16_precision=0` 이다([Ep.QNN] 기본이
+         * 그렇게 고정돼 있다). [Ep.QNN_FP16] 은 잰 적이 없어 뺐다 — 기기 밖 재현은 0.9202 였다.
+         * [Ep.QNN_STN_CPU] 는 지금 [Ep.QNN] 과 같은 그래프다(층 배정이 플러그인 EP 에 안 먹는다).
+         */
+        val QNN_MEASURED = setOf(Ep.QNN, Ep.QNN_FP32, Ep.QNN_STN_CPU, Ep.QNN_RNN_CPU, Ep.QNN_CACHED)
+
+        /**
+         * QNN 실측 점수의 하한. V69 0.9441 · V73 0.9436 · V75 0.9438(2026-10-13~15) 아래로 0.005.
+         *
+         * **무너지는 것만 잡는다** — 서브그래프가 통째로 CPU 로 빠지거나 SDK 가 GridSample 을 크게
+         * 바꾸는 정도다. 0.003 쯤 움직이는 작은 변화는 못 잡는다. 위로는 막지 않는다(개선이면 채택된다).
+         */
+        const val QNN_IMPRINT_FLOOR = 0.9388f
     }
 }
