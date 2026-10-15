@@ -31,6 +31,8 @@ import javax.inject.Singleton
  * | 기기 | 검출 | 각인 | 마크 |
  * |---|---|---|---|
  * | Xclipse 940 (Exynos 2400) | **1.95배** | **2.03배** | **3.2배** |
+ * | Xclipse 950 (Exynos 2500) | **2.1배** | **1.9배** | **2.7배** |
+ * | Xclipse 960 (Exynos 2600) | 1.1배 | **1.8배** ⚠️ | **7.8배** |
  * | Adreno 740 (SM8550) | 1.53배 | **프로세스 사망** | 2.1배 |
  * | Adreno 750 (SM8650) | **프로세스 사망** | 예외 | 2.1배 |
  * | Mali (Tensor G4) | 예외 | 예외 | 예외 |
@@ -38,6 +40,15 @@ import javax.inject.Singleton
  * **같은 Adreno 안에서도 세대마다 깨지는 모델이 다르다.** 740 은 검출이 되는데 750 은 죽고,
  * 둘 다 각인은 안 된다. 드라이버 빌드가 다르기 때문이다(`dc3d4da3a2` 대 `c81b28e1a5`).
  * 무엇이 깨질지 미리 알 수 없으니 **되는 것만 켜는** 쪽이 맞다 — 모르면 CPU 다.
+ *
+ * 2500·2600 줄은 2026-10-14 Samsung RTL 실측이다(NM-601). 2500 은 세 모델을 3회씩 돌려 값과 답이
+ * 모두 같았고, 2600 은 검출 6회·마크 39회가 무결했다.
+ *
+ * ⚠️ **2600 각인은 「안전」이 아니라 「확률을 낮춘」 상태로 켠다.** 배치 144 에서 225회 중 30회
+ *    예외 없이 빈 답(한 번은 `EE · 0.609` 처럼 계산이 망가진 값)이 나왔고, 배치를 72 로 내려
+ *    1,393회 무결이 됐다(NM-602). 원인을 막은 것은 아니다 — 망가진 값의 점수가 우연히 0.949 를
+ *    넘으면 틀린 각인을 채택한다. 운영에서 「각인 못 읽음」 비율이 2600 에서만 튀면 여기서
+ *    각인을 빼는 것이 첫 조치다.
  *
  * ## 왜 Adreno 의 마크·검출까지 끄나
  * Adreno 740 은 검출·마크가 통과했고 2배 가까이 빠르다. 그런데 **한 번 통과한 것으로는
@@ -166,15 +177,17 @@ class WebGpuPolicy @Inject constructor(@param:ApplicationContext private val con
          * ⚠️ **실기기에서 재서 통과한 것만 적는다.** 추측으로 줄을 늘리면 그 기기 사용자가
          * 앱째로 죽는다. 늘릴 때는 같은 기기를 **여러 번** 돌려 확률적으로도 안전한지 본다.
          *
-         * `s5e9945` = Exynos 2400 · Xclipse 940 (Galaxy S24/S24+ 국내·유럽판).
-         * 검출·각인·마크 셋 다 CPU 와 답이 같고(최대차 1e-7) 1.95~3.2배 빠르다.
+         * - `s5e9945` = Exynos 2400 · Xclipse 940 (Galaxy S24/S24+ 국내·유럽판).
+         *   검출·각인·마크 셋 다 CPU 와 답이 같고(최대차 1e-7) 1.95~3.2배 빠르다.
+         * - `s5e9955` = Exynos 2500 · Xclipse 950 (Galaxy Z Flip7). 셋 다 3회 재현, 1.9~2.7배.
+         * - `s5e9965` = Exynos 2600 · Xclipse 960 (Galaxy S26/S26+ 국내판). 각인은 위 KDoc 의 ⚠️ 를 볼 것.
          */
-        val ALLOWED: Map<String, Set<String>> = mapOf(
-            "s5e9945" to setOf(
+        val ALLOWED: Map<String, Set<String>> = listOf("s5e9945", "s5e9955", "s5e9965").associateWith {
+            setOf(
                 PillDetector.MODEL_FILE_NAME,
                 ImprintReader.MODEL_FILE_NAME,
                 MarkReader.MODEL_FILE_NAME
             )
-        )
+        }
     }
 }
