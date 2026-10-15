@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded · 굵기 600 · content_copy — DESIGN.pen「Icons · V2.1.0」(NM-608) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M379.78-233.78q-44.3 0-75.15-30.85-30.85-30.85-30.85-75.15v-466.44q0-44.3 30.85-75.15 30.85-30.85 75.15-30.85h346.44q44.3 0 75.15 30.85 30.85 30.85 30.85 75.15v466.44q0 44.3-30.85 75.15-30.85 30.85-75.15 30.85H379.78Zm0-106h346.44v-466.44H379.78v466.44Zm-186 292q-44.3 0-75.15-30.85-30.85-30.85-30.85-75.15v-519.44q0-22.08 15.46-37.54 15.45-15.46 37.54-15.46t37.55 15.46q15.45 15.46 15.45 37.54v519.44h399.44q22.08 0 37.54 15.45 15.46 15.46 15.46 37.55 0 22.09-15.46 37.54-15.46 15.46-37.54 15.46H193.78Zm186-292v-466.44 466.44Z" />
+    </group>
+</vector>

@@ -9,4 +9,10 @@ android {
 
 dependencies {
     implementation(libs.androidx.compose.material3)
+
+    // V2.1.0 컴포넌트 캡처(V2GalleryCaptureTest) — 정본과 나란히 보는 용도다.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.compose.ui.test.manifest)
 }
