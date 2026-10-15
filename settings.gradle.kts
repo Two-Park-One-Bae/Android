@@ -46,6 +46,7 @@ include(":wear")
 // 세대를 더할 때는 모듈 디렉터리 · app 의 dynamicFeatures · 기기그룹 셋을 같이 손본다.
 // 세대와 무관한 토대. 세대 모듈들이 이걸 문다.
 include(":qnn_core")
+include(":qnn_v69")
 include(":qnn_v73")
 include(":qnn_v75")
 include(":qnn_v79")

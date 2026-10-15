@@ -23,9 +23,23 @@
   ~ **V85(SM8950 · SM8975, 8 Elite Gen 6)는 일부러 뺐다** — `qnn-runtime` 2.51 에 그 세대
   ~ Skel 이 없다. 그룹에 넣으면 토대만 받고 Skel 이 없어 QNN 이 안 뜬다. SDK 를 올려 Skel 이
   ~ 생기면 그때 모듈과 그룹을 함께 더한다.
+  ~
+  ~ **V68(SM8350 · 888)과 그 아래도 뺐다** — V68 HTP 는 부동소수 연산을 받지 않아 세션 생성이
+  ~ 실패한다(2026-10-15 S21 실측). V66 이하는 HTP Skel 자체가 없다. 근거는 `scripts/qnn_chipsets.py`.
   -->
 <config:device-targeting-config
     xmlns:config="http://schemas.android.com/apk/config">
+
+    <!-- Hexagon V69 · Snapdragon 8 Gen 1 · 8+ Gen 1 — Galaxy S22 · Tab S8 · Z Flip4 · Z Fold4.
+         모델명은 Play 기기 카탈로그의 SoC 값 그대로다(2026-10-15, 우리 앱 설치 기기 기준). -->
+    <config:device-group name="qti_v69">
+        <config:device-selector>
+            <config:system-on-chip manufacturer="QTI" model="SM8450"/>
+        </config:device-selector>
+        <config:device-selector>
+            <config:system-on-chip manufacturer="QTI" model="SM8475"/>
+        </config:device-selector>
+    </config:device-group>
 
     <!-- Hexagon V73 · Snapdragon 8 Gen 2 — Galaxy S23 · Z Fold5.
          DeviceProbeTest 가 dm1q(SM-S911U)에서 QTI/SM8550 을 직접 찍었다. -->

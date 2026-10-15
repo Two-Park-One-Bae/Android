@@ -47,10 +47,11 @@ android {
      * 덜어내는 것:
      *  - `libQnnGpu.so`(11.8MB) — QNN 의 OpenCL 백엔드. 우리 GPU 길은 ORT WebGPU 다.
      *  - `libQnnDsp*.so`(4.3MB) — Hexagon **DSP(v66)**, 스냅드래곤 855 세대. 대상에 없다.
-     *  - `V68`·`V69` skel(25.9MB) — 865 · 888 세대. 대상에 없다.
+     *  - `V68` skel — 888 세대. HTP 가 부동소수 연산을 못 받아 우리 모델이 안 돈다(S21 실측).
      *
-     * 남기는 세대: **V73**(8 Gen 2 · S23) · **V75**(8 Gen 3 · S24) · **V79**(8 Elite · S25) ·
-     * **V81**(그다음). 기기의 `htp_arch` 와 안 맞으면 세션 생성부터 실패하므로 넉넉히 둔다.
+     * 남기는 세대: **V69**(8 Gen 1 · S22) · **V73**(8 Gen 2 · S23) · **V75**(8 Gen 3 · S24) ·
+     * **V79**(8 Elite · S25) · **V81**(8 Elite Gen 5 · S26). 기기의 `htp_arch` 와 안 맞으면 세션
+     * 생성부터 실패하므로 넉넉히 둔다.
      */
     /*
      * `.so` 를 APK **밖으로 풀어** 설치한다 — QNN 이 그걸 요구한다(NM-577).
@@ -73,9 +74,7 @@ android {
         "**/libQnnDspV66Skel.so",
         "**/libQnnDspV66Stub.so",
         "**/libQnnHtpV68Skel.so",
-        "**/libQnnHtpV68Stub.so",
-        "**/libQnnHtpV69Skel.so",
-        "**/libQnnHtpV69Stub.so"
+        "**/libQnnHtpV68Stub.so"
     )
 }
 

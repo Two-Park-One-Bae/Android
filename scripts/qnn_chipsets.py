@@ -42,11 +42,14 @@ GROUP_RE = re.compile(r"^qti_v(\d+)$")
 #    두 세대를 통째로 놓쳤다.
 SOC_RE = re.compile(r"^(sm|sdm|qcs|sa|sc)[\w-]+$")
 
-# **일부러 대상에서 뺀 세대.** Skel 은 AAR 에 있지만 우리가 안 싣는다 — 그 폰들은 알약 식별을
-# 돌리기엔 이미 낡았고, 세대 하나당 19MB 를 더 들고 다닐 이유가 없다.
+# **일부러 대상에서 뺀 세대.** Skel 은 AAR 에 있지만 우리 모델이 그 세대에서 안 돈다.
+#
+# V68 — 2026-10-15 Galaxy S21(SM8350) 실측. HTP V68 은 **부동소수 연산을 받지 않는다** —
+#   Conv·MatMul·Relu 까지 노드마다 `backendValidateOpConfig` 3110 으로 거절하고, 세션 생성이
+#   「NHWC 로 바꿔 둔 Conv 를 EP 가 안 가져갔다」로 실패한다. 각인(fp32)·마크(fp16) 둘 다.
+#   쓰려면 int8 양자화 모델을 따로 만들어야 한다. V69 부터는 fp16 이 된다(S22 실측).
 UNSUPPORTED = {
-    "68": "스냅드래곤 888 · 778G 세대",
-    "69": "스냅드래곤 8 Gen 1 세대",
+    "68": "스냅드래곤 888 · 778G 세대 — HTP 가 부동소수를 못 받는다",
 }
 # `sm8750-ac` 처럼 붙는 SKU 접미사. Build.SOC_MODEL 이 달고 올지 아닐지 몰라 양쪽을 같은 것으로 본다.
 SUFFIX_RE = re.compile(r"-[a-z]{2}$")
