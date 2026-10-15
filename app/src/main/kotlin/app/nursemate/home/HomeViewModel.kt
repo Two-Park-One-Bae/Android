@@ -16,6 +16,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,7 +44,8 @@ class HomeViewModel @Inject constructor(
 
     val usage = usageHolder.usage
 
-    private val _recent = MutableStateFlow<HomeRecent>(HomeRecent.None)
+    private val _recent = MutableStateFlow<HomeRecent>(HomeRecent.Loading)
+    private var recentJob: Job? = null
 
     /**
      * 최근 식별 카드 — 가장 최근 기록 한 건(spec home §최근 식별 카드).
@@ -58,7 +60,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refreshRecent() {
-        viewModelScope.launch {
+        // 앞 요청은 버린다 — 홈 복귀와 기록 변경이 겹치면 늦게 온 옛 응답이 새 값을 덮는다.
+        recentJob?.cancel()
+        recentJob = viewModelScope.launch {
             _recent.value = historyRepository.latest().fold(
                 onSuccess = { summary -> summary?.toHomeRecent() ?: HomeRecent.None },
                 onFailure = { HomeRecent.Failed }

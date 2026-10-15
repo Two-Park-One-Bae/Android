@@ -29,7 +29,17 @@ object NmRoute {
 
     /** 알약 탭 — 촬영 버튼 + 식별 기록 목록(NM-555). 알약 그래프의 시작점이다. */
     const val PILL_TAB = "pill/tab"
-    const val PILL_CAPTURE = "pill/capture"
+
+    /**
+     * 촬영. `from=home` 이면 홈 `사진 찍기` 로 들어온 것이다 — 닫으면 홈으로 돌아간다(spec §재촬영 · 뒤로).
+     * 알약 화면은 늘 **알약 탭 스택**에 쌓는다 — 홈 스택에 쌓으면 탭 바는 알약인데 화면은 홈 탭에 저장된다.
+     */
+    const val PILL_CAPTURE = "pill/capture?from={from}"
+
+    fun pillCapture(fromHome: Boolean): String = "pill/capture?from=${if (fromHome) FROM_HOME else FROM_PILL_TAB}"
+
+    const val FROM_HOME = "home"
+    const val FROM_PILL_TAB = "pill"
     const val PILL_PREVIEW = "pill/preview"
     const val PILL_LOADING = "pill/loading"
     const val PILL_RESULT = "pill/result"
@@ -58,10 +68,11 @@ object NmRoute {
      * 식별 기록 상세(NM-555). 요약의 식별 시각과 알약 수를 같이 실어 — 조회 전에도 시각을 바로 보이고
      * 알약 수만큼 자리 표시 행을 둔다(spec §기록 상세 — 조회 중).
      *
-     * 알약 그래프 밖에 둔다 — 홈 최근 식별 카드에서도 열고, 거기서 뒤로는 홈이어야 한다.
+     * 홈 최근 식별 카드에서 열면 알약 탭으로 옮겨 열고 `from=home` 을 싣는다 — 뒤로는 홈이다.
      */
-    const val PILL_HISTORY = "history/{historyId}?at={at}&count={count}"
+    const val PILL_HISTORY = "history/{historyId}?at={at}&count={count}&from={from}"
 
-    fun pillHistory(historyId: String, identifiedAt: String, pillCount: Int): String =
-        "history/$historyId?at=${android.net.Uri.encode(identifiedAt)}&count=$pillCount"
+    fun pillHistory(historyId: String, identifiedAt: String, pillCount: Int, fromHome: Boolean): String =
+        "history/$historyId?at=${android.net.Uri.encode(identifiedAt)}&count=$pillCount" +
+            "&from=${if (fromHome) FROM_HOME else FROM_PILL_TAB}"
 }

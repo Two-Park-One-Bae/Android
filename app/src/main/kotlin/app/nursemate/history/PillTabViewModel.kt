@@ -51,7 +51,9 @@ class PillTabViewModel @Inject constructor(
     private val _state = MutableStateFlow<HistoryListState>(HistoryListState.Loading)
     val state: StateFlow<HistoryListState> = _state.asStateFlow()
 
-    private var loading: Job? = null
+    /** 처음부터 받기 · 이어서 받기를 따로 쥔다 — 하나로 쥐면 서로를 덮어써 취소가 엇나간다. */
+    private var reloadJob: Job? = null
+    private var moreJob: Job? = null
 
     init {
         reload()
@@ -65,9 +67,11 @@ class PillTabViewModel @Inject constructor(
 
     /** 처음부터 다시. 실패 화면의 `다시 시도` 도 이것이다. */
     fun reload() {
-        loading?.cancel()
-        if (_state.value !is HistoryListState.Loaded) _state.value = HistoryListState.Loading
-        loading = viewModelScope.launch {
+        reloadJob?.cancel()
+        // 이어서 받던 것은 버린다 — 처음부터 다시 받으니 경계가 바뀐다. 「받는 중」 표시도 같이 내린다.
+        moreJob?.cancel()
+        _state.update { if (it is HistoryListState.Loaded) it.copy(loadingMore = false) else HistoryListState.Loading }
+        reloadJob = viewModelScope.launch {
             repository.page().fold(
                 onSuccess = { _state.value = HistoryListState.Loaded(it.items, it.nextCursor) },
                 // 이미 보이던 목록이 있으면 지우지 않는다 — 다시 불러오다 실패해도 보던 것은 남긴다.
@@ -82,7 +86,7 @@ class PillTabViewModel @Inject constructor(
         val cursor = current?.nextCursor
         if (current == null || cursor == null || current.loadingMore) return
         _state.value = current.copy(loadingMore = true, moreFailed = false)
-        loading = viewModelScope.launch {
+        moreJob = viewModelScope.launch {
             repository.page(cursor).fold(
                 onSuccess = { page ->
                     _state.update {

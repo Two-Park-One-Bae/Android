@@ -71,8 +71,19 @@ fun NavGraphBuilder.pillNavGraph(navController: NavController, pillTab: @Composa
     }
 }
 
-private fun NavGraphBuilder.capture(navController: NavController) = composable(NmRoute.PILL_CAPTURE) { entry ->
+private fun NavGraphBuilder.capture(navController: NavController) = composable(
+    route = NmRoute.PILL_CAPTURE,
+    arguments = listOf(
+        navArgument("from") {
+            type = NavType.StringType
+            defaultValue = NmRoute.FROM_PILL_TAB
+        }
+    )
+) { entry ->
     val viewModel = entry.pillViewModel(navController)
+    val fromHome = entry.cameFromHome()
+    // 시스템 뒤로도 닫기와 같다 — 홈에서 왔으면 홈으로(spec §재촬영 · 뒤로).
+    BackHandler(enabled = fromHome) { navController.leavePillScreen(fromHome = true) }
     PillCaptureRoute(
         session = viewModel.analyticsSession,
         onPhotoSelected = { uri ->
@@ -80,7 +91,7 @@ private fun NavGraphBuilder.capture(navController: NavController) = composable(N
             navController.navigate(NmRoute.PILL_PREVIEW)
         },
         // 들어온 화면(알약 탭 목록 또는 홈)으로 돌아간다 — spec §재촬영 · 뒤로.
-        onClose = { navController.popBackStack() }
+        onClose = { navController.leavePillScreen(fromHome) }
     )
 }
 

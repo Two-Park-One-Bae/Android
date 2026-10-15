@@ -278,7 +278,7 @@ private fun NmNavHost(
                     // 0회면 버튼이 비활성이라 여기 오지 않는다(spec home — 팝업 없음).
                     onTakePhoto = {
                         navController.switchTab(NmTab.Pill)
-                        navController.navigate(NmRoute.PILL_CAPTURE)
+                        navController.navigate(NmRoute.pillCapture(fromHome = true))
                     },
                     // 카드의 나머지는 알약 탭(기록 목록) — 한도와 상관없이 간다(spec home §누르는 곳).
                     onPillCard = { navController.switchTab(NmTab.Pill) },
@@ -292,7 +292,10 @@ private fun NmNavHost(
                     onTimerCard = { navController.switchTab(NmTab.Timer) },
                     // 그 기록의 상세로 — 상세에서 뒤로는 홈이다(spec §홈 최근 식별 카드).
                     onRecent = {
-                        navController.navigate(NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount))
+                        navController.switchTab(NmTab.Pill)
+                        navController.navigate(
+                            NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount, fromHome = true)
+                        )
                     }
                 )
             }
@@ -324,12 +327,14 @@ private fun NmNavHost(
                             pillTabLimitReached = true
                         } else {
                             navController.navigate(
-                                NmRoute.PILL_CAPTURE
+                                NmRoute.pillCapture(fromHome = false)
                             )
                         }
                     },
                     onOpen = {
-                        navController.navigate(NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount))
+                        navController.navigate(
+                            NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount, fromHome = false)
+                        )
                     },
                     onRetry = pillTab::reload,
                     onLoadMore = pillTab::loadMore
@@ -348,6 +353,10 @@ private fun NmNavHost(
                 navArgument("count") {
                     type = NavType.IntType
                     defaultValue = 1
+                },
+                navArgument("from") {
+                    type = NavType.StringType
+                    defaultValue = NmRoute.FROM_PILL_TAB
                 }
             )
         ) { entry ->
@@ -355,6 +364,7 @@ private fun NmNavHost(
                 navController = navController,
                 identifiedAt = entry.arguments?.getString("at").orEmpty(),
                 pillCount = entry.arguments?.getInt("count") ?: 1,
+                fromHome = entry.cameFromHome(),
                 tabbed = { content: @Composable () -> Unit ->
                     TabRoot(
                         navController = navController,

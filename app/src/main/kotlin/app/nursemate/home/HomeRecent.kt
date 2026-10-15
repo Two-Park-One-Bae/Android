@@ -27,6 +27,9 @@ import app.nursemate.core.designsystem.v2.NmV2Type
 
 /** 홈 최근 식별 카드에 보일 것(spec home §최근 식별 카드). */
 sealed interface HomeRecent {
+    /** 아직 받지 않았다 — 기록이 있는데 「없어요」로 깜빡이지 않게 글자를 비워 둔다. */
+    data object Loading : HomeRecent
+
     /** 기록이 없다 — `아직 식별 기록이 없어요`. */
     data object None : HomeRecent
 
@@ -71,6 +74,7 @@ internal fun RecentCard(recent: HomeRecent, onRecent: (HomeRecent.Item) -> Unit)
                 )
                 when (recent) {
                     is HomeRecent.Item -> RecentTitle(recent.title)
+                    HomeRecent.Loading -> Text("", style = NmV2Type.field)
                     HomeRecent.None -> Text("아직 식별 기록이 없어요", style = NmV2Type.field, color = colors.textTertiary)
                     HomeRecent.Failed -> Text("기록을 불러오지 못했어요", style = NmV2Type.field, color = colors.textTertiary)
                 }

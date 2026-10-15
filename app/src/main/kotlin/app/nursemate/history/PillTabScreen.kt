@@ -125,11 +125,14 @@ private fun HistoryList(
     onRetryMore: () -> Unit
 ) {
     val groups = remember(state.items, today) {
-        state.items
-            .map { it to parseIdentifiedAt(it.identifiedAt) }
-            // 시각을 읽지 못한 기록은 마지막 묶음에 붙인다 — 버리면 기록이 사라진 것처럼 보인다.
-            .groupBy { (_, at) -> at?.toLocalDate() }
-            .map { (date, items) -> DateGroup(date?.let { dateGroupLabel(it, today) } ?: "", items) }
+        val parsed = state.items.map { it to parseIdentifiedAt(it.identifiedAt) }
+        val dated = parsed.filter { (_, at) -> at != null }
+            .groupBy { (_, at) -> at!!.toLocalDate() }
+            .map { (date, items) -> DateGroup(dateGroupLabel(date, today), items) }
+        // 시각을 읽지 못한 기록은 **맨 끝** 묶음에 모은다 — 버리면 기록이 사라진 것처럼 보이고, 중간에 끼면
+        // 앞 날짜의 기록처럼 읽힌다.
+        val undated = parsed.filter { (_, at) -> at == null }
+        if (undated.isEmpty()) dated else dated + DateGroup("", undated)
     }
     val listState = rememberLazyListState()
     LoadMoreWhenNearEnd(
@@ -162,7 +165,7 @@ private fun HistoryList(
                 }
             }
         }
-        item(key = "end") { ListEnd(state, onRetryMore) }
+        item(key = END_KEY) { ListEnd(state, onRetryMore) }
     }
 }
 
@@ -235,18 +238,20 @@ private fun ListEnd(state: HistoryListState.Loaded, onRetryMore: () -> Unit) {
     }
 }
 
-/** 끝에서 세 칸 안쪽까지 오면 다음 묶음을 부른다. */
+/**
+ * 목록 끝 칸이 화면에 들어오면 다음 묶음을 부른다.
+ *
+ * ⚠️ 칸 **개수**로 재지 않는다 — 한 칸이 날짜 묶음 하나라 날짜가 적으면(100건이 이틀) 늘 「끝에서 세 칸 안」이 되어
+ *    모든 묶음을 연달아 받는다. 끝 칸이 실제로 보일 때만 부른다.
+ */
 @Composable
 private fun LoadMoreWhenNearEnd(listState: LazyListState, enabled: Boolean, onLoadMore: () -> Unit) {
-    val nearEnd by remember {
-        derivedStateOf {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= listState.layoutInfo.totalItemsCount - LOAD_AHEAD
-        }
+    val atEnd by remember {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.key == END_KEY } }
     }
-    LaunchedEffect(nearEnd, enabled) { if (nearEnd && enabled) onLoadMore() }
+    LaunchedEffect(atEnd, enabled) { if (atEnd && enabled) onLoadMore() }
 }
 
 /** 촬영 버튼(56) + 아래 여백(16) + 틈 — 마지막 항목이 버튼에 가리지 않게. */
 private val FabRoom = 88.dp
-private const val LOAD_AHEAD = 3
+private const val END_KEY = "end"

@@ -1,6 +1,7 @@
 package app.nursemate.history
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +12,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import app.nursemate.core.model.LicenseStatus
 import app.nursemate.navigation.NmRoute
+import app.nursemate.navigation.leavePillScreen
 import app.nursemate.pill.SharedPill
 import app.nursemate.pill.copyPillShare
 import app.nursemate.pill.sharePillPdf
@@ -30,10 +32,14 @@ fun PillHistoryDetailRoute(
     navController: NavController,
     identifiedAt: String,
     pillCount: Int,
+    fromHome: Boolean,
     tabbed: @Composable (@Composable () -> Unit) -> Unit,
     viewModel: PillHistoryDetailViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    // 들어온 화면으로 — 홈 최근 식별 카드에서 왔으면 홈이다(spec §홈 최근 식별 카드).
+    val leave = { navController.leavePillScreen(fromHome) }
+    BackHandler(enabled = fromHome, onBack = leave)
     val state by viewModel.state.collectAsStateWithLifecycle()
     val deleting by viewModel.deleting.collectAsStateWithLifecycle()
     val at = remember(identifiedAt) { parseIdentifiedAt(identifiedAt) }
@@ -43,11 +49,11 @@ fun PillHistoryDetailRoute(
         viewModel.events.collect { event ->
             when (event) {
                 HistoryDetailEvent.NotFound -> {
-                    navController.popBackStack()
+                    leave()
                     Toast.makeText(context, "기록을 찾을 수 없어요", Toast.LENGTH_SHORT).show()
                 }
 
-                HistoryDetailEvent.Deleted -> navController.popBackStack()
+                HistoryDetailEvent.Deleted -> leave()
 
                 HistoryDetailEvent.DeleteFailed ->
                     Toast.makeText(context, "기록을 삭제하지 못했어요", Toast.LENGTH_SHORT).show()
@@ -67,7 +73,7 @@ fun PillHistoryDetailRoute(
             pillCount = pillCount,
             state = state,
             deleting = deleting,
-            onBack = { navController.popBackStack() },
+            onBack = leave,
             onRetry = viewModel::load,
             onPillDetail = { pill ->
                 navController.navigate(NmRoute.pillDetail(pill.pillCode, pill.licenseStatus == LicenseStatus.REVOKED))
