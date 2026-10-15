@@ -99,7 +99,7 @@ class NurseMateApplication :
         webGpuPolicy.install()
 
         // 퀄컴 기기가 QNN 모듈을 받았는지 버전마다 한 번 보고한다 (NM-603). 디스크를 보므로 뒤로 미룬다.
-        applicationScope.launch { qnnDeliveryReporter.reportOnce() }
+        applicationScope.launch(Dispatchers.IO) { qnnDeliveryReporter.reportOnce() }
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.

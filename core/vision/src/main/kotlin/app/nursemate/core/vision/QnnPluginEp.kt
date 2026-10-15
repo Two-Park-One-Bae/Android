@@ -46,10 +46,13 @@ private const val QNN_PLUGIN_MARKER_CLASS = "ai.onnxruntime.qnnpluginep.QnnPlugi
  * | `skel_only` | 세대만 왔다 — 같은 어긋남의 반대쪽 |
  * | `none` | 아무 그룹에도 안 맞았다 — **이 칩을 목록에 안 적었다** |
  *
+ * 「토대가 있다」는 **플러그인 클래스가 로드되고 `libQnnHtp.so` 가 실파일로 있다**는 뜻이다. 둘 중
+ * 하나만 보면 패키징이 `.so` 를 떨궜을 때 QNN 이 못 뜨는데도 정상으로 센다.
+ *
  * 퀄컴 기기에서 `none` 이 나오면 그 `SOC_MODEL` 을 `device_targeting_configuration.xml` 에
  * 더할 후보다.
  */
-enum class QnnDelivery(val label: String) {
+enum class QnnDeliveryState(val label: String) {
     CORE_AND_SKEL("core+skel"),
     CORE_ONLY("core_only"),
     SKEL_ONLY("skel_only"),
@@ -60,15 +63,24 @@ enum class QnnDelivery(val label: String) {
          * @param nativeLibDir `applicationInfo.nativeLibraryDir`. `useLegacyPackaging` 이라 split 의
          *                     `.so` 도 여기에 실파일로 풀린다(NM-598).
          */
-        fun of(nativeLibDir: File): QnnDelivery {
-            val skel = nativeLibDir.listFiles()
-                ?.any { it.name.startsWith("libQnnHtpV") && it.name.endsWith("Skel.so") } == true
+        fun of(nativeLibDir: File): QnnDeliveryState = of(nativeLibDir, QNN_BUNDLED)
+
+        /** [QNN_BUNDLED] 를 받는 판정 본체 — JVM 테스트가 클래스 로드 없이 두 경우를 다 본다. */
+        internal fun of(nativeLibDir: File, pluginLoaded: Boolean): QnnDeliveryState {
+            val names = nativeLibDir.list()?.toSet().orEmpty()
+            val core = pluginLoaded && CORE_LIB in names
+            val skel = names.any { SKEL_NAME.matches(it) }
             return when {
-                QNN_BUNDLED && skel -> CORE_AND_SKEL
-                QNN_BUNDLED -> CORE_ONLY
+                core && skel -> CORE_AND_SKEL
+                core -> CORE_ONLY
                 skel -> SKEL_ONLY
                 else -> NONE
             }
         }
+
+        private const val CORE_LIB = "libQnnHtp.so"
+
+        /** 세대 Skel — `libQnnHtpV73Skel.so` 꼴. `QnnFeatureConventionPlugin.wantedLibs` 와 같은 이름이다. */
+        private val SKEL_NAME = Regex("libQnnHtpV\\d+Skel\\.so")
     }
 }

@@ -15,4 +15,13 @@ class QnnDeliveryReporterTest {
         assertFalse(QnnDeliveryReporter.isQualcomm("Mediatek"))
         assertFalse(QnnDeliveryReporter.isQualcomm(""))
     }
+
+    @Test
+    fun `Play 설치만 센다`() {
+        assertTrue(QnnDeliveryReporter.isFromPlay("com.android.vending"))
+        // adb·Android Studio 설치는 feature module 을 전부 깔아 기기그룹을 안 탔다.
+        assertFalse(QnnDeliveryReporter.isFromPlay(null))
+        assertFalse(QnnDeliveryReporter.isFromPlay("com.android.shell"))
+        assertFalse(QnnDeliveryReporter.isFromPlay("com.sec.android.app.samsungapps"))
+    }
 }

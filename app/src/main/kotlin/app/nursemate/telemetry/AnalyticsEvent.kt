@@ -260,7 +260,7 @@ sealed interface AnalyticsEvent {
      * 기기 식별자·사용자 정보는 넣지 않는다 — 칩 이름과 전달 상태뿐이다.
      *
      * @param socModel `Build.SOC_MODEL` (예: `SM8650`)
-     * @param delivered `core+skel` · `core_only` · `skel_only` · `none` — `QnnDelivery` 참조
+     * @param delivered `core+skel` · `core_only` · `skel_only` · `none` — `QnnDeliveryState` 참조
      */
     data class QnnDelivery(val socModel: String, val delivered: String) : AnalyticsEvent {
         override val name = "qnn_delivery"
