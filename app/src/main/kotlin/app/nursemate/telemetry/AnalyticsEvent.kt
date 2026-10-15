@@ -245,7 +245,32 @@ sealed interface AnalyticsEvent {
         override val params get() = presetParams(label, category, durationSec)
     }
 
+    // ────────────────────── Android 전용 — iOS 짝 없음 ──────────────────────
+    //
+    // 위의 「iOS 와 문자 단위로 같아야 한다」의 **예외**다. iOS 에는 같은 개념이 없어 이름이 갈릴
+    // 일도 없다. 새로 넣을 때는 [ANDROID_ONLY] 에도 적는다 — 대조 테스트가 이것만 빼고 비교한다.
+
+    /**
+     * QNN 조건부 전달 결과 — **퀄컴 기기에서만, 앱 버전마다 한 번** 보낸다 (NM-603).
+     *
+     * 기기그룹은 우리가 적어 둔 `SOC_MODEL` 만 맞춘다. 목록에 없는 칩은 조용히 base 만 받고
+     * WebGPU/CPU 로 정상 동작해서 **느린 것 말고는 증상이 없다.** 그 비율과 칩 이름을 본다.
+     * 받은 기기도 보내야 비율의 분모가 생긴다.
+     *
+     * 기기 식별자·사용자 정보는 넣지 않는다 — 칩 이름과 전달 상태뿐이다.
+     *
+     * @param socModel `Build.SOC_MODEL` (예: `SM8650`)
+     * @param delivered `core+skel` · `core_only` · `skel_only` · `none` — `QnnDelivery` 참조
+     */
+    data class QnnDelivery(val socModel: String, val delivered: String) : AnalyticsEvent {
+        override val name = "qnn_delivery"
+        override val params get() = mapOf("soc_model" to socModel, "delivered" to delivered)
+    }
+
     companion object {
+
+        /** iOS 카탈로그에 없는 이벤트 이름. 대조 테스트가 이 집합을 빼고 비교한다. */
+        val ANDROID_ONLY: Set<String> = setOf("qnn_delivery")
 
         private fun presetParams(label: String, category: String, durationSec: Int) = mapOf(
             "preset_label" to label,

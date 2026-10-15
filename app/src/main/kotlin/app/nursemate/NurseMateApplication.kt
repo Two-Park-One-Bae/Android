@@ -8,6 +8,7 @@ import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.pill.QnnDeliveryReporter
 import app.nursemate.pill.WebGpuPolicy
 import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
@@ -67,6 +68,9 @@ class NurseMateApplication :
     @Inject
     lateinit var webGpuPolicy: WebGpuPolicy
 
+    @Inject
+    lateinit var qnnDeliveryReporter: QnnDeliveryReporter
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -93,6 +97,9 @@ class NurseMateApplication :
         // Adreno 드라이버가 각인 모델을 받다 죽는데, 그 죽음이 예외가 아니라 SIGSEGV 라
         // 어떤 catch 로도 못 막는다. 들어가기 전에 거르는 유일한 자리다.
         webGpuPolicy.install()
+
+        // 퀄컴 기기가 QNN 모듈을 받았는지 버전마다 한 번 보고한다 (NM-603). 디스크를 보므로 뒤로 미룬다.
+        applicationScope.launch { qnnDeliveryReporter.reportOnce() }
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.

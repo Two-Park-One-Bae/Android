@@ -1,5 +1,7 @@
 package app.nursemate.core.vision
 
+import java.io.File
+
 /**
  * QNN 플러그인 EP 가 **지금 이 설치본에 들어 있는지.**
  *
@@ -30,3 +32,43 @@ internal val QNN_BUNDLED: Boolean by lazy {
  * `DeviceProbeTest` 의 QNN 줄이 「등록 실패」로 바뀌는지 본다.
  */
 private const val QNN_PLUGIN_MARKER_CLASS = "ai.onnxruntime.qnnpluginep.QnnPluginEpLibraryKt"
+
+/**
+ * 이 설치본에 QNN 이 **어디까지** 내려왔는가 — NM-603 관측용.
+ *
+ * QNN 은 모듈 둘이 짝이다. `qnn_core`(플러그인 클래스 + 토대 `.so`)는 퀄컴 그룹 전부에, 세대
+ * 모듈(`qnn_v##`, 그 세대 Skel)은 자기 그룹에만 간다. 둘 중 하나만 있으면 QNN 은 못 뜬다.
+ *
+ * | 값 | 뜻 |
+ * |---|---|
+ * | `core+skel` | 정상 — 기기그룹에 맞았다 |
+ * | `core_only` | 토대만 왔다 — 세대 모듈 그룹 목록이 `qnn_core` 와 어긋났다 |
+ * | `skel_only` | 세대만 왔다 — 같은 어긋남의 반대쪽 |
+ * | `none` | 아무 그룹에도 안 맞았다 — **이 칩을 목록에 안 적었다** |
+ *
+ * 퀄컴 기기에서 `none` 이 나오면 그 `SOC_MODEL` 을 `device_targeting_configuration.xml` 에
+ * 더할 후보다.
+ */
+enum class QnnDelivery(val label: String) {
+    CORE_AND_SKEL("core+skel"),
+    CORE_ONLY("core_only"),
+    SKEL_ONLY("skel_only"),
+    NONE("none");
+
+    companion object {
+        /**
+         * @param nativeLibDir `applicationInfo.nativeLibraryDir`. `useLegacyPackaging` 이라 split 의
+         *                     `.so` 도 여기에 실파일로 풀린다(NM-598).
+         */
+        fun of(nativeLibDir: File): QnnDelivery {
+            val skel = nativeLibDir.listFiles()
+                ?.any { it.name.startsWith("libQnnHtpV") && it.name.endsWith("Skel.so") } == true
+            return when {
+                QNN_BUNDLED && skel -> CORE_AND_SKEL
+                QNN_BUNDLED -> CORE_ONLY
+                skel -> SKEL_ONLY
+                else -> NONE
+            }
+        }
+    }
+}
