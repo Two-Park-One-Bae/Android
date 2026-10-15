@@ -51,6 +51,14 @@ SOC_RE = re.compile(r"^(sm|sdm|qcs|sa|sc)[\w-]+$")
 UNSUPPORTED = {
     "68": "스냅드래곤 888 · 778G 세대 — HTP 가 부동소수를 못 받는다",
 }
+# **일부러 그룹에 안 넣은 SoC.** 세대는 지원하지만 이 칩만 뺀다. 빠졌다고 보고하지 않는다.
+#
+# SM7750(7 Gen 4) — AI Hub 는 V73 이라 하지만 실기기 근거가 없다(7 Gen 3 = SM7550 과 헷갈리기 쉽다).
+#   Play 기기 카탈로그(2026-10-15)에서 이 칩을 쓰는 16종(모토로라 · 오포 · 비보 · 리얼미 · 아너 등)은
+#   우리 앱 설치가 **0대**이고 삼성 기기는 없다. `qnn_delivery` 이벤트에 잡히면 그때 실측하고 넣는다.
+SKIPPED_SOCS = {
+    "sm7750": "7 Gen 4 — 세대 미확인 · 우리 설치 0대",
+}
 # `sm8750-ac` 처럼 붙는 SKU 접미사. Build.SOC_MODEL 이 달고 올지 아닐지 몰라 양쪽을 같은 것으로 본다.
 SUFFIX_RE = re.compile(r"-[a-z]{2}$")
 
@@ -141,7 +149,8 @@ def main() -> int:
             continue
 
         our_socs = {base_model(s) for s in ours.get(generation, set())}
-        missing = {s for s in hub_socs if base_model(s) not in our_socs}
+        missing = {s for s in hub_socs if base_model(s) not in our_socs and base_model(s) not in SKIPPED_SOCS}
+        skipped = {s for s in hub_socs if base_model(s) in SKIPPED_SOCS}
         if generation not in ours:
             problems += 1
             print(f"V{generation}: ❌ 그룹이 없다 — 모듈 `qnn_v{generation}` 과 그룹 `qti_v{generation}` 을 만들어야 한다")
@@ -150,7 +159,13 @@ def main() -> int:
             problems += 1
             print(f"V{generation}: ❌ 그룹에 빠진 SoC — {', '.join(sorted(missing))}")
         else:
-            print(f"V{generation}: ✅ {', '.join(sorted(hub_socs))}")
+            print(f"V{generation}: ✅ {', '.join(sorted(hub_socs - skipped))}")
+        for soc in sorted(skipped):
+            flag = ""
+            if base_model(soc) in our_socs:
+                problems += 1
+                flag = " ⚠️ 그룹에 들어가 있다 — 일부러 뺀 SoC 다"
+            print(f"V{generation}: ↷ 일부러 뺌 — {soc} ({SKIPPED_SOCS[base_model(soc)]}){flag}")
 
     # 우리가 적었는데 AI Hub 가 모르는 것 — 오타이거나, AI Hub 에 기기가 없을 뿐이거나.
     hub_bases = {base_model(s) for socs in hub_map.values() for s in socs}
