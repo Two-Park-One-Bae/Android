@@ -4,10 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,8 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,9 +26,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.model.Block
 import app.nursemate.core.model.plainText
 
@@ -45,7 +45,7 @@ import app.nursemate.core.model.plainText
 private data class CautionSection(val title: String, val body: List<Block>)
 
 @Composable
-internal fun ColumnScope.CautionSections(blocks: List<Block>) {
+internal fun ColumnScope.CautionSections(blocks: List<Block>, openIndex: Int, onOpenChange: (Int) -> Unit) {
     val sections = blocks.toSections()
 
     // 제목 없이 본문만 오는 문서도 있다(폴백 문단 하나). 그때는 접지 않고 그대로 그린다.
@@ -54,14 +54,11 @@ internal fun ColumnScope.CautionSections(blocks: List<Block>) {
         return
     }
 
-    // 한 번에 하나만 펼친다. 여럿을 열어 두면 접어 놓은 뜻이 없어진다.
-    var openIndex by rememberSaveable { mutableIntStateOf(0) }
-
     sections.forEachIndexed { index, section ->
         CautionCard(
             title = section.title,
             open = index == openIndex,
-            onToggle = { openIndex = if (openIndex == index) NONE_OPEN else index },
+            onToggle = { onOpenChange(if (openIndex == index) NONE_OPEN else index) },
             body = section.body
         )
     }
@@ -92,7 +89,7 @@ private fun CautionCard(title: String, open: Boolean, onToggle: () -> Unit, body
                 modifier = Modifier.weight(1f)
             )
             Icon(
-                painter = painterResource(R.drawable.nm_ic_chevron_down),
+                painter = painterResource(NmSymbols.KeyboardArrowDown),
                 contentDescription = null,
                 tint = colors.textTertiary,
                 modifier = Modifier.size(18.dp).rotate(if (open) 180f else 0f)
@@ -104,6 +101,8 @@ private fun CautionCard(title: String, open: Boolean, onToggle: () -> Unit, body
                 modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 제목과 본문 사이 구분선 — 정본 ⑩-d.
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
                 body.forEach { block ->
                     if (block is Block.Paragraph) {
                         Text(
@@ -155,8 +154,8 @@ private fun List<Block>.toSections(): List<CautionSection> {
     }
 }
 
-/** 아무 칸도 펼치지 않은 상태. */
-private const val NONE_OPEN = -1
+/** 아무 항목도 펼치지 않았다. */
+internal const val NONE_OPEN = -1
 
 private val CardTitle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 private val CardTitleOpen = CardTitle.copy(fontWeight = FontWeight.Bold)

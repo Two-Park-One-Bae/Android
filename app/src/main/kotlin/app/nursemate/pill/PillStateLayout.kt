@@ -36,13 +36,15 @@ import app.nursemate.ui.SystemBarIcons
 internal class PillStateAction(val label: String, val onClick: () -> Unit)
 
 /**
- * 알약 식별 상태 화면의 틀 — 정본 「알약 식별 · 촬영 ~ 로딩 · V2.1.0 (NM-586)」 ③ 권한 거부 · ⑥ 결과 없음 · ⑦ 분석 실패.
+ * 알약 식별 상태 화면의 틀 — 정본 「알약 식별 · 촬영 ~ 로딩 · V2.1.0 (NM-586)」 ③ 권한 거부 · ⑥ 결과 없음 · ⑦ 분석 실패,
+ * 「세부정보 · 이미지 비교 (NM-589)」 ⑩-e 데이터 없음 · ⑩-f 오류 · ⑩-g 허가 종료.
  *
- * 세 화면이 같은 뼈대다 — 내비 바 / 가운데 그림 + 제목 · 설명 / 아래 주 버튼 · 보조 버튼(모서리 12, 세로로 쌓음).
- * 하나로 두어야 셋의 여백 · 글자가 갈리지 않는다.
+ * 여섯 화면이 같은 뼈대다 — 내비 바 / 가운데 그림 + 제목 · 설명 / 아래 주 버튼 · 보조 버튼(모서리 12, 세로로 쌓음).
+ * 하나로 두어야 여섯의 여백 · 글자가 갈리지 않는다. 여기를 고치면 촬영 쪽과 세부정보 쪽이 함께 바뀐다.
  *
- * @param navTitle 내비 바 제목. 정본은 ⑥ 만 `인식 결과` 이고 ③ · ⑦ 은 비어 있다
- * @param gap 그림과 글자 사이 — 정본 ③ 20 · ⑥ ⑦ 24
+ * @param navTitle 내비 바 제목. 정본은 ⑥ `인식 결과` · ⑩-e ~ g `세부정보` 이고 ③ · ⑦ 은 비어 있다
+ * @param gap 그림과 글자 사이 — 정본 ③ 20 · 나머지 24
+ * @param primary 주 버튼. 없으면 보조 버튼 하나만 둔다(세부정보 없음 · 허가 종료 — 다시 눌러도 같다)
  * @param visual 가운데 그림(아이콘 원 또는 사진 카드)
  * @param extra 설명 아래에 붙일 것 — 디버그 사유 등
  */
@@ -52,7 +54,7 @@ internal fun PillStateLayout(
     onBack: () -> Unit,
     title: String,
     description: String,
-    primary: PillStateAction,
+    primary: PillStateAction?,
     secondary: PillStateAction,
     modifier: Modifier = Modifier,
     gap: Dp = 24.dp,
@@ -98,7 +100,7 @@ internal fun PillStateLayout(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            NmV2Button(primary.label, primary.onClick, Modifier.fillMaxWidth())
+            primary?.let { NmV2Button(it.label, it.onClick, Modifier.fillMaxWidth()) }
             NmV2Button(secondary.label, secondary.onClick, Modifier.fillMaxWidth(), NmV2ButtonKind.Secondary)
         }
     }
