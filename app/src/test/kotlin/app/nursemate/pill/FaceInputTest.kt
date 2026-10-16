@@ -118,4 +118,29 @@ class FaceInputTest {
         assertEquals(false, faces.front.hasCondition)
         assertTrue("임베딩만 실려 나간다", faces.front.toRequest()?.markEmbedding != null)
     }
+
+    /** `모름` 은 손대지 않음과 검색에서 같다 — 조건이 없다(spec §각인 · 구분선 · 마크 — 네 상태). */
+    @Test
+    fun `모름은 조건을 걸지 않고 화면에만 남는다`() {
+        val input = FaceInput(imprint = "AX", imprintSource = ImprintSource.MODEL, hasMark = true)
+            .imprintUnknown()
+            .line(null)
+            .mark(null)
+
+        assertTrue(input.imprintUnknown && input.lineUnknown && input.markUnknown)
+        assertEquals(false, input.hasCondition)
+        assertNull(input.toRequest())
+    }
+
+    @Test
+    fun `값을 고르면 모름이 풀린다`() {
+        val input = FaceInput().imprintUnknown().line(null).mark(null)
+            .typed("MK")
+            .line(DividingLine.PLUS)
+            .mark(false)
+
+        assertEquals(false, input.imprintUnknown || input.lineUnknown || input.markUnknown)
+        assertEquals(ImprintSource.USER, input.imprintSource)
+        assertEquals(false, input.toRequest()?.hasMark)
+    }
 }

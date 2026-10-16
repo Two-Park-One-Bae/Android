@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -34,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.model.DividingLine
@@ -44,16 +44,16 @@ import app.nursemate.core.model.PillShape
 /*
  * 외형 칩을 누르면 **칩 아래로 뜨는 메뉴** — 정본 ③ 색상 · ④ 모양 · ⑤ 제형.
  *
- * ## 맨 위가 늘 「전체」다
- * 조건을 푸는 길이 메뉴 안에 있어야 사용자가 「잘못 골랐다」를 같은 자리에서 되돌린다 —
- * 정본이 「되돌리기: 각인 칸 안 · 외형은 메뉴의 전체」로 적는다.
+ * ## 맨 위가 `자동` 이다 (V2.1.0)
+ * 조건을 푸는 길이 메뉴 안에 있어야 사용자가 「잘못 골랐다」를 같은 자리에서 되돌린다. `자동` 은 조건 없이
+ * 모델 출력으로 정렬만 하는 상태다. **수동 추가 · 추출 실패에는 두지 않는다** — 보여 줄 모델 출력이 없다.
+ * 그때는 고른 값을 같은 값을 다시 눌러 푼다(spec §수정 · 후보 선택).
  *
  * 그 줄 오른쪽에 **사진 기준** 미리보기를 둔다. 조건을 풀면 무엇으로 돌아가는지, 즉 모델이
  * 무엇을 읽었는지를 그 자리에서 보여 주는 것이다.
  *
- * ## 고른 칸은 호박색이다
- * 칩·드롭다운과 같은 규칙이다([conditionTone]) — 화면 어디서든 「내가 정한 값」은 호박색이다.
- * v0 은 여기만 파란 선택 표시를 썼는데, 그러면 칸은 파랗고 칩은 호박색이 된다.
+ * ## 고른 칸은 파랑이다
+ * 칩과 같은 규칙이다([conditionTone]) — 화면 어디서든 「확실한 값」은 파랑이다(V2.1.0. 출시된 앱은 호박색).
  *
  * ## 색만 여러 개 고를 수 있다
  * 알약 하나가 두세 색을 함께 갖는 일이 흔해서(캡슐의 몸통·뚜껑) 색은 다중 선택이고,
@@ -67,9 +67,11 @@ import app.nursemate.core.model.PillShape
 internal fun ColorMenu(
     selected: List<PillColor>,
     modelHexes: List<String>?,
+    auto: Boolean,
     onToggle: (PillColor) -> Unit,
     onClear: () -> Unit
 ) = AttributeMenu(
+    header = AUTO.takeIf { auto },
     all = selected.isEmpty(),
     onClear = onClear,
     // 「사진 기준」도 칩과 같은 조각 원이다 — 되돌리면 저 모양으로 돌아간다는 뜻이라
@@ -90,7 +92,7 @@ internal fun ColorMenu(
                         .background(color.swatch)
                         .border(
                             width = if (certain) 2.dp else 1.dp,
-                            color = if (certain) NmColor.Warning.C700 else NmColor.Neutral.C300,
+                            color = if (certain) NmColor.Primary.C700 else NmColor.Neutral.C300,
                             shape = CircleShape
                         )
                 )
@@ -104,9 +106,11 @@ internal fun ColorMenu(
 internal fun ShapeMenu(
     selected: PillShape?,
     modelShape: PillShape?,
+    auto: Boolean,
     onSelect: (PillShape) -> Unit,
     onClear: () -> Unit
 ) = AttributeMenu(
+    header = AUTO.takeIf { auto },
     all = selected == null,
     onClear = onClear,
     preview = { modelShape?.let { PanelShapeIcon(shape = it, tint = NmTheme.semanticColors.textSecondary) } }
@@ -122,9 +126,11 @@ internal fun ShapeMenu(
 internal fun FormulationMenu(
     selected: PillFormulation?,
     modelFormulation: PillFormulation?,
+    auto: Boolean,
     onSelect: (PillFormulation) -> Unit,
     onClear: () -> Unit
 ) = AttributeMenu(
+    header = AUTO.takeIf { auto },
     all = selected == null,
     onClear = onClear,
     preview = {
@@ -147,22 +153,24 @@ internal fun FormulationMenu(
                 formulation = formulation,
                 tint = iconTint(certain),
                 // 안쪽 홈은 칸 배경색으로 파낸다 — 선택 여부에 따라 배경이 달라진다.
-                groove = if (certain) NmColor.Warning.C50 else NmTheme.semanticColors.surface
+                groove = if (certain) NmColor.Primary.C50 else NmTheme.semanticColors.surface
             )
         }
     }
 }
 
 /**
- * 메뉴 한 장 — 정본 358 폭, `$surface`, r16, padding 10, gap 6.
+ * 메뉴 한 장 — 정본 358 폭, `$surface`, 모서리 12, 테두리 `$border`, padding 10, gap 6.
  *
- * @param all 지금 「전체」인가(= 고른 것이 없다)
+ * @param header 맨 위 줄 — `자동`(외형) · `모름`(구분선). null 이면 그 줄과 구분선을 두지 않는다
+ * @param all 지금 맨 위 줄 상태인가(= 고른 것이 없다)
  * @param preview 모델이 읽은 값 그림. **null 이면 「사진 기준」 자체를 안 그린다** — 구분선처럼
  *   모델이 내지 않는 값은 정본도 그 줄을 비워 둔다. 그림만 빼면 라벨이 홀로 남아,
  *   읽는 쪽은 그림이 깨진 줄 안다
  */
 @Composable
 private fun AttributeMenu(
+    header: String?,
     all: Boolean,
     onClear: () -> Unit,
     preview: (@Composable () -> Unit)?,
@@ -172,47 +180,51 @@ private fun AttributeMenu(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(NmRadius.md))
             .background(colors.surface)
-            .border(1.dp, NmColor.Neutral.C200, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(NmRadius.md))
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(10.dp))
-                // 지금 「전체」면 그 줄에 바탕을 깐다(정본 ④·⑨) — 칸처럼 호박색을 쓰지 않는 자리라
-                // 바탕이 없으면 **어디가 현재값인지 체크 하나로만** 알아야 한다.
-                .background(if (all) NmColor.Neutral.C100 else Color.Transparent)
-                .clickable(onClick = onClear)
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-                if (all) {
-                    Icon(
-                        painter = painterResource(R.drawable.nm_ic_check),
-                        contentDescription = null,
-                        tint = NmColor.Primary.C600,
-                        modifier = Modifier.size(16.dp)
+        if (header != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    // 지금 맨 위 줄 상태면 체크와 굵은 글자로 알린다(정본 ⑥).
+                    .clickable(onClick = onClear)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+                    if (all) {
+                        Icon(
+                            painter = painterResource(R.drawable.nm_ic_check),
+                            contentDescription = null,
+                            tint = NmColor.Primary.C600,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = header,
+                    style = if (all) MenuAll.copy(fontWeight = FontWeight.Bold) else MenuAll,
+                    color = colors.textPrimary
+                )
+                if (preview != null) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier.size(width = 40.dp, height = 28.dp),
+                        contentAlignment = Alignment.Center,
+                        content = { preview() }
                     )
+                    Text(text = "사진 기준", style = PreviewLabel, color = colors.textTertiary)
                 }
             }
-            Text(text = "전체", style = MenuAll, color = colors.textPrimary)
-            if (preview != null) {
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                    contentAlignment = Alignment.Center,
-                    content = { preview() }
-                )
-                Text(text = "사진 기준", style = PreviewLabel, color = colors.textTertiary)
-            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
         }
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
         rows()
     }
 }
@@ -284,7 +296,7 @@ private fun ColorlessSlash() {
 
 @Composable
 private fun iconTint(certain: Boolean): Color =
-    if (certain) NmColor.Warning.C700 else NmTheme.semanticColors.textSecondary
+    if (certain) NmColor.Primary.C700 else NmTheme.semanticColors.textSecondary
 
 /** 사용자가 고를 수 있는 값들 — 미인식은 뺀다. 순서는 정본 팔레트와 같다. */
 private val SelectableColors = PillColor.entries.filter { it != PillColor.UNKNOWN }
@@ -292,6 +304,8 @@ private val SelectableShapes = PillShape.entries.filter { it != PillShape.UNKNOW
 private val SelectableFormulations = PillFormulation.entries.filter { it != PillFormulation.UNKNOWN }
 
 private const val CELLS_PER_ROW = 4
+
+private const val AUTO = "자동"
 
 // 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
 private val MenuAll = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -305,23 +319,29 @@ private val CellLabel = NmTypography.caption.copy(fontSize = 11.sp)
  * 그림이 빠르다** — 사용자는 손에 든 알약을 보고 고르지 이름으로 떠올리지 않는다.
  * 마크는 종류가 296가지라 그림으로 고를 수 없어 유무만 묻는다.
  *
- * 「없음」도 칸이다 — 선 없는 원판. 「조건 없음」과 다른 말이라 그림으로도 갈라 준다.
+ * 「없음」도 칸이다 — 선 없는 원판. `모름`(조건 없음)과 다른 말이라 그림으로도 갈라 준다. 손대지 않은 칸은
+ * 체크가 없다(spec §각인 · 구분선 · 마크 — 네 상태).
  */
 @Composable
-internal fun DividingLineMenu(selected: DividingLine?, onSelect: (DividingLine) -> Unit, onClear: () -> Unit) =
-    AttributeMenu(
-        all = selected == null,
-        onClear = onClear,
-        // 구분선은 사진에서 읽지 않는다 — 모델이 내는 값이 아니라 보여 줄 기준이 없다.
-        // 정본도 이 메뉴에만 「사진 기준」 줄을 안 둔다.
-        preview = null
-    ) {
-        MenuRows(items = SelectableLines) { line ->
-            MenuCell(label = line.menuLabel, selected = line == selected, onClick = { onSelect(line) }) { certain ->
-                DividingLineIcon(line = line, tint = iconTint(certain))
-            }
+internal fun DividingLineMenu(
+    selected: DividingLine?,
+    unknown: Boolean,
+    onSelect: (DividingLine) -> Unit,
+    onUnknown: () -> Unit
+) = AttributeMenu(
+    header = "모름",
+    all = unknown,
+    onClear = onUnknown,
+    // 구분선은 사진에서 읽지 않는다 — 모델이 내는 값이 아니라 보여 줄 기준이 없다.
+    // 정본도 이 메뉴에만 「사진 기준」 줄을 안 둔다.
+    preview = null
+) {
+    MenuRows(items = SelectableLines) { line ->
+        MenuCell(label = line.menuLabel, selected = line == selected, onClick = { onSelect(line) }) { certain ->
+            DividingLineIcon(line = line, tint = iconTint(certain))
         }
     }
+}
 
 /**
  * 구분선 알약 그림 — 원판 위에 흰 선. 정본은 24 자리에 원 22, 선 14×2 다.
