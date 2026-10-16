@@ -4,10 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,9 +28,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.model.Block
 import app.nursemate.core.model.plainText
 
@@ -55,7 +57,8 @@ internal fun ColumnScope.CautionSections(blocks: List<Block>) {
     }
 
     // 한 번에 하나만 펼친다. 여럿을 열어 두면 접어 놓은 뜻이 없어진다.
-    var openIndex by rememberSaveable { mutableIntStateOf(0) }
+    // 처음엔 모두 접는다 — spec §세부정보 「기본 접힘」. 정본 ⑩-d 는 펼친 모양을 보이려고 첫 항목을 열어 그렸다.
+    var openIndex by rememberSaveable { mutableIntStateOf(NONE_OPEN) }
 
     sections.forEachIndexed { index, section ->
         CautionCard(
@@ -92,7 +95,7 @@ private fun CautionCard(title: String, open: Boolean, onToggle: () -> Unit, body
                 modifier = Modifier.weight(1f)
             )
             Icon(
-                painter = painterResource(R.drawable.nm_ic_chevron_down),
+                painter = painterResource(NmSymbols.KeyboardArrowDown),
                 contentDescription = null,
                 tint = colors.textTertiary,
                 modifier = Modifier.size(18.dp).rotate(if (open) 180f else 0f)
@@ -104,6 +107,8 @@ private fun CautionCard(title: String, open: Boolean, onToggle: () -> Unit, body
                 modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 제목과 본문 사이 구분선 — 정본 ⑩-d.
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
                 body.forEach { block ->
                     if (block is Block.Paragraph) {
                         Text(

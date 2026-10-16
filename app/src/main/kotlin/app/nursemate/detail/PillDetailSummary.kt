@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,13 +21,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.model.Ingredient
 import app.nursemate.core.model.PillClassification
 import app.nursemate.core.model.PillDetail
@@ -88,7 +86,7 @@ private fun PillImageFallback() {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            painter = painterResource(R.drawable.nm_ic_image),
+            painter = painterResource(NmSymbols.Image),
             contentDescription = null,
             tint = NmTheme.semanticColors.textTertiary,
             modifier = Modifier.size(36.dp)
@@ -152,7 +150,6 @@ internal fun DetailNotice() {
                 PILL_DISCLAIMER,
             style = NoticeText,
             color = colors.textTertiary,
-            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
     }
