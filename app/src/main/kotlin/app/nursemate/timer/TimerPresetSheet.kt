@@ -392,7 +392,8 @@ private fun PresetRow(
                 if (editing) {
                     // 아이콘은 18 이다. 패딩으로 누르는 영역을 넓히면 행이 그만큼 커져 정본(행 높이 그대로)과
                     // 어긋난다. 대신 Compose 의 최소 터치 영역(48) 확장에 맡긴다 — `pointerInput` 이 붙은
-                    // 작은 노드는 주변 48 안의 손가락도 받는다(실기기에서 아이콘 밖 12dp 를 끌어 확인).
+                    // 작은 노드는 주변 48 안의 손가락도 받는다. 행 전체의 누름보다 이 노드가 먼저다 — 실기기(S24)에서
+                    // 아이콘 밖 12dp(행 안쪽)를 끌어 행 편집이 아니라 순서 변경이 일어나는 것을 확인했다.
                     Icon(
                         painter = painterResource(NmSymbols.Menu),
                         contentDescription = "${preset.label} 순서 변경",

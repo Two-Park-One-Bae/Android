@@ -218,6 +218,8 @@ fun ExpiredTimerCard(timer: CareTimer, now: Long, onComplete: () -> Unit, modifi
                 )
             }
 
+            // `NmV2ButtonCaution` 을 쓰지 않는다 — 그쪽은 일반 버튼 크기(16/600 · 아이콘 18 · 위아래 14)이고,
+            // 정본 만료 카드의 `완료` 는 카드 안 크기(15/600 · 아이콘 16 · 위아래 11)다. 면은 같은 `Caution` 이다.
             NmV2RaisedButton(
                 onClick = onComplete,
                 modifier = Modifier.fillMaxWidth(),

@@ -13,6 +13,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.dismiss
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -47,14 +50,30 @@ internal fun TimerSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = NmTheme.semanticColors.surface,
         shape = SheetShape,
-        dragHandle = { SheetHandle(handleGap) },
+        dragHandle = { SheetHandle(handleGap, onDismiss) },
         content = content
     )
 }
 
+/**
+ * 기본 손잡이는 화면 낭독기에 「닫기」 동작을 준다. 그림만 바꾸면 그것이 사라지므로 직접 단다 —
+ * 낭독기 사용자는 끌어 내릴 수 없어 이것이 시트를 닫는 길이다.
+ */
 @Composable
-private fun SheetHandle(gap: Dp) {
-    Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = gap), contentAlignment = Alignment.Center) {
+private fun SheetHandle(gap: Dp, onDismiss: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = gap)
+            .semantics {
+                contentDescription = "시트 손잡이"
+                dismiss(label = "닫기") {
+                    onDismiss()
+                    true
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
         Box(Modifier.size(width = 40.dp, height = 4.dp).background(NmColor.Neutral.C200, HandleShape))
     }
 }

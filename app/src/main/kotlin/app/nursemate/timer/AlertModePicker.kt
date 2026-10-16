@@ -2,13 +2,14 @@ package app.nursemate.timer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -36,7 +37,7 @@ import app.nursemate.core.model.AlertMode
  */
 @Composable
 fun AlertModePicker(selected: AlertMode, onSelect: (AlertMode) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AlertMode.entries.forEach { mode ->
             ModeCard(
                 modifier = Modifier.weight(1f),
@@ -63,7 +64,7 @@ private fun ModeCard(mode: AlertMode, active: Boolean, onClick: () -> Unit, modi
             .clip(CardShape)
             .background(background, CardShape)
             .border(strokeWidth, stroke, CardShape)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally

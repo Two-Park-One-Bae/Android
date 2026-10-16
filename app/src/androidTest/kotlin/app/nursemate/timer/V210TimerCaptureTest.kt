@@ -223,23 +223,10 @@ class V210TimerCaptureTest {
         capture("11_alert_mode")
     }
 
-    /** `TimerGateHost` 의 권한 시트와 같은 인자 — 그쪽은 권한 객체가 있어야 떠서 여기서는 틀만 그린다. */
+    /** 앱이 띄우는 권한 시트 그대로 — 단계는 「알람 및 리마인더」. */
     @Composable
-    private fun notice(denied: Boolean) {
-        val step = PermissionStep.EXACT_ALARM
-        TimerNoticeSheet(
-            icon = if (denied) NmSymbols.NotificationsOff else NmSymbols.Notifications,
-            iconTint = if (denied) NmColor.Error.C600 else NmColor.Primary.C600,
-            iconBackground = if (denied) NmColor.Error.C50 else NmColor.Primary.C50,
-            title = step.title(denied),
-            body = step.body(denied),
-            primaryLabel = if (denied) "설정에서 켜기" else step.primaryLabel(),
-            onPrimary = {},
-            secondaryLabel = if (denied) "닫기" else "나중에 할게요",
-            onSecondary = {},
-            onDismiss = {}
-        )
-    }
+    private fun notice(denied: Boolean) =
+        PermissionSheet(step = PermissionStep.EXACT_ALARM, denied = denied, onRequest = {}, onDismiss = {})
 
     private companion object {
         const val SHEET_SETTLE_MS = 1_000L

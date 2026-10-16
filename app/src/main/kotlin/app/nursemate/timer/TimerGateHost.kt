@@ -126,7 +126,7 @@ fun TimerGateHost(
  * [denied] 는 "한 번 요청했는데도 권한이 없다"는 뜻이다.
  */
 @Composable
-private fun PermissionSheet(step: PermissionStep, denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
+internal fun PermissionSheet(step: PermissionStep, denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
     TimerNoticeSheet(
         icon = if (denied) NmSymbols.NotificationsOff else NmSymbols.Notifications,
         iconTint = if (denied) NmColor.Error.C600 else NmColor.Primary.C600,

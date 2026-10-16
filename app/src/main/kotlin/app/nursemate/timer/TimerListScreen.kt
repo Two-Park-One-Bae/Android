@@ -154,7 +154,6 @@ fun TimerListScreen(
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = NmTheme.semanticColors
     // 만료를 화면에서도 판정한다.
     //
     // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫이지만, 알람이 못 오는 경우가 있다 —
@@ -162,7 +161,8 @@ fun TimerListScreen(
     // 00:00」으로 굳어 사용자가 손댈 수 없다. 보이는 것만이라도 만료로 바꿔 [완료]를 준다.
     val ordered = remember(timers, now) { CareTimerTransitions.projectedAndOrdered(timers, now) }
 
-    Box(modifier.fillMaxSize().background(colors.surface)) {
+    // 바탕(흰색)은 탭 셸(`NmTabScaffold`)이 칠한다 — 탭 바 뒤까지 한 색이어야 해서 거기 한 곳에 둔다.
+    Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // ⚠️ **투영본을 넘긴다.** raw 를 세면 알람이 못 온 타이머가 카드로는 만료인데
             // 헤더에는 「진행 중」으로 남아, 투영을 넣은 이유와 앞뒤가 맞지 않는다.

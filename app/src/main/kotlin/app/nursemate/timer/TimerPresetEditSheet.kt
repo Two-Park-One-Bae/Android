@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -89,13 +88,13 @@ fun TimerPresetEditSheet(
                     style = TimerSheetTitle,
                     color = colors.textPrimary
                 )
-                // 보이는 아이콘은 22 지만 누르는 영역은 48 이다.
+                // 보이는 아이콘은 22 다. 48 로 키우면 제목 줄이 높아져 정본과 어긋난다 — 작은 누름 노드의
+                // 최소 터치 영역 확장(48)에 맡긴다(프리셋 손잡이와 같다).
                 Icon(
                     painter = painterResource(NmSymbols.Close),
                     contentDescription = "닫기",
                     tint = colors.textSecondary,
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
                         .clip(CircleShape)
                         .clickable(role = Role.Button, onClick = onDismiss)
                         .size(22.dp)
