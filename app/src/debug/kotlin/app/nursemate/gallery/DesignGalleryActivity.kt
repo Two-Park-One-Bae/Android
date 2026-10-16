@@ -47,15 +47,8 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.core.designsystem.R as DsR
-import app.nursemate.core.model.DividingLine
-import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillColor
 import app.nursemate.core.model.PillFace
-import app.nursemate.core.model.PillFormulation
-import app.nursemate.core.model.PillShape
-import app.nursemate.pill.FaceInput
-import app.nursemate.pill.FaceInputs
-import app.nursemate.pill.PillAttributeChips
 
 /**
  * 디자인시스템 컴포넌트 갤러리 — **debug 빌드 전용**.
@@ -181,10 +174,6 @@ private fun Gallery() {
             )
         }
 
-        Section("Pill Attribute Chips — ⑤ 인식 결과 카드") {
-            AttributeChipStates()
-        }
-
         Section("Loading — 스피너 40 · 간격 14 · 라벨 14/500") {
             NmLoading(label = "알약을 찾고 있어요")
             NmLoading()
@@ -215,49 +204,6 @@ private fun Gallery() {
  * 실제 값은 `POST /pill-attributes` 가 채우는데, 그걸 받으려면 촬영·검출·App Check 가
  * 모두 맞아떨어져야 한다. 레이아웃만 보려고 매번 그 과정을 거칠 수는 없다.
  */
-@Composable
-private fun AttributeChipStates() {
-    val cases = listOf(
-        "단색 · 정제" to Case(
-            PillAttribute(
-                pillId = "1",
-                attributeToken = "tok1",
-                colorHexes = listOf("#FFFFFF"),
-                shape = PillShape.ROUND,
-                formulation = PillFormulation.TABLET
-            ),
-            FaceInputs(
-                front = FaceInput(imprint = "325", dividingLine = DividingLine.MINUS, hasMark = false),
-                // 「없음」을 전부 고른 면 — 셋 다 호박색이어야 한다.
-                back = FaceInput(imprint = "", dividingLine = DividingLine.NONE, hasMark = false)
-            )
-        ),
-        "다색 캡슐" to Case(
-            PillAttribute(
-                pillId = "2",
-                attributeToken = "tok2",
-                colorHexes = listOf("#4CAF50", "#FFEB3B"),
-                shape = PillShape.OBLONG,
-                formulation = PillFormulation.HARD_CAPSULE
-            ),
-            // 뒷면은 손대지 않은 그대로 — 셋 다 「전체」(회색)다.
-            FaceInputs(front = FaceInput(imprint = "MK", dividingLine = DividingLine.PLUS, hasMark = true))
-        ),
-        // V1 은 속성별 부분 실패가 없다 — 모델값이 있으면 색·모양·제형이 모두 있다.
-        "추출 실패 (EXTRACTION_FAILED)" to Case(PillAttribute(pillId = "4", error = "EXTRACTION_FAILED"), FaceInputs()),
-        "아직 못 받음 (null)" to Case(null, FaceInputs())
-    )
-
-    cases.forEach { (label, case) ->
-        Text(text = label, style = NmTypography.caption, color = NmTheme.semanticColors.textTertiary)
-        // 각인 표기값은 화면 입력([FaceInputs])이 정본이라 따로 넣는다 — 서버는 각인을 주지 않는다.
-        PillAttributeChips(attribute = case.attribute, faces = case.faces)
-    }
-}
-
-/** 갤러리 표본 한 줄 — 모델값과 화면 입력이 따로라 함께 든다. */
-private data class Case(val attribute: PillAttribute?, val faces: FaceInputs)
-
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     val colors = NmTheme.semanticColors
