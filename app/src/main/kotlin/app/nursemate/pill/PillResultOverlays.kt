@@ -6,10 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.round
 import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.designsystem.v2.NmV2Menu
 import app.nursemate.core.designsystem.v2.NmV2MenuItem
@@ -22,9 +28,12 @@ import app.nursemate.core.designsystem.v2.NmV2Modal
 @Composable
 internal fun PillCardMenu(topEnd: IntOffset, onEdit: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     val menuWidth = with(LocalDensity.current) { NmV2MenuWidth.roundToPx() }
+    // [topEnd] 는 화면(root) 좌표다. 이 상자가 탭 바 셸 안(상태 바 아래)에 있으므로 자기 원점을 빼야 맞는다.
+    var origin by remember { mutableStateOf(IntOffset.Zero) }
     Box(
         Modifier
             .fillMaxSize()
+            .onGloballyPositioned { origin = it.positionInRoot().round() }
             .clickable(
                 interactionSource = remember {
                     MutableInteractionSource()
@@ -38,7 +47,7 @@ internal fun PillCardMenu(topEnd: IntOffset, onEdit: () -> Unit, onDelete: () ->
                 NmV2MenuItem("수정", NmSymbols.Edit, onClick = onEdit),
                 NmV2MenuItem("삭제", NmSymbols.Delete, destructive = true, onClick = onDelete)
             ),
-            modifier = Modifier.offset { IntOffset(topEnd.x - menuWidth, topEnd.y) }
+            modifier = Modifier.offset { IntOffset(topEnd.x - menuWidth - origin.x, topEnd.y - origin.y) }
         )
     }
 }

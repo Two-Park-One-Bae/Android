@@ -21,20 +21,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import app.nursemate.core.designsystem.NmButtonPrimary
-import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmV2Button
+import app.nursemate.core.designsystem.v2.NmV2ButtonKind
+import app.nursemate.core.designsystem.v2.NmV2NavBar
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.Usage
 import app.nursemate.ui.SystemBarIcons
 
 /**
- * 미리보기 — 디자인 `② 미리보기`.
+ * 미리보기 — 정본 「알약 식별 · 촬영 ~ 로딩 · V2.1.0 (NM-586)」 ② · ②-a.
  *
  * Nav Bar("미리보기") / 폭을 꽉 채운 정사각 사진 / 하단 액션 바(재촬영 · 이 사진 사용).
  *
@@ -54,7 +56,9 @@ fun PillPreviewScreen(
     usage: Usage?,
     onRetake: () -> Unit,
     onConfirm: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    limitReached: Boolean = false,
+    onDismissLimit: () -> Unit = {}
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
@@ -66,10 +70,10 @@ fun PillPreviewScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.bgApp)
+            .background(colors.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        NmNavBar(title = "미리보기", onBack = onRetake)
+        NmV2NavBar(title = "미리보기", onBack = onRetake)
 
         Column(
             modifier = Modifier
@@ -86,8 +90,9 @@ fun PillPreviewScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 모르면 줄 자체를 두지 않는다 — 숫자를 지어내면 남은 횟수를 오해하게 한다.
             if (usage != null) {
@@ -99,20 +104,14 @@ fun PillPreviewScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NmButtonSecondary(
-                    text = "재촬영",
-                    onClick = onRetake,
-                    modifier = Modifier.weight(1f)
-                )
-                NmButtonPrimary(
-                    text = "이 사진 사용",
-                    onClick = onConfirm,
-                    enabled = state.photo != null,
-                    modifier = Modifier.weight(1f)
-                )
+                NmV2Button("재촬영", onRetake, Modifier.weight(1f), NmV2ButtonKind.Secondary)
+                NmV2Button("이 사진 사용", onConfirm, Modifier.weight(1f), enabled = state.photo != null)
             }
         }
     }
+
+    // 정본 ②-a — 이 사진을 쓰려는 순간 한도가 0 이면 요청 없이 여기서 알린다. 확인하면 이 화면에 머문다.
+    if (limitReached) PillLimitAlert(usage = usage, onConfirm = onDismissLimit)
 }
 
 /**
@@ -151,5 +150,5 @@ private fun PhotoArea(state: PillUiState) {
     }
 }
 
-/** 정본 12·500. 스케일에 없는 크기라 여기 명시한다. */
-private val RemainingLabel = NmTypography.caption
+/** 정본 12·500. */
+private val RemainingLabel = NmV2Type.rowSubtitle.copy(fontWeight = FontWeight.Medium)

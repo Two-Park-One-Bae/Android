@@ -203,6 +203,19 @@ private fun NmNavHost(
         onHandled = onTimerTabOpened
     )
 
+    // 알약 탭 안의 화면(촬영 제외)에 두르는 탭 바 — 알약 플로우 · 기록 상세가 함께 쓴다(spec §화면 공통).
+    val pillTabbed: PillTabbed = { content ->
+        TabRoot(
+            navController = navController,
+            tab = NmTab.Pill,
+            usage = homeUsage,
+            pillTabLimitReached = false,
+            onDismissPillTabLimit = {},
+            background = NmTheme.semanticColors.surface,
+            content = content
+        )
+    }
+
     NavHost(navController = navController, startDestination = startDestination) {
         composable(NmRoute.LOGIN) {
             val viewModel: LoginViewModel = hiltViewModel()
@@ -301,7 +314,7 @@ private fun NmNavHost(
             }
         }
 
-        pillNavGraph(navController) {
+        pillNavGraph(navController, tabbed = pillTabbed) {
             val pillTab: PillTabViewModel = hiltViewModel()
             val listState by pillTab.state.collectAsStateWithLifecycle()
             val tabUsage by pillTab.usage.collectAsStateWithLifecycle()
@@ -365,17 +378,7 @@ private fun NmNavHost(
                 identifiedAt = entry.arguments?.getString("at").orEmpty(),
                 pillCount = entry.arguments?.getInt("count") ?: 1,
                 fromHome = entry.cameFromHome(),
-                tabbed = { content: @Composable () -> Unit ->
-                    TabRoot(
-                        navController = navController,
-                        tab = NmTab.Pill,
-                        usage = homeUsage,
-                        pillTabLimitReached = false,
-                        onDismissPillTabLimit = {},
-                        background = NmTheme.semanticColors.surface,
-                        content = content
-                    )
-                }
+                tabbed = pillTabbed
             )
         }
 

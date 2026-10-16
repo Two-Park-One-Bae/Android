@@ -54,10 +54,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.ui.SystemBarIcons
 import java.io.File
 import kotlin.coroutines.resume
@@ -220,7 +220,7 @@ private fun CameraTopBar(flashOn: Boolean, flashAvailable: Boolean, onClose: () 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Icon(
-            painter = painterResource(R.drawable.nm_ic_close),
+            painter = painterResource(NmSymbols.Close),
             contentDescription = "촬영 닫기",
             tint = Color.White,
             modifier = Modifier
@@ -234,7 +234,7 @@ private fun CameraTopBar(flashOn: Boolean, flashAvailable: Boolean, onClose: () 
         )
         if (flashAvailable) {
             Icon(
-                painter = painterResource(R.drawable.nm_ic_flash),
+                painter = painterResource(NmSymbols.FlashOn),
                 contentDescription = if (flashOn) "플래시 끄기" else "플래시 켜기",
                 tint = if (flashOn) NmColor.Warning.C300 else Color.White,
                 modifier = Modifier
@@ -268,7 +268,7 @@ private fun CameraControls(captureEnabled: Boolean, onGallery: () -> Unit, onShu
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.nm_ic_image),
+                painter = painterResource(NmSymbols.Image),
                 contentDescription = "갤러리에서 선택",
                 tint = Color.White,
                 modifier = Modifier.size(22.dp)

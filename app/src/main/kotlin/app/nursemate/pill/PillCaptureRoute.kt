@@ -36,7 +36,8 @@ fun PillCaptureRoute(
     onPhotoSelected: (Uri) -> Unit,
     onClose: () -> Unit,
     session: PillAnalyticsSession,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tabbed: @Composable (@Composable () -> Unit) -> Unit = { it() }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -77,12 +78,15 @@ fun PillCaptureRoute(
             modifier = modifier
         )
 
-        alreadyAsked -> PillPermissionDeniedScreen(
-            onBack = onClose,
-            onPickFromGallery = onPhotoSelected,
-            onGalleryTap = { session.buttonTapped(target = "gallery", screen = "permission_denied") },
-            modifier = modifier
-        )
+        // 권한 거부는 탭 바를 두른다 — 촬영(뷰파인더)만 빼고 알약 화면은 모두 탭 바 안이다(spec §화면 공통).
+        alreadyAsked -> tabbed {
+            PillPermissionDeniedScreen(
+                onBack = onClose,
+                onPickFromGallery = onPhotoSelected,
+                onGalleryTap = { session.buttonTapped(target = "gallery", screen = "permission_denied") },
+                modifier = modifier
+            )
+        }
 
         // 권한 창이 떠 있는 동안. 거부 화면을 미리 띄우면 허용을 눌러도 한 번 깜빡인다.
         else -> Box(
