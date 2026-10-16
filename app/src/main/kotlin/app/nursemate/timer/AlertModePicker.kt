@@ -2,13 +2,14 @@ package app.nursemate.timer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -17,13 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.AlertMode
 
 /**
@@ -36,7 +37,7 @@ import app.nursemate.core.model.AlertMode
  */
 @Composable
 fun AlertModePicker(selected: AlertMode, onSelect: (AlertMode) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AlertMode.entries.forEach { mode ->
             ModeCard(
                 modifier = Modifier.weight(1f),
@@ -51,6 +52,7 @@ fun AlertModePicker(selected: AlertMode, onSelect: (AlertMode) -> Unit, modifier
 @Composable
 private fun ModeCard(mode: AlertMode, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
+    // 정본은 이 칸만 평면이다 — 고르는 값을 보여 주는 칸이라 버튼처럼 볼록하게 두지 않았다.
     val background = if (active) NmColor.Primary.C50 else NmColor.Neutral.C50
     val stroke = if (active) NmColor.Primary.C500 else colors.border
     val strokeWidth = if (active) 1.5.dp else 1.dp
@@ -62,7 +64,7 @@ private fun ModeCard(mode: AlertMode, active: Boolean, onClick: () -> Unit, modi
             .clip(CardShape)
             .background(background, CardShape)
             .border(strokeWidth, stroke, CardShape)
-            .clickable(onClick = onClick)
+            .selectable(selected = active, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -84,9 +86,9 @@ fun AlertMode.label(): String = when (this) {
 }
 
 private fun AlertMode.iconRes(): Int = when (this) {
-    AlertMode.SOUND -> DsR.drawable.nm_ic_volume_2
-    AlertMode.VIBRATE -> DsR.drawable.nm_ic_vibrate
-    AlertMode.SILENT -> DsR.drawable.nm_ic_volume_x
+    AlertMode.SOUND -> NmSymbols.VolumeUp
+    AlertMode.VIBRATE -> NmSymbols.Vibration
+    AlertMode.SILENT -> NmSymbols.VolumeOff
 }
 
 /**
@@ -98,5 +100,5 @@ private fun AlertMode.iconRes(): Int = when (this) {
 const val ALERT_MODE_NOTICE = "‘소리’는 무음 모드에서도 크게 울려요. ‘진동’은 소리 없이 진동만, " +
     "‘무음’은 화면 알림만 떠요."
 
-private val CardShape = RoundedCornerShape(12.dp)
-private val LabelStyle = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+private val CardShape = RoundedCornerShape(NmRadius.md)
+private val LabelStyle = NmV2Type.chipConfirmed

@@ -10,25 +10,23 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmV2ButtonPrimary
+import app.nursemate.core.designsystem.v2.NmV2ButtonShape
+import app.nursemate.core.designsystem.v2.NmV2Type
 
 /**
  * 안내 시트 공통 골격 — 정본 `A3 알람 권한 안내`·`A3 알람 권한 거부`·`첫 시작 — 울림 방식 선택`
@@ -36,7 +34,6 @@ import app.nursemate.core.designsystem.NmTypography
  *
  * 셋을 각각 짜면 여백·크기가 조금씩 어긋나므로 하나로 둔다.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimerNoticeSheet(
     icon: Int,
@@ -53,12 +50,7 @@ fun TimerNoticeSheet(
     content: (@Composable () -> Unit)? = null
 ) {
     val colors = NmTheme.semanticColors
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = colors.surface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    ) {
+    TimerSheet(onDismiss = onDismiss, handleGap = 16.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -87,33 +79,22 @@ fun TimerNoticeSheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(title, style = TitleStyle, color = colors.textPrimary, textAlign = TextAlign.Center)
+                Text(title, style = TimerSheetTitle, color = colors.textPrimary, textAlign = TextAlign.Center)
                 Text(body, style = BodyStyle, color = colors.textSecondary, textAlign = TextAlign.Center)
             }
 
             content?.invoke()
 
-            Text(
-                text = primaryLabel,
-                style = PrimaryStyle,
-                color = NmColor.Neutral.C0,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(ButtonShape)
-                    .background(NmColor.Primary.C500, ButtonShape)
-                    .clickable(onClick = onPrimary)
-                    .padding(vertical = 15.dp)
-            )
+            NmV2ButtonPrimary(primaryLabel, onPrimary, Modifier.fillMaxWidth())
 
             if (secondaryLabel != null && onSecondary != null) {
                 Text(
                     text = secondaryLabel,
-                    style = SecondaryStyle,
+                    style = NmV2Type.menu,
                     color = colors.textSecondary,
                     modifier = Modifier
-                        .clip(ButtonShape)
-                        .clickable(onClick = onSecondary)
+                        .clip(NmV2ButtonShape)
+                        .clickable(role = Role.Button, onClick = onSecondary)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
@@ -123,9 +104,6 @@ fun TimerNoticeSheet(
 
 // 정본 수치 — A3 · 첫 시작 시트 공통
 private val IconBox = 64.dp
-private val ButtonShape = RoundedCornerShape(12.dp)
 
-private val TitleStyle = NmTypography.title.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold)
-private val BodyStyle = NmTypography.body.copy(fontSize = 14.sp, lineHeight = 21.sp)
-private val PrimaryStyle = NmTypography.body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-private val SecondaryStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+/** 정본 14 · 줄 높이 1.5. */
+private val BodyStyle = NmV2Type.menu.copy(fontWeight = FontWeight.Normal, lineHeight = 21.sp)
