@@ -41,7 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -119,10 +119,8 @@ fun PillResultScreen(
 
     // 여기서 나가면 이미 쓴 식별 1회와 고친 내용이 함께 사라진다 — 확인을 받는다. 저장 중에는 나가지 않는다.
     BackHandler { if (!saving) confirmingExit = true }
-    // 메뉴가 열려 있으면 뒤로는 메뉴만 닫는다 — 나중에 건 BackHandler 가 먼저 받는다.
-    BackHandler(enabled = menuFor != null) { menuFor = null }
 
-    // 인셋은 안쪽 Column 에만 건다 — ⋮ 메뉴는 화면 기준 좌표(positionInRoot)로 놓이므로 바깥 상자가 화면 원점이어야 한다.
+    // 인셋은 안쪽 Column 에만 건다 — 바깥 상자는 배경만 깐다.
     Box(modifier.fillMaxSize().background(colors.surface)) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             NmV2NavBar(title = "식별 결과", onBack = { if (!saving) confirmingExit = true })
@@ -346,7 +344,7 @@ private fun ResultCardRow(
         Modifier
             .fillMaxWidth()
             .height(68.dp)
-            .onGloballyPositioned { cardRight = it.positionInRoot().round().x + it.size.width }
+            .onGloballyPositioned { cardRight = it.positionInWindow().round().x + it.size.width }
     ) {
         Row(
             Modifier
@@ -404,7 +402,7 @@ private fun ResultCardRow(
             Box(
                 Modifier
                     .size(width = 28.dp, height = 32.dp)
-                    .onGloballyPositioned { menuTop = it.positionInRoot().round().y + it.size.height }
+                    .onGloballyPositioned { menuTop = it.positionInWindow().round().y + it.size.height }
                     .clip(CircleShape)
                     .clickable(enabled = enabled, role = Role.Button) { onMenu(IntOffset(cardRight, menuTop)) },
                 contentAlignment = Alignment.Center

@@ -289,10 +289,7 @@ private fun NmNavHost(
                     recent = recent,
                     // 곧장 촬영으로 — 알약 탭 스택 위에 올린다(촬영 · 결과 화면이 알약 탭 아래에 있다).
                     // 0회면 버튼이 비활성이라 여기 오지 않는다(spec home — 팝업 없음).
-                    onTakePhoto = {
-                        navController.switchTab(NmTab.Pill)
-                        navController.navigate(NmRoute.pillCapture(fromHome = true))
-                    },
+                    onTakePhoto = { navController.startCaptureFromHome() },
                     // 카드의 나머지는 알약 탭(기록 목록) — 한도와 상관없이 간다(spec home §누르는 곳).
                     onPillCard = { navController.switchTab(NmTab.Pill) },
                     onNewTimer = {

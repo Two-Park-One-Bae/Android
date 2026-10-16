@@ -55,7 +55,10 @@ import app.nursemate.pill.toResultUi
  *
  * ## 탭 바 — 촬영만 뺀다
  * 촬영(뷰파인더)을 뺀 알약 화면은 모두 탭 바를 두른다(spec §화면 공통 · Apple HIG). 뷰파인더는 탭 바에 눌리면
- * 정사각 가이드가 잘리므로 뺀다. 모달 · 시트는 다이얼로그라 탭 바를 덮는다.
+ * 정사각 가이드가 잘리므로 뺀다. 모달 · 시트 · ⋮ 메뉴는 창이 따로라 탭 바를 덮는다. 수정 화면은 아직 아니다(edit).
+ *
+ * 탭 바로 다른 탭에 나가도 하던 식별은 알약 탭 스택에 남는다 — 로딩 중이면 요청은 ViewModel 에서 계속 돌고,
+ * 알약 탭으로 돌아오면 결과로 넘어간다. 홈 `사진 찍기` 는 그 식별을 덮지 않고 보여 준다([startCaptureFromHome]).
  *
  * @param tabbed 화면에 알약 탭 바를 두르는 셸(NmNavHost 의 TabRoot)
  */
@@ -68,7 +71,7 @@ fun NavGraphBuilder.pillNavGraph(
         // 알약 탭 — 기록 목록. 탭 바 · 한도 팝업이 셸(NmNavHost)에 있어 그리는 일은 셸이 맡는다.
         composable(NmRoute.PILL_TAB) { pillTab() }
         capture(navController, tabbed)
-        edit(navController, tabbed)
+        edit(navController)
         detail(navController, tabbed)
         preview(navController, tabbed)
         loading(navController, tabbed)
@@ -103,7 +106,7 @@ private fun NavGraphBuilder.capture(navController: NavController, tabbed: PillTa
     )
 }
 
-private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbed) = composable(
+private fun NavGraphBuilder.edit(navController: NavController) = composable(
     route = NmRoute.PILL_EDIT,
     arguments = listOf(navArgument("pillId") { type = NavType.StringType })
 ) { entry ->
@@ -139,43 +142,43 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
 
     val index = state.detectedIndexOf(pillId)
 
-    tabbed {
-        PillEditScreen(
-            number = (index ?: 0) + 1,
-            crop = state.cropOf(index),
-            manual = pillId.isManualPill,
-            attribute = edit.attribute,
-            conditions = edit.conditions,
-            onConditionsChange = { changed ->
-                // 화면은 조건을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
-                changed.changesFrom(edit.conditions).forEach(tracking::attrEdited)
-                viewModel.corrections.updateEdit(pillId, edit.copy(conditions = changed))
-            },
-            faces = edit.faces,
-            reading = state.faceReadings[pillId],
-            onFacesChange = {
-                tracking.attrEdited("imprint")
-                viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))
-            },
-            candidates = candidates,
-            selected = pending,
-            onSelect = { pending = it },
-            onConfirm = {
-                confirmEdit(viewModel, tracking, pillId, pending, candidates.candidates)
-                navController.popBackStack()
-            },
-            onCancel = {
-                viewModel.corrections.updateEdit(pillId, original)
-                leave()
-            },
-            onDetail = { openDetail(navController, tracking, it) },
-            onLoadMore = candidateViewModel::loadMore,
-            onRetry = search,
-            onRetryLoadMore = candidateViewModel::retryLoadMore,
-            onPanelChange = { tracking.openPanel = it },
-            onCompare = { tracking.buttonTapped("compare") }
-        )
-    }
+    // 수정 화면은 아직 탭 바를 두르지 않는다 — 이미지 비교 뷰어가 화면 안에 그려져 탭 바를 덮지 못한다.
+    // 수정 · 후보 선택을 V2 로 옮길 때(NM-588) 뷰어를 다이얼로그로 바꾸며 함께 두른다.
+    PillEditScreen(
+        number = (index ?: 0) + 1,
+        crop = state.cropOf(index),
+        manual = pillId.isManualPill,
+        attribute = edit.attribute,
+        conditions = edit.conditions,
+        onConditionsChange = { changed ->
+            // 화면은 조건을 한 덩이로 넘겨 주므로 무엇이 바뀌었는지는 여기서 가린다.
+            changed.changesFrom(edit.conditions).forEach(tracking::attrEdited)
+            viewModel.corrections.updateEdit(pillId, edit.copy(conditions = changed))
+        },
+        faces = edit.faces,
+        reading = state.faceReadings[pillId],
+        onFacesChange = {
+            tracking.attrEdited("imprint")
+            viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))
+        },
+        candidates = candidates,
+        selected = pending,
+        onSelect = { pending = it },
+        onConfirm = {
+            confirmEdit(viewModel, tracking, pillId, pending, candidates.candidates)
+            navController.popBackStack()
+        },
+        onCancel = {
+            viewModel.corrections.updateEdit(pillId, original)
+            leave()
+        },
+        onDetail = { openDetail(navController, tracking, it) },
+        onLoadMore = candidateViewModel::loadMore,
+        onRetry = search,
+        onRetryLoadMore = candidateViewModel::retryLoadMore,
+        onPanelChange = { tracking.openPanel = it },
+        onCompare = { tracking.buttonTapped("compare") }
+    )
 }
 
 private fun NavGraphBuilder.detail(navController: NavController, tabbed: PillTabbed) = composable(
