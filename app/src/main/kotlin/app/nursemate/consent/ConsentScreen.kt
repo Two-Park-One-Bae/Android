@@ -33,21 +33,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
-import app.nursemate.core.designsystem.NmButtonPrimary
-import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmConfirmDialog
 import app.nursemate.core.designsystem.NmDim
-import app.nursemate.core.designsystem.NmRadius
-import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmV2ButtonPrimary
+import app.nursemate.core.designsystem.v2.NmV2ButtonSecondary
+import app.nursemate.core.designsystem.v2.NmV2ButtonText
+import app.nursemate.core.designsystem.v2.NmV2ModalOverlay
+import app.nursemate.core.designsystem.v2.NmV2Radius
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.ConsentDefinition
 import app.nursemate.core.model.ConsentType
 import app.nursemate.ui.SystemBarIcons
@@ -126,27 +126,26 @@ fun ConsentScreen(
         // 안내가 먼저다. 취소 확인과 겹칠 일은 없다 — 안내가 떠 있는 동안은 시트도 뒤로가기도
         // 닿지 않는다(모달이 화면 전체를 덮는다).
         if (showingNotice) {
-            NmConfirmDialog(
+            NmV2ModalOverlay(
                 title = "약관이 변경되었어요",
                 message = "서비스를 계속 이용하려면 변경된 약관에 다시 동의해 주세요.",
-                confirmLabel = "확인",
+                confirmText = "확인",
                 // 고를 것이 없는 알림이다 — 「취소」를 두면 동의하지 않고 빠져나가는 길이
                 // 있는 것처럼 읽힌다. iOS 도 확인 하나다.
-                dismissLabel = null,
-                onConfirm = { noticeDismissed = true },
-                onDismiss = {}
+                onConfirm = { noticeDismissed = true }
             )
         }
 
         if (confirmingCancel) {
-            NmConfirmDialog(
+            NmV2ModalOverlay(
                 title = "로그인 화면으로 돌아갈까요?",
                 message = "동의하지 않으면 이용이 제한돼요",
-                confirmLabel = "로그아웃",
+                confirmText = "로그아웃",
                 onConfirm = {
                     confirmingCancel = false
                     onCancel()
                 },
+                dismissText = "취소",
                 onDismiss = { confirmingCancel = false }
             )
         }
@@ -168,18 +167,20 @@ private fun Sheet(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = NmRadius.xl, topEnd = NmRadius.xl))
+            .clip(SheetShape)
             .background(colors.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = NmSpacing.lg, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(NmSpacing.lg)
+            .padding(horizontal = 24.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "약관 동의", style = SheetTitle, color = colors.textPrimary)
             Text(
                 text = "널스메이트 이용을 위해 아래 약관 동의가 필요해요",
                 style = SheetSubtitle,
                 color = colors.textSecondary,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.width(280.dp)
             )
         }
@@ -199,12 +200,12 @@ private fun Sheet(
             ) {
                 Text(
                     text = state.message ?: "약관을 불러오지 못했어요",
-                    style = NmTypography.body,
+                    style = NmV2Type.menu.copy(fontWeight = FontWeight.Normal),
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(NmSpacing.md))
-                NmButtonSecondary(text = "다시 시도", onClick = onRetry)
+                Spacer(modifier = Modifier.height(12.dp))
+                NmV2ButtonSecondary(text = "다시 시도", onClick = onRetry)
             }
 
             else -> ConsentGroup(
@@ -228,14 +229,15 @@ private fun Sheet(
             )
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(NmSpacing.sm)) {
-            NmButtonPrimary(
+        // 정본 — 주 버튼 위, 글자 버튼 「취소」 아래(간격 8).
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            NmV2ButtonPrimary(
                 text = if (state.submitting) "저장 중…" else "동의하고 계속",
                 onClick = onSubmit,
                 enabled = state.canSubmit,
                 modifier = Modifier.fillMaxWidth()
             )
-            NmButtonSecondary(
+            NmV2ButtonText(
                 text = "취소",
                 onClick = onCancel,
                 enabled = !state.submitting,
@@ -260,14 +262,14 @@ private fun ConsentGroup(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !state.submitting, onClick = onToggleAll)
-                .padding(vertical = NmSpacing.md, horizontal = NmSpacing.xs),
+                .clickable(enabled = !state.submitting, role = Role.Checkbox, onClick = onToggleAll)
+                .padding(vertical = 16.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 선택 항목까지 켜져 있어야 체크된다(spec §동의 온보딩). 필수만 켠 상태에서
             // 「전체 동의」가 체크돼 보이면 화면이 무엇에 동의했는지를 거짓으로 말한다.
-            NmConsentCheckBox(checked = allChecked, size = 26.dp, radius = NmRadius.sm, mark = 16.dp)
+            NmConsentCheckBox(checked = allChecked, size = 26.dp, radius = 8.dp, mark = 16.dp)
             Text(text = "전체 동의", style = AllLabel, color = colors.textPrimary)
         }
 
@@ -291,8 +293,12 @@ private fun ConsentGroup(
 private val LogoTop = 140.dp
 private val LoadingHeight = 180.dp
 
-// 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
-private val SheetTitle = NmTypography.heading3.copy(fontWeight = FontWeight.Bold)
-private val SheetSubtitle = NmTypography.body.copy(fontSize = 13.sp, lineHeight = 20.sp)
-private val SheetNotice = NmTypography.body.copy(fontSize = 13.sp)
-private val AllLabel = NmTypography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+private val SheetShape = RoundedCornerShape(topStart = NmV2Radius.x2l, topEnd = NmV2Radius.x2l)
+
+/** 정본 22/700 — V2 글자에 없는 크기라 화면 제목(24/700)에서 크기만 바꾼다. */
+private val SheetTitle = NmV2Type.screenTitle.copy(fontSize = 22.sp, lineHeight = 31.sp)
+
+/** 정본 13 · 줄 높이 1.5. */
+private val SheetSubtitle = NmV2Type.cardBody.copy(lineHeight = 20.sp)
+private val SheetNotice = NmV2Type.cardBody
+private val AllLabel = NmV2Type.button

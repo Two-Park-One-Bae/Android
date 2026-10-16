@@ -414,6 +414,7 @@ private fun NmNavHost(
                 usage = homeUsage,
                 pillTabLimitReached = pillTabLimitReached,
                 onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface,
                 overlay = confirming?.let { pending ->
                     {
                         SettingsConfirmDialog(
@@ -443,22 +444,31 @@ private fun NmNavHost(
         }
 
         // 설정 / 약관 및 동의 — 선택 동의 철회·재동의(NM-548).
-        // 탭바를 두르지 않는다(정본에 없다) — 설정 탭 위로 밀고 들어왔다가 뒤로가기로 돌아간다.
+        // 설정 탭 안의 화면이라 `설정` 을 고른 탭 바를 두른다(V2.1.0, NM-616). `저장` 은 탭 바 위에 붙는다.
         composable(NmRoute.CONSENT_SETTINGS) {
             val viewModel: ConsentSettingsViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val context = LocalContext.current
             LaunchedEffect(Unit) { viewModel.start(consents) }
-            ConsentSettingsScreen(
-                state = state,
-                onBack = { navController.popBackStack() },
-                onToggle = viewModel::toggle,
-                // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
-                // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
-                onSave = { viewModel.save(onSaved = onUserUpdated) },
-                onOpenPolicy = { context.openPolicy(it.policyUrl) },
-                onRetry = { viewModel.load() }
-            )
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Settings,
+                usage = homeUsage,
+                pillTabLimitReached = pillTabLimitReached,
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface
+            ) {
+                ConsentSettingsScreen(
+                    state = state,
+                    onBack = { navController.popBackStack() },
+                    onToggle = viewModel::toggle,
+                    // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
+                    // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
+                    onSave = { viewModel.save(onSaved = onUserUpdated) },
+                    onOpenPolicy = { context.openPolicy(it.policyUrl) },
+                    onRetry = { viewModel.load() }
+                )
+            }
         }
     }
 }

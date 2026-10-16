@@ -26,7 +26,8 @@ import app.nursemate.core.designsystem.NmColor
  * [content] 는 지금 상태(기본 · 누름 · 비활성)의 글자색을 받는다. 다른 색을 쓰는 자리(`재개` 의
  * `primary-700` 등)는 그 색을 버리고 제 색을 칠한다.
  *
- * [selected] 면 테두리를 `primary-500` 1.5 로 바꾼다 — 정본 분류 고르기의 고른 칸이다.
+ * [selected] 면 테두리를 `primary-500` 1.5 로 바꾼다 — 정본 분류 고르기의 고른 칸이다. 고르는 칸으로 쓸 때는
+ * [role] 을 `RadioButton` 등으로 넘기고, 고른 상태는 부르는 쪽이 `semantics { selected }` 로 알린다.
  */
 @Composable
 fun NmV2RaisedButton(
@@ -37,6 +38,7 @@ fun NmV2RaisedButton(
     selected: Boolean = false,
     shape: Shape = NmV2ButtonShape,
     contentPadding: PaddingValues = ButtonPadding,
+    role: Role = Role.Button,
     content: @Composable RowScope.(contentColor: Color) -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -50,7 +52,7 @@ fun NmV2RaisedButton(
                 interactionSource = interaction,
                 indication = null,
                 enabled = enabled,
-                role = Role.Button,
+                role = role,
                 onClick = onClick
             )
             .padding(contentPadding),

@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmDim
 import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.R
@@ -75,7 +80,9 @@ fun NmV2ListRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    @DrawableRes icon: Int? = null
+    @DrawableRes icon: Int? = null,
+    iconTint: Color = NmColor.Neutral.C700,
+    titleColor: Color = NmTheme.semanticColors.textPrimary
 ) {
     val colors = NmTheme.semanticColors
     NmV2Surface(
@@ -94,14 +101,14 @@ fun NmV2ListRow(
             if (icon !=
                 null
             ) {
-                Icon(painterResource(icon), null, tint = NmColor.Neutral.C700, modifier = Modifier.size(24.dp))
+                Icon(painterResource(icon), null, tint = iconTint, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 if (subtitle != null) Text(subtitle, style = NmV2Type.rowSubtitle, color = colors.textSecondary)
                 Text(
                     title,
                     style = NmV2Type.rowTitle,
-                    color = colors.textPrimary,
+                    color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -186,6 +193,33 @@ fun NmV2Modal(
 /** 모달 판 그림자가 들어갈 창 여백 — 흐림 34 + y 14. */
 private val ModalShadowRoom = 48.dp
 
+/**
+ * [NmV2Modal] 을 창 없이 그 자리에 덮는다 — 막 · 판. 화면 셸의 덮개 자리(탭 바까지 덮는 곳)에 넣는 쪽이 쓴다.
+ * 막을 눌러도 닫히지 않는다 — 고르게 하려고 띄운 것이라 바깥 누름을 「취소」로 읽지 않는다.
+ */
+@Composable
+fun NmV2ModalOverlay(
+    title: String,
+    confirmText: String,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    message: String? = null,
+    dismissText: String? = null,
+    onDismiss: () -> Unit = {},
+    confirmKind: NmV2ButtonKind = NmV2ButtonKind.Primary
+) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(NmDim)
+            // 막 아래 화면이 눌리지 않게 누름을 먹는다.
+            .pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.Center
+    ) {
+        NmV2ModalPanel(title, confirmText, onConfirm, message, dismissText, onDismiss, confirmKind)
+    }
+}
+
 /** [NmV2Modal] 의 판만. 미리보기 · 캡처용으로 따로 둔다. */
 @Composable
 fun NmV2ModalPanel(
@@ -213,11 +247,12 @@ fun NmV2ModalPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, style = NmV2Type.button, color = colors.textPrimary, textAlign = TextAlign.Center)
-        if (message !=
-            null
-        ) {
-            Text(message, style = NmV2Type.cardBody, color = colors.textSecondary, textAlign = TextAlign.Center)
+        // 정본 「Texts」 묶음 — 제목과 본문 사이는 6 이다(판 간격 16 은 글 묶음과 버튼 줄 사이).
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, style = NmV2Type.button, color = colors.textPrimary, textAlign = TextAlign.Center)
+            if (message != null) {
+                Text(message, style = NmV2Type.cardBody, color = colors.textSecondary, textAlign = TextAlign.Center)
+            }
         }
         NmV2ButtonRow {
             if (dismissText != null) {
