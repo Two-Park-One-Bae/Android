@@ -21,6 +21,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -57,54 +58,64 @@ import app.nursemate.ui.SystemBarIcons
  */
 @Composable
 fun PillDetailScreen(state: DetailUiState, onBack: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    SystemBarIcons(darkIcons = true)
-    val back = PillStateAction("뒤로", onBack)
     when (state) {
-        DetailUiState.Loading, is DetailUiState.Ready -> Column(
-            modifier
-                .fillMaxSize()
-                .background(NmTheme.semanticColors.surface)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-        ) {
-            NmV2NavBar(title = "세부정보", onBack = onBack)
-            if (state is DetailUiState.Ready) DetailBody(state.detail) else DetailLoading()
+        DetailUiState.Loading, is DetailUiState.Ready -> {
+            SystemBarIcons(darkIcons = true)
+            Column(
+                modifier
+                    .fillMaxSize()
+                    .background(NmTheme.semanticColors.surface)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+            ) {
+                NmV2NavBar(title = "세부정보", onBack = onBack)
+                if (state is DetailUiState.Ready) DetailBody(state.detail) else DetailLoading()
+            }
         }
 
         // 없는 것은 다시 눌러도 없다 — 재시도는 오류일 때만이다.
-        DetailUiState.Empty -> PillStateLayout(
-            navTitle = "세부정보",
-            onBack = onBack,
+        DetailUiState.Empty -> DetailState(
             title = "등록된 세부정보가 없어요",
             description = "이 약은 허가정보가 아직 준비되지 않았어요\n후보 선택과 식별 결과에는 영향이 없어요",
-            primary = null,
-            secondary = back,
-            modifier = modifier,
-            visual = { PillStateIcon(NmSymbols.FindInPage, NmColor.Neutral.C100, NmColor.Neutral.C400) }
-        )
-
-        DetailUiState.Failed -> PillStateLayout(
-            navTitle = "세부정보",
             onBack = onBack,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.FindInPage, NmColor.Neutral.C100, NmColor.Neutral.C400) }
+
+        DetailUiState.Failed -> DetailState(
             title = "세부정보를 불러오지 못했어요",
             description = "네트워크 연결을 확인하고\n다시 시도해 주세요",
-            primary = PillStateAction("다시 시도", onRetry),
-            secondary = back,
-            modifier = modifier,
-            visual = { PillStateIcon(NmSymbols.Error, NmColor.Error.C50, NmColor.Error.C500) }
-        )
-
-        DetailUiState.Revoked -> PillStateLayout(
-            navTitle = "세부정보",
             onBack = onBack,
+            retry = onRetry,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.Error, NmColor.Error.C50, NmColor.Error.C500) }
+
+        DetailUiState.Revoked -> DetailState(
             title = "허가가 종료된 약이에요",
             description = "허가가 취소되거나 취하된 품목이라\n세부정보가 제공되지 않아요\n후보 선택과 식별 결과에는 영향이 없어요",
-            primary = null,
-            secondary = back,
-            modifier = modifier,
-            visual = { PillStateIcon(NmSymbols.ScanDelete, NmV2Color.Caution.C50, NmV2Color.Caution.C600) }
-        )
+            onBack = onBack,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.ScanDelete, NmV2Color.Caution.C50, NmV2Color.Caution.C600) }
     }
 }
+
+/** 데이터 없음 · 오류 · 허가 종료 — 촬영 쪽과 같은 상태 틀에 `세부정보` 제목 · `뒤로`(보조)를 깐다. */
+@Composable
+private fun DetailState(
+    title: String,
+    description: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    retry: (() -> Unit)? = null,
+    visual: @Composable () -> Unit
+) = PillStateLayout(
+    navTitle = "세부정보",
+    onBack = onBack,
+    title = title,
+    description = description,
+    primary = retry?.let { PillStateAction("다시 시도", it) },
+    secondary = PillStateAction("뒤로", onBack),
+    modifier = modifier,
+    visual = visual
+)
 
 @Composable
 private fun DetailLoading() {
@@ -137,6 +148,9 @@ private fun DetailLoading() {
 @Composable
 private fun DetailBody(detail: PillDetail) {
     var tab by rememberSaveable { mutableStateOf(DocType.EFFECT) }
+    // 주의사항에서 펼친 항목 — 탭을 오가도 남게 여기 둔다. 처음엔 모두 접는다(spec §세부정보 「기본 접힘」;
+    // 정본 ⑩-d 는 펼친 모양을 보이려고 첫 항목을 열어 그렸다).
+    var openCaution by rememberSaveable { mutableIntStateOf(NONE_OPEN) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         DetailSummary(detail)
@@ -151,7 +165,7 @@ private fun DetailBody(detail: PillDetail) {
                 blocks.isEmpty() -> EmptyDoc()
 
                 // 주의사항만 접어서 보여준다 — 원문이 길어 한 번에 펼치면 찾기 어렵다.
-                tab == DocType.CAUTION -> CautionSections(blocks)
+                tab == DocType.CAUTION -> CautionSections(blocks, openCaution) { openCaution = it }
 
                 else -> blocks.forEach { DocBlock(it) }
             }

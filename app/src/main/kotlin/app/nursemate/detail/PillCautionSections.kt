@@ -17,8 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,7 +45,7 @@ import app.nursemate.core.model.plainText
 private data class CautionSection(val title: String, val body: List<Block>)
 
 @Composable
-internal fun ColumnScope.CautionSections(blocks: List<Block>) {
+internal fun ColumnScope.CautionSections(blocks: List<Block>, openIndex: Int, onOpenChange: (Int) -> Unit) {
     val sections = blocks.toSections()
 
     // 제목 없이 본문만 오는 문서도 있다(폴백 문단 하나). 그때는 접지 않고 그대로 그린다.
@@ -56,15 +54,11 @@ internal fun ColumnScope.CautionSections(blocks: List<Block>) {
         return
     }
 
-    // 한 번에 하나만 펼친다. 여럿을 열어 두면 접어 놓은 뜻이 없어진다.
-    // 처음엔 모두 접는다 — spec §세부정보 「기본 접힘」. 정본 ⑩-d 는 펼친 모양을 보이려고 첫 항목을 열어 그렸다.
-    var openIndex by rememberSaveable { mutableIntStateOf(NONE_OPEN) }
-
     sections.forEachIndexed { index, section ->
         CautionCard(
             title = section.title,
             open = index == openIndex,
-            onToggle = { openIndex = if (openIndex == index) NONE_OPEN else index },
+            onToggle = { onOpenChange(if (openIndex == index) NONE_OPEN else index) },
             body = section.body
         )
     }
@@ -160,8 +154,8 @@ private fun List<Block>.toSections(): List<CautionSection> {
     }
 }
 
-/** 아무 칸도 펼치지 않은 상태. */
-private const val NONE_OPEN = -1
+/** 아무 항목도 펼치지 않았다. */
+internal const val NONE_OPEN = -1
 
 private val CardTitle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 private val CardTitleOpen = CardTitle.copy(fontWeight = FontWeight.Bold)
