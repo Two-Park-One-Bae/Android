@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -75,7 +76,9 @@ fun NmV2ListRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    @DrawableRes icon: Int? = null
+    @DrawableRes icon: Int? = null,
+    iconTint: Color = NmColor.Neutral.C700,
+    titleColor: Color = NmTheme.semanticColors.textPrimary
 ) {
     val colors = NmTheme.semanticColors
     NmV2Surface(
@@ -94,14 +97,14 @@ fun NmV2ListRow(
             if (icon !=
                 null
             ) {
-                Icon(painterResource(icon), null, tint = NmColor.Neutral.C700, modifier = Modifier.size(24.dp))
+                Icon(painterResource(icon), null, tint = iconTint, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 if (subtitle != null) Text(subtitle, style = NmV2Type.rowSubtitle, color = colors.textSecondary)
                 Text(
                     title,
                     style = NmV2Type.rowTitle,
-                    color = colors.textPrimary,
+                    color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -213,11 +216,12 @@ fun NmV2ModalPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, style = NmV2Type.button, color = colors.textPrimary, textAlign = TextAlign.Center)
-        if (message !=
-            null
-        ) {
-            Text(message, style = NmV2Type.cardBody, color = colors.textSecondary, textAlign = TextAlign.Center)
+        // 정본 「Texts」 묶음 — 제목과 본문 사이는 6 이다(판 간격 16 은 글 묶음과 버튼 줄 사이).
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, style = NmV2Type.button, color = colors.textPrimary, textAlign = TextAlign.Center)
+            if (message != null) {
+                Text(message, style = NmV2Type.cardBody, color = colors.textSecondary, textAlign = TextAlign.Center)
+            }
         }
         NmV2ButtonRow {
             if (dismissText != null) {

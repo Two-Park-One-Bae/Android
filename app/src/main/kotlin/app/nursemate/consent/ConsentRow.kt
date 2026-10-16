@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -17,18 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmSemanticColors
-import app.nursemate.core.designsystem.NmSpacing
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.ConsentDefinition
 
 /**
@@ -58,8 +57,14 @@ internal fun ConsentRow(
             .fillMaxWidth()
             // 체크 토글은 행 전체가 받고, '보기'만 따로 가로챈다. 체크박스만 누르게 하면
             // 22dp 과녁이라 손가락으로 맞추기 어렵다.
-            .clickable(enabled = enabled && !locked, onClick = onToggle)
-            .padding(vertical = 14.dp, horizontal = NmSpacing.xs),
+            // `toggleable` 이라야 낭독기가 체크 상태까지 읽는다. 굳은 필수 항목은 「체크됨 · 사용 중지됨」으로 읽힌다.
+            .toggleable(
+                value = checked || locked,
+                enabled = enabled && !locked,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() }
+            )
+            .padding(vertical = 14.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -90,14 +95,14 @@ internal fun ConsentRow(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(NmRadius.sm))
-                .clickable(enabled = enabled, onClick = onOpenPolicy)
-                .padding(horizontal = NmSpacing.xs, vertical = 2.dp),
+                .clickable(enabled = enabled, role = Role.Button, onClick = onOpenPolicy)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(text = "보기", style = ViewLabel, color = colors.textSecondary)
             Icon(
-                painter = painterResource(DsR.drawable.nm_ic_chevron_right),
+                painter = painterResource(NmSymbols.ChevronRight),
                 contentDescription = null,
                 tint = colors.textTertiary,
                 modifier = Modifier.size(16.dp)
@@ -137,7 +142,7 @@ internal fun NmConsentCheckBox(
         // 미체크 상태에서는 아예 그리지 않는다. 체크할 때 아이콘이 나타나는 것이 정본이다.
         if (checked) {
             Icon(
-                painter = painterResource(R.drawable.nm_ic_check),
+                painter = painterResource(NmSymbols.Check),
                 contentDescription = null,
                 tint = NmColor.Neutral.C0,
                 modifier = Modifier.size(mark)
@@ -146,7 +151,10 @@ internal fun NmConsentCheckBox(
     }
 }
 
-// 정본 스케일에 없는 크기다. 두 화면이 같은 값을 쓰도록 여기 둔다.
-private val Badge = NmTypography.caption.copy(fontWeight = FontWeight.SemiBold)
-private val ItemLabel = NmTypography.bodyLarge.copy(fontSize = 15.sp)
-private val ViewLabel = NmTypography.body.copy(fontSize = 13.sp)
+// 정본 — 꼬리표 12/600 · 항목명 15/400 · 보기 13/400.
+private val Badge = NmV2Type.groupLabel
+private val ItemLabel = NmV2Type.field
+private val ViewLabel = NmV2Type.cardBody
+
+/** 약관을 못 불러왔을 때 안내 — 정본 14/400. 동의 온보딩 · 약관 및 동의가 함께 쓴다. */
+internal val ConsentLoadFailed = NmV2Type.menu.copy(fontWeight = FontWeight.Normal)

@@ -414,6 +414,7 @@ private fun NmNavHost(
                 usage = homeUsage,
                 pillTabLimitReached = pillTabLimitReached,
                 onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface,
                 overlay = confirming?.let { pending ->
                     {
                         SettingsConfirmDialog(
@@ -443,22 +444,32 @@ private fun NmNavHost(
         }
 
         // 설정 / 약관 및 동의 — 선택 동의 철회·재동의(NM-548).
-        // 탭바를 두르지 않는다(정본에 없다) — 설정 탭 위로 밀고 들어왔다가 뒤로가기로 돌아간다.
+        // 설정 탭 안의 화면이라 `설정` 을 고른 탭 바를 두른다(V2.1.0, NM-616). `저장` 은 탭 바 위에 붙는다.
         composable(NmRoute.CONSENT_SETTINGS) {
             val viewModel: ConsentSettingsViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val context = LocalContext.current
             LaunchedEffect(Unit) { viewModel.start(consents) }
-            ConsentSettingsScreen(
-                state = state,
-                onBack = { navController.popBackStack() },
-                onToggle = viewModel::toggle,
-                // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
-                // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
-                onSave = { viewModel.save(onSaved = onUserUpdated) },
-                onOpenPolicy = { context.openPolicy(it.policyUrl) },
-                onRetry = { viewModel.load() }
-            )
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Settings,
+                usage = homeUsage,
+                pillTabLimitReached = pillTabLimitReached,
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface,
+                onSelect = navController::switchTabFromSettingsChild
+            ) {
+                ConsentSettingsScreen(
+                    state = state,
+                    onBack = { navController.popBackStack() },
+                    onToggle = viewModel::toggle,
+                    // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
+                    // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
+                    onSave = { viewModel.save(onSaved = onUserUpdated) },
+                    onOpenPolicy = { context.openPolicy(it.policyUrl) },
+                    onRetry = { viewModel.load() }
+                )
+            }
         }
     }
 }
@@ -521,12 +532,13 @@ private fun TabRoot(
     onDismissPillTabLimit: () -> Unit,
     overlay: (@Composable () -> Unit)? = null,
     background: Color = NmTheme.semanticColors.bgApp,
+    onSelect: (NmTab) -> Unit = { target -> navController.switchTab(target) },
     content: @Composable () -> Unit
 ) {
     NmTabScaffold(
         selected = tab,
         background = background,
-        onSelect = { target -> navController.switchTab(target) },
+        onSelect = onSelect,
         overlay = if (pillTabLimitReached) {
             { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit) }
         } else {
@@ -547,6 +559,14 @@ internal fun NavController.switchTab(tab: NmTab) {
         launchSingleTop = true
         restoreState = true
     }
+}
+
+/**
+ * 설정 탭 안 화면(약관 및 동의)의 탭 전환. 지금 탭(설정)을 다시 누르면 설정 첫 화면으로 돌아간다 —
+ * [switchTab] 은 이 화면까지 저장해 둔 스택을 그대로 되살려 아무 일도 일어나지 않는다.
+ */
+private fun NavController.switchTabFromSettingsChild(target: NmTab) {
+    if (target == NmTab.Settings) popBackStack(NmRoute.SETTINGS, inclusive = false) else switchTab(target)
 }
 
 /** 홈 `새 타이머` → 타이머 탭 프리셋 시트 요청. 타이머 항목의 savedStateHandle 키다. */
