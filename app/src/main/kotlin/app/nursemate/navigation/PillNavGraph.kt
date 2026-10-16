@@ -30,7 +30,6 @@ import app.nursemate.pill.PillAnalysisFailedScreen
 import app.nursemate.pill.PillCandidateViewModel
 import app.nursemate.pill.PillCaptureRoute
 import app.nursemate.pill.PillEditScreen
-import app.nursemate.pill.PillLimitAlert
 import app.nursemate.pill.PillLoadingScreen
 import app.nursemate.pill.PillNotFoundScreen
 import app.nursemate.pill.PillPreviewScreen
@@ -54,26 +53,35 @@ import app.nursemate.pill.toResultUi
  * ## 셸이 아니라 여기 있는 이유
  * 화면이 여섯이라 [NurseMateApp] 쪽 그래프에 그대로 두면 함수 하나가 앱 전체 라우팅을 떠안는다.
  *
- * ## 아직 탭 바를 두르지 않는다
- * V2.1.0 정본은 촬영을 뺀 알약 화면에 모두 탭 바를 둔다(spec §화면 공통). 촬영 ~ 로딩을 V2 로 옮길 때
- * 함께 붙인다 — 그 전까지는 촬영부터 결과까지 전체화면 플로우다.
+ * ## 탭 바 — 촬영만 뺀다
+ * 촬영(뷰파인더)을 뺀 알약 화면은 모두 탭 바를 두른다(spec §화면 공통 · Apple HIG). 뷰파인더는 탭 바에 눌리면
+ * 정사각 가이드가 잘리므로 뺀다. 모달 · 시트 · ⋮ 메뉴는 창이 따로라 탭 바를 덮는다. 수정 화면은 아직 아니다(edit).
+ *
+ * 탭 바로 다른 탭에 나가도 하던 식별은 알약 탭 스택에 남는다 — 로딩 중이면 요청은 ViewModel 에서 계속 돌고,
+ * 알약 탭으로 돌아오면 결과로 넘어간다. 홈 `사진 찍기` 는 그 식별을 덮지 않고 보여 준다([startCaptureFromHome]).
+ *
+ * @param tabbed 화면에 알약 탭 바를 두르는 셸(NmNavHost 의 TabRoot)
  */
-fun NavGraphBuilder.pillNavGraph(navController: NavController, pillTab: @Composable () -> Unit) {
+fun NavGraphBuilder.pillNavGraph(
+    navController: NavController,
+    tabbed: @Composable (@Composable () -> Unit) -> Unit,
+    pillTab: @Composable () -> Unit
+) {
     navigation(startDestination = NmRoute.PILL_TAB, route = NmRoute.PILL_GRAPH) {
         // 알약 탭 — 기록 목록. 탭 바 · 한도 팝업이 셸(NmNavHost)에 있어 그리는 일은 셸이 맡는다.
         composable(NmRoute.PILL_TAB) { pillTab() }
-        capture(navController)
+        capture(navController, tabbed)
         edit(navController)
-        detail(navController)
-        preview(navController)
-        loading(navController)
-        result(navController)
-        notFound(navController)
-        failed(navController)
+        detail(navController, tabbed)
+        preview(navController, tabbed)
+        loading(navController, tabbed)
+        result(navController, tabbed)
+        notFound(navController, tabbed)
+        failed(navController, tabbed)
     }
 }
 
-private fun NavGraphBuilder.capture(navController: NavController) = composable(
+private fun NavGraphBuilder.capture(navController: NavController, tabbed: PillTabbed) = composable(
     route = NmRoute.PILL_CAPTURE,
     arguments = listOf(
         navArgument("from") {
@@ -93,7 +101,8 @@ private fun NavGraphBuilder.capture(navController: NavController) = composable(
             navController.navigate(NmRoute.PILL_PREVIEW)
         },
         // 들어온 화면(알약 탭 목록 또는 홈)으로 돌아간다 — spec §재촬영 · 뒤로.
-        onClose = { navController.leavePillScreen(fromHome) }
+        onClose = { navController.leavePillScreen(fromHome) },
+        tabbed = tabbed
     )
 }
 
@@ -133,6 +142,8 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
 
     val index = state.detectedIndexOf(pillId)
 
+    // 수정 화면은 아직 탭 바를 두르지 않는다 — 이미지 비교 뷰어가 화면 안에 그려져 탭 바를 덮지 못한다.
+    // 수정 · 후보 선택을 V2 로 옮길 때(NM-588) 뷰어를 다이얼로그로 바꾸며 함께 두른다.
     PillEditScreen(
         number = (index ?: 0) + 1,
         crop = state.cropOf(index),
@@ -170,7 +181,7 @@ private fun NavGraphBuilder.edit(navController: NavController) = composable(
     )
 }
 
-private fun NavGraphBuilder.detail(navController: NavController) = composable(
+private fun NavGraphBuilder.detail(navController: NavController, tabbed: PillTabbed) = composable(
     route = NmRoute.PILL_DETAIL,
     arguments = listOf(
         navArgument("pillCode") { type = NavType.StringType },
@@ -191,168 +202,197 @@ private fun NavGraphBuilder.detail(navController: NavController) = composable(
     val revoked = entry.arguments?.getBoolean("revoked") == true
     LaunchedEffect(pillCode) { viewModel.load(pillCode, revoked) }
 
-    PillDetailScreen(
-        state = state,
-        onBack = { navController.popBackStack() },
-        onRetry = viewModel::retry
-    )
-}
-
-private fun NavGraphBuilder.preview(navController: NavController) = composable(NmRoute.PILL_PREVIEW) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val usage by viewModel.usage.collectAsStateWithLifecycle()
-    PillPreviewScreen(
-        state = state,
-        usage = usage,
-        onRetake = {
-            viewModel.analyticsSession.buttonTapped(target = "retake", screen = "photo_preview")
-            viewModel.discardPhoto()
-            navController.popBackStack()
-        },
-        onConfirm = { navController.navigate(NmRoute.PILL_LOADING) }
-    )
-}
-
-private fun NavGraphBuilder.loading(navController: NavController) = composable(NmRoute.PILL_LOADING) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { viewModel.startDetection() }
-
-    // 끝나면 결과 화면으로 **갈아탄다**(로딩을 스택에서 뺀다). 그냥 쌓으면 결과에서
-    // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
-    //
-    // 검출 0개는 실패가 아니라 정상 결과라 ⑥으로, 모델·추론이 깨진 것만 ⑦로 간다.
-    // 로딩 화면은 **온디바이스 검출과 서버 속성 추출을 함께** 덮는다(spec §한도 도달 플로우의 B).
-    // 검출만 끝났다고 결과로 보내면 속성 칸이 빈 채로 한 번 그려진다.
-    LaunchedEffect(state.detection, state.attributes) {
-        val destination = when {
-            state.detection == DetectionPhase.Empty -> NmRoute.PILL_NOT_FOUND
-
-            state.detection is DetectionPhase.Failed -> NmRoute.PILL_FAILED
-
-            state.attributes is AttributePhase.Done -> NmRoute.PILL_RESULT
-
-            state.attributes is AttributePhase.Failed -> NmRoute.PILL_FAILED
-
-            // 한도 도달은 화면을 옮기지 않고 이 위에 안내를 덮는다.
-            else -> null
-        }
-        if (destination != null) {
-            // 결과 화면으로 **갈아탄다**(로딩을 스택에서 뺀다). 그냥 쌓으면 결과에서
-            // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
-            navController.navigate(destination) {
-                popUpTo(NmRoute.PILL_LOADING) { inclusive = true }
-            }
-        }
-    }
-
-    PillLoadingScreen(state = state)
-
-    if (state.attributes == AttributePhase.LimitReached) {
-        val usage by viewModel.usage.collectAsStateWithLifecycle()
-        PillLimitAlert(
-            usage = usage,
-            // spec §한도 안내 팝업: 확인 시 현재 화면에 머무른다. 로딩까지 온 사진을 버리고
-            // 홈으로 내보내지 않는다 — 자정에 한도가 풀리면 같은 사진으로 바로 재시도할 수 있다.
-            onConfirm = { navController.popBackStack(NmRoute.PILL_PREVIEW, inclusive = false) }
+    tabbed {
+        PillDetailScreen(
+            state = state,
+            onBack = { navController.popBackStack() },
+            onRetry = viewModel::retry
         )
     }
 }
 
-private fun NavGraphBuilder.result(navController: NavController) = composable(NmRoute.PILL_RESULT) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val fromHome = remember(entry) { navController.pillFlowFromHome() }
+private fun NavGraphBuilder.preview(navController: NavController, tabbed: PillTabbed) =
+    composable(NmRoute.PILL_PREVIEW) { entry ->
+        val viewModel = entry.pillViewModel(navController)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val usage by viewModel.usage.collectAsStateWithLifecycle()
+        tabbed {
+            PillPreviewScreen(
+                state = state,
+                usage = usage,
+                onRetake = {
+                    viewModel.analyticsSession.buttonTapped(target = "retake", screen = "photo_preview")
+                    viewModel.discardPhoto()
+                    navController.popBackStack()
+                },
+                onConfirm = {
+                    when {
+                        // 한도 0 이면 요청 없이 이 화면 위에 안내한다(spec §세션 중 소진 방어 · 정본 ②-a).
+                        viewModel.limit.blocked -> viewModel.limit.show()
 
-    // 중도이탈 경과시간의 기준점. 여기까지 와야 "식별 세션"이다.
-    LaunchedEffect(Unit) { viewModel.analyticsSession.resultShown() }
-
-    // 남겼으면 들어온 화면으로 — 알약 탭이면 방금 남긴 기록이 목록 맨 위에 보인다(spec §완료 · 공유).
-    LaunchedEffect(state.save) {
-        if (state.save == HistorySave.Saved) {
-            viewModel.analyticsSession.completed(state.identificationSummary())
-            navController.exitPillFlow(viewModel, fromHome)
+                        else -> {
+                            // 한 번 돌았던 사진이면(실패 · 한도로 돌아옴) 다시 돌린다. 검출이 끝났으면 서버 요청만 다시 한다.
+                            if (state.detection != DetectionPhase.Idle) viewModel.retryDetection()
+                            navController.navigate(NmRoute.PILL_LOADING)
+                        }
+                    }
+                },
+                limitReached = state.attributes == AttributePhase.LimitReached,
+                onDismissLimit = viewModel.limit::dismiss
+            )
         }
     }
 
-    PillResultScreen(
-        ui = state.toResultUi(),
-        save = state.save,
-        onExit = {
-            viewModel.analyticsSession.sessionExited(state.identificationSummary())
-            navController.exitPillFlow(viewModel, fromHome)
-        },
-        onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
-        onRemovePill = viewModel.corrections::removePill,
-        // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
-        onAddPill = {
-            viewModel.analyticsSession.buttonTapped(target = "add_pill", screen = "identify_result")
-            navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId()))
-        },
-        onDetail = { candidate ->
-            viewModel.analyticsSession.buttonTapped(target = "pill_detail", screen = "identify_result")
-            navController.navigate(
-                NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+private fun NavGraphBuilder.loading(navController: NavController, tabbed: PillTabbed) =
+    composable(NmRoute.PILL_LOADING) { entry ->
+        val viewModel = entry.pillViewModel(navController)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+
+        LaunchedEffect(Unit) { viewModel.startDetection() }
+
+        // 끝나면 결과 화면으로 **갈아탄다**(로딩을 스택에서 뺀다). 그냥 쌓으면 결과에서
+        // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
+        //
+        // 검출 0개는 실패가 아니라 정상 결과라 ⑥으로, 모델·추론이 깨진 것만 ⑦로 간다.
+        // 로딩 화면은 **온디바이스 검출과 서버 속성 추출을 함께** 덮는다(spec §한도 도달 플로우의 B).
+        // 검출만 끝났다고 결과로 보내면 속성 칸이 빈 채로 한 번 그려진다.
+        LaunchedEffect(state.detection, state.attributes) {
+            val destination = when {
+                state.detection == DetectionPhase.Empty -> NmRoute.PILL_NOT_FOUND
+
+                state.detection is DetectionPhase.Failed -> NmRoute.PILL_FAILED
+
+                state.attributes is AttributePhase.Done -> NmRoute.PILL_RESULT
+
+                state.attributes is AttributePhase.Failed -> NmRoute.PILL_FAILED
+
+                // 한도 도달은 화면을 옮기지 않고 이 위에 안내를 덮는다.
+                else -> null
+            }
+            if (destination != null) {
+                // 결과 화면으로 **갈아탄다**(로딩을 스택에서 뺀다). 그냥 쌓으면 결과에서
+                // 뒤로 갔을 때 로딩으로 돌아가 추론이 다시 돈다.
+                navController.navigate(destination) {
+                    popUpTo(NmRoute.PILL_LOADING) { inclusive = true }
+                }
+            }
+        }
+
+        // 서버가 429 로 막았다 — 미리보기로 돌아가 거기서 안내한다(정본 ②-a). 사진은 그대로 둔다 —
+        // 자정에 한도가 풀리면 같은 사진으로 바로 다시 할 수 있다.
+        LaunchedEffect(state.attributes) {
+            if (state.attributes == AttributePhase.LimitReached) {
+                navController.popBackStack(NmRoute.PILL_PREVIEW, inclusive = false)
+            }
+        }
+
+        tabbed { PillLoadingScreen(state = state) }
+    }
+
+private fun NavGraphBuilder.result(navController: NavController, tabbed: PillTabbed) =
+    composable(NmRoute.PILL_RESULT) { entry ->
+        val viewModel = entry.pillViewModel(navController)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val context = LocalContext.current
+        val fromHome = remember(entry) { navController.pillFlowFromHome() }
+
+        // 중도이탈 경과시간의 기준점. 여기까지 와야 "식별 세션"이다.
+        LaunchedEffect(Unit) { viewModel.analyticsSession.resultShown() }
+
+        // 남겼으면 들어온 화면으로 — 알약 탭이면 방금 남긴 기록이 목록 맨 위에 보인다(spec §완료 · 공유).
+        LaunchedEffect(state.save) {
+            if (state.save == HistorySave.Saved) {
+                viewModel.analyticsSession.completed(state.identificationSummary())
+                navController.exitPillFlow(viewModel, fromHome)
+            }
+        }
+
+        tabbed {
+            PillResultScreen(
+                ui = state.toResultUi(),
+                save = state.save,
+                onExit = {
+                    viewModel.analyticsSession.sessionExited(state.identificationSummary())
+                    navController.exitPillFlow(viewModel, fromHome)
+                },
+                onEditPill = { navController.navigate(NmRoute.pillEdit(it)) },
+                onRemovePill = viewModel.corrections::removePill,
+                // 새 키로 수정 화면을 빈 입력으로 연다. 목록에는 확인을 눌러야 들어간다(spec NM-187).
+                onAddPill = {
+                    viewModel.analyticsSession.buttonTapped(target = "add_pill", screen = "identify_result")
+                    navController.navigate(NmRoute.pillEdit(viewModel.corrections.nextManualPillId()))
+                },
+                onDetail = { candidate ->
+                    viewModel.analyticsSession.buttonTapped(target = "pill_detail", screen = "identify_result")
+                    navController.navigate(
+                        NmRoute.pillDetail(candidate.pillCode, candidate.licenseStatus == LicenseStatus.REVOKED)
+                    )
+                },
+                onCopyText = {
+                    viewModel.analyticsSession.shared(method = "copy_text", contentType = "pill_result")
+                    context.copyPillResult(state.finalPills())
+                },
+                onSavePdf = {
+                    viewModel.analyticsSession.shared(method = "save_pdf", contentType = "pill_result")
+                    context.sharePillResultPdf(state.finalPills())
+                },
+                onSave = viewModel.history::save,
+                // 저장하지 못한 채 끝낸다 — 식별은 마쳤으니 완주로 센다.
+                onLeaveUnsaved = {
+                    viewModel.analyticsSession.completed(state.identificationSummary())
+                    navController.exitPillFlow(viewModel, fromHome)
+                },
+                onDismissSaveFailure = viewModel.history::dismissFailure
             )
-        },
-        onCopyText = {
-            viewModel.analyticsSession.shared(method = "copy_text", contentType = "pill_result")
-            context.copyPillResult(state.finalPills())
-        },
-        onSavePdf = {
-            viewModel.analyticsSession.shared(method = "save_pdf", contentType = "pill_result")
-            context.sharePillResultPdf(state.finalPills())
-        },
-        onSave = viewModel.history::save,
-        // 저장하지 못한 채 끝낸다 — 식별은 마쳤으니 완주로 센다.
-        onLeaveUnsaved = {
-            viewModel.analyticsSession.completed(state.identificationSummary())
-            navController.exitPillFlow(viewModel, fromHome)
-        },
-        onDismissSaveFailure = viewModel.history::dismissFailure
-    )
-}
+        }
+    }
 
-private fun NavGraphBuilder.notFound(navController: NavController) = composable(NmRoute.PILL_NOT_FOUND) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    PillNotFoundScreen(
-        state = state,
-        onRetake = {
-            viewModel.analyticsSession.buttonTapped(target = "retake", screen = "not_found")
-            navController.restartCapture(viewModel)
-        },
-        onGalleryTap = { viewModel.analyticsSession.buttonTapped(target = "gallery", screen = "not_found") },
-        onPickFromGallery = { uri ->
-            viewModel.selectPhoto(uri)
-            // 촬영 화면을 거치지 않고 바로 미리보기로. 결과 없음 화면은 스택에서 뺀다.
-            navController.navigate(NmRoute.PILL_PREVIEW) {
-                popUpTo(NmRoute.PILL_CAPTURE) { inclusive = false }
-            }
-        },
-        // ⑥ 은 결과 화면을 본 적이 없어 세션 이탈로 세지 않는다 — `pill_identify_result`
-        // 의 outcome=empty 가 이미 그 시도를 설명한다.
-        onExit = { navController.exitPillFlow(viewModel, navController.pillFlowFromHome()) }
-    )
-}
+private fun NavGraphBuilder.notFound(navController: NavController, tabbed: PillTabbed) =
+    composable(NmRoute.PILL_NOT_FOUND) { entry ->
+        val viewModel = entry.pillViewModel(navController)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        tabbed {
+            PillNotFoundScreen(
+                state = state,
+                onRetake = {
+                    viewModel.analyticsSession.buttonTapped(target = "retake", screen = "not_found")
+                    navController.restartCapture(viewModel)
+                },
+                onGalleryTap = { viewModel.analyticsSession.buttonTapped(target = "gallery", screen = "not_found") },
+                onPickFromGallery = { uri ->
+                    viewModel.selectPhoto(uri)
+                    // 촬영 화면을 거치지 않고 바로 미리보기로. 결과 없음 화면은 스택에서 뺀다.
+                    navController.navigate(NmRoute.PILL_PREVIEW) {
+                        popUpTo(NmRoute.PILL_CAPTURE) { inclusive = false }
+                    }
+                },
+                // ⑥ 은 결과 화면을 본 적이 없어 세션 이탈로 세지 않는다 — `pill_identify_result`
+                // 의 outcome=empty 가 이미 그 시도를 설명한다.
+                onExit = { navController.exitPillFlow(viewModel, navController.pillFlowFromHome()) }
+            )
+        }
+    }
 
-private fun NavGraphBuilder.failed(navController: NavController) = composable(NmRoute.PILL_FAILED) { entry ->
-    val viewModel = entry.pillViewModel(navController)
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    PillAnalysisFailedScreen(
-        // 검출(모델)과 속성 추출(네트워크) 중 실제로 실패한 쪽의 사유를 보여준다.
-        message = (state.detection as? DetectionPhase.Failed)?.message
-            ?: (state.attributes as? AttributePhase.Failed)?.message,
-        onRetry = {
-            viewModel.retryDetection()
-            navController.navigate(NmRoute.PILL_LOADING) {
-                popUpTo(NmRoute.PILL_FAILED) { inclusive = true }
-            }
-        },
-        // 사진은 살려 둔다 — 미리보기에서 '이 사진 사용'을 다시 누를 수 있어야 한다.
-        onBack = { navController.popBackStack() }
-    )
-}
+private fun NavGraphBuilder.failed(navController: NavController, tabbed: PillTabbed) =
+    composable(NmRoute.PILL_FAILED) { entry ->
+        val viewModel = entry.pillViewModel(navController)
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        tabbed {
+            PillAnalysisFailedScreen(
+                // 검출(모델)과 속성 추출(네트워크) 중 실제로 실패한 쪽의 사유를 보여준다.
+                message = (state.detection as? DetectionPhase.Failed)?.message
+                    ?: (state.attributes as? AttributePhase.Failed)?.message,
+                onRetry = {
+                    viewModel.retryDetection()
+                    navController.navigate(NmRoute.PILL_LOADING) {
+                        popUpTo(NmRoute.PILL_FAILED) { inclusive = true }
+                    }
+                },
+                // 사진은 살려 둔다 — 미리보기에서 '이 사진 사용'을 다시 누를 수 있어야 한다.
+                onBack = { navController.popBackStack() }
+            )
+        }
+    }
+
+/** 화면에 알약 탭 바를 두르는 셸. */
+internal typealias PillTabbed = @Composable (@Composable () -> Unit) -> Unit

@@ -32,16 +32,25 @@ internal fun NavController.restartCapture(viewModel: PillRecognitionViewModel) {
 /**
  * 알약 탭 스택에 띄운 화면(촬영 · 기록 상세)을 닫고 **들어온 화면**으로 돌아간다.
  *
- * 알약 화면은 홈에서 들어와도 알약 탭 스택에 쌓인다. 그래서 홈에서 왔으면 알약 탭을 목록까지 되감은 뒤
- * 홈 탭으로 옮긴다 — 되감지 않으면 알약 탭을 다시 눌렀을 때 그 화면이 복원된다([exitPillFlow] 와 같은 이유).
+ * 알약 화면은 홈에서 들어와도 알약 탭 스택에 쌓인다. 그 **한 화면만** 빼고, 홈에서 왔으면 홈 탭으로 옮긴다 —
+ * 남겨 두면 알약 탭을 다시 눌렀을 때 그 화면이 복원된다. 목록까지 되감지 않는다: 그 아래에 하던 식별이
+ * 있으면(탭 바로 잠깐 나갔던 것) 그대로 남아야 한다.
  */
 internal fun NavController.leavePillScreen(fromHome: Boolean) {
-    if (fromHome) {
-        popBackStack(NmRoute.PILL_TAB, inclusive = false)
-        switchTab(NmTab.Home)
-    } else {
-        popBackStack()
-    }
+    popBackStack()
+    if (fromHome) switchTab(NmTab.Home)
+}
+
+/**
+ * 홈 `사진 찍기` — 알약 탭으로 옮겨 촬영을 연다.
+ *
+ * 하던 식별이 있으면(탭 바로 다른 탭에 나갔다 온 것) **새로 시작하지 않고 그 화면을 보인다.** 위에 촬영을
+ * 쌓으면 플로우가 공유하는 ViewModel 의 사진 · 결과가 새 사진으로 덮여 하던 것이 말없이 사라진다.
+ */
+internal fun NavController.startCaptureFromHome() {
+    switchTab(NmTab.Pill)
+    val inProgress = runCatching { getBackStackEntry(NmRoute.PILL_CAPTURE) }.isSuccess
+    if (!inProgress) navigate(NmRoute.pillCapture(fromHome = true))
 }
 
 /** 이 항목이 홈에서 들어왔는가 — 경로의 `from` 값. */

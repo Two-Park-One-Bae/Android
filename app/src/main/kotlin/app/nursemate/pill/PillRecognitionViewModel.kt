@@ -345,6 +345,9 @@ class PillRecognitionViewModel @Inject constructor(
         }
     }
 
+    /** 미리보기의 한도 안내(spec §세션 중 소진 방어 · 정본 ②-a). */
+    val limit = PillLimitGate(_state, usageHolder)
+
     /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). */
     val history = PillHistorySaving(_state, historyRepository, viewModelScope)
 

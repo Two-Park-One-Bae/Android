@@ -31,38 +31,42 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmV2NavBar
 import app.nursemate.ui.SystemBarIcons
 
 /**
- * 식별 중 — 디자인 `④ 로딩 (식별 중)`.
+ * 식별 중 — 정본 「알약 식별 · 촬영 ~ 로딩 · V2.1.0 (NM-586)」 ④.
  *
  * 제목 없는 Nav Bar / 사진 카드(300, 어둡게 덮음) / 스피너 + 안내 문구.
  *
+ * 정본 ④ 는 내비 바에 뒤로를 그렸지만 두지 않는다 — 아래 이유로 이 화면에서는 나갈 수 없다.
+ *
  * ## 뒤로가기를 막는다
- * 디자인의 Nav Bar 제목이 비어 있고 iOS도 뒤로 버튼을 숨긴다. 지금은 온디바이스 검출만 돌아
- * 되돌아가도 잃을 게 없지만, 서버 속성 추출(`POST /pill-attributes`)이 붙으면 **요청이 이미
- * 나가 식별 횟수가 차감된 뒤**라 중간에 빠져나가면 안 된다. 그때 규칙을 바꾸지 않도록 지금부터
- * 막아 둔다. Android는 시스템 뒤로가 따로 살아 있으므로 [BackHandler] 로도 막는다.
+ * 서버 속성 추출(`POST /pill-attributes`)은 **요청이 나가는 순간 식별 횟수가 차감된다** — 뒤로 빠져나가면
+ * 횟수만 쓰고 결과를 잃는다. iOS 도 뒤로 버튼을 숨긴다. Android는 시스템 뒤로가 따로 살아 있으므로
+ * [BackHandler] 로도 막는다.
+ *
+ * 탭 바로 다른 탭에 가는 것은 막지 않는다 — 그건 버리는 게 아니다. 요청은 ViewModel 에서 계속 돌고, 화면은
+ * 알약 탭 스택에 남아 돌아오면 결과로 넘어간다.
  */
 @Composable
 fun PillLoadingScreen(state: PillUiState, modifier: Modifier = Modifier) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
-    // 검출이 끝날 때까지 나갈 수 없다(위 KDoc 참조).
+    // 뒤로는 나갈 수 없다 — 탭 바로 다른 탭에 가는 것만 된다(위 KDoc 참조).
     BackHandler(enabled = true) { /* 의도적으로 아무것도 하지 않는다 */ }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.bgApp)
+            .background(colors.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        NmNavBar(title = "")
+        NmV2NavBar(title = "")
 
         Column(
             modifier = Modifier
