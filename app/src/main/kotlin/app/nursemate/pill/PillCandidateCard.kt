@@ -6,9 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,11 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
@@ -147,26 +149,12 @@ internal fun PillCandidatePair(
     modifier: Modifier = Modifier,
     gap: Dp = 8.dp
 ) {
-    SubcomposeLayout(modifier.fillMaxWidth()) { constraints ->
-        val gapPx = gap.roundToPx()
-        val cellWidth = (constraints.maxWidth - gapPx) / 2
-        val loose = Constraints(minWidth = cellWidth, maxWidth = cellWidth)
-        val heights = buildList {
-            add(subcompose(Slot.MeasureLeft) { left(Modifier) }.single().measure(loose).height)
-            if (right != null) add(subcompose(Slot.MeasureRight) { right(Modifier) }.single().measure(loose).height)
-        }
-        val height = heights.max()
-        val fixed = Constraints.fixed(cellWidth, height)
-        val placedLeft = subcompose(Slot.Left) { left(Modifier) }.single().measure(fixed)
-        val placedRight = right?.let { subcompose(Slot.Right) { it(Modifier) }.single().measure(fixed) }
-        layout(constraints.maxWidth, height) {
-            placedLeft.place(0, 0)
-            placedRight?.place(cellWidth + gapPx, 0)
-        }
+    // 높이를 짝 중 큰 쪽에 맞춘다 — 각 카드를 한 번만 그리고 고유 높이로 잰다.
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
+        left(Modifier.weight(1f).fillMaxHeight())
+        if (right != null) right(Modifier.weight(1f).fillMaxHeight()) else Spacer(Modifier.weight(1f))
     }
 }
-
-private enum class Slot { MeasureLeft, MeasureRight, Left, Right }
 
 /** 정본 사진 칸 151×78 — CDN 낱알 이미지(약 1.83:1)가 거의 그대로 들어간다. */
 private const val THUMB_RATIO = 151f / 78f

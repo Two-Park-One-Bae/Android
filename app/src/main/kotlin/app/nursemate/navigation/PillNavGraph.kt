@@ -106,6 +106,8 @@ private fun NavGraphBuilder.capture(navController: NavController, tabbed: PillTa
     )
 }
 
+// 화면과 뷰모델 · 지표 · 후보 조회를 잇는 배선이라 한 자리에 둔다 — 쪼개면 같은 값을 여러 곳으로 넘기게 된다.
+@Suppress("LongMethod")
 private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbed) = composable(
     route = NmRoute.PILL_EDIT,
     arguments = listOf(navArgument("pillId") { type = NavType.StringType })
@@ -123,13 +125,19 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
     // 확정 없이 나가는 **동작**에서 이탈을 센다. 화면이 사라지는 것으로 판단하면 안 된다 —
     // 세부정보(⑩)로 들어가도 사라지고, pop 때는 엔트리가 DESTROYED 가 되기 전에 이미
     // 컴포저블이 정리된다([EditTracking.reportExit]).
-    val leave = {
+    // 되돌릴 값 · 고른 후보는 ViewModel 이 쥔다 — 탭 바로 다른 탭에 다녀와도 남아야 한다.
+    remember(pillId) { viewModel.corrections.originalOf(pillId) }
+    var pending by remember(pillId) {
+        mutableStateOf(viewModel.corrections.pendingOf(pillId) ?: state.selections[pillId])
+    }
+    // 뒤로는 취소다 — 고친 것을 버린다(spec §선택). 내비 바 뒤로와 시스템 뒤로가 같은 길을 탄다.
+    val cancel: () -> Unit = {
+        viewModel.corrections.revert(pillId)
+        viewModel.corrections.endEdit(pillId)
         tracking.reportExit(edit)
         navController.popBackStack()
     }
-    BackHandler { leave() }
-    val original = rememberOriginalEdit(state, pillId)
-    var pending by remember(pillId) { mutableStateOf(state.selections[pillId]) }
+    BackHandler { cancel() }
 
     val search = { candidateViewModel.search(edit.conditions, edit.faces) }
     // 조건·각인이 바뀌면 후보를 다시 받는다. 스펙이 "입력마다 재호출(실시간)"이다.
@@ -138,7 +146,9 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
     //
     // ⚠️ **모델값이 아니라 조건을 보낸다** — 모델이 추정한 모양을 보내면 하드 필터가 되어
     //    정답 약이 떨어진다(NM-516). 모델값은 `attributeToken` 으로 정렬에만 쓰인다.
-    LaunchedEffect(edit) { search() }
+    //
+    // 요청에 실리는 값으로만 다시 부른다 — `모름` 처럼 화면에만 남는 값을 바꿔도 요청은 같다.
+    LaunchedEffect(edit.conditions, edit.faces.front.toRequest(), edit.faces.back.toRequest()) { search() }
 
     val index = state.detectedIndexOf(pillId)
 
@@ -156,21 +166,23 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
             },
             faces = edit.faces,
             reading = state.faceReadings[pillId],
-            onFacesChange = {
-                tracking.attrEdited("imprint")
-                viewModel.corrections.updateEdit(pillId, edit.copy(faces = it))
+            onFacesChange = { changed ->
+                // 각인만이 아니다 — 구분선 · 마크도 이 길로 온다. 무엇이 바뀌었는지 여기서 가린다.
+                changed.changesFrom(edit.faces).forEach(tracking::attrEdited)
+                viewModel.corrections.updateEdit(pillId, edit.copy(faces = changed))
             },
             candidates = candidates,
             selected = pending,
-            onSelect = { pending = it },
+            onSelect = {
+                pending = it
+                viewModel.corrections.choose(pillId, it)
+            },
             onConfirm = {
                 confirmEdit(viewModel, tracking, pillId, pending, candidates.candidates)
+                viewModel.corrections.endEdit(pillId)
                 navController.popBackStack()
             },
-            onCancel = {
-                viewModel.corrections.updateEdit(pillId, original)
-                leave()
-            },
+            onCancel = cancel,
             onDetail = { openDetail(navController, tracking, it) },
             onLoadMore = candidateViewModel::loadMore,
             onRetry = search,

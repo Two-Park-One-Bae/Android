@@ -77,7 +77,9 @@ internal fun MarkMenu(input: FaceInput, onSelect: (Boolean?) -> Unit, onDismiss:
     Popup(
         popupPositionProvider = position,
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
+        // 포커스를 주지 않는다 — 포커스를 가진 팝업은 바깥 탭을 먹어 다른 칩을 두 번 눌러야 하고, 각인을 치던
+        // 중이면 포커스를 빼앗아 키보드가 내려가며 친 글자가 조건으로 넘어간다. 외형 메뉴와 같다.
+        properties = PopupProperties(focusable = false)
     ) {
         BackHandler(onBack = onDismiss)
         val shape = RoundedCornerShape(NmRadius.md)

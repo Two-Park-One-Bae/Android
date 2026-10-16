@@ -90,7 +90,8 @@ data class FaceInputs(val front: FaceInput = FaceInput(), val back: FaceInput = 
 /**
  * 온디바이스가 읽은 값을 조건 칸의 **초기값**으로 옮긴다.
  *
- * 뒷면은 사진이 없어 읽을 것이 없다 — 「전체」로 남는다.
+ * 뒷면은 사진이 없어 읽을 것이 없다 — 세 칸 모두 손대지 않음(회색 `입력` · `선택`)으로 남는다. `모름` 이 아니다 —
+ * 앱이 스스로 `모름` 을 채우지 않는다.
  */
 fun FaceReading.toInputs(): FaceInputs = FaceInputs(
     front = FaceInput(

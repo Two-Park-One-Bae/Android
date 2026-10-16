@@ -20,7 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.MultiContentMeasurePolicy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,37 +61,67 @@ internal fun PillCandidateFaceSummary(
     back: PillCandidateFace,
     modifier: Modifier = Modifier
 ) {
-    SubcomposeLayout(
-        // 칸이 그림투성이라 그냥 두면 읽어 줄 것이 하나도 없다. 줄 전체를 한 문장으로 묶는다.
-        modifier.semantics(mergeDescendants = true) {
-            contentDescription = "앞면 ${front.spoken()}, 뒷면 ${back.spoken()}"
-        }
-    ) { constraints ->
-        val oneLine = subcompose(Layout.OneLine) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(GroupGap),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FaceCells("앞", front)
-                Box(Modifier.width(1.dp).height(12.dp).background(NmColor.Neutral.C300))
-                FaceCells("뒤", back)
-            }
-        }.single().measure(Constraints())
-        val placeable = if (oneLine.width <= constraints.maxWidth) {
-            oneLine
-        } else {
-            subcompose(Layout.TwoLines) {
+    Layout(
+        contents = listOf(
+            {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(GroupGap),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FaceCells("앞", front)
+                    Box(Modifier.width(1.dp).height(12.dp).background(NmColor.Neutral.C300))
+                    FaceCells("뒤", back)
+                }
+            },
+            {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     FaceCells("앞", front)
                     FaceCells("뒤", back)
                 }
-            }.single().measure(constraints.copy(minWidth = 0))
-        }
-        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
-    }
+            }
+        ),
+        // 칸이 그림투성이라 그냥 두면 읽어 줄 것이 하나도 없다. 줄 전체를 한 문장으로 묶는다.
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = "앞면 ${front.spoken()}, 뒷면 ${back.spoken()}"
+        },
+        measurePolicy = OneOrTwoLines
+    )
 }
 
-private enum class Layout { OneLine, TwoLines }
+/**
+ * 한 줄을 먼저 재 보고, 넘치면 두 줄을 쓴다. 두 모양을 다 그려 두지만 칸 몇 개라 가볍다.
+ *
+ * 고유 높이도 같은 규칙으로 답한다 — 짝 카드 높이를 맞추는 줄([PillCandidatePair])이 `IntrinsicSize.Min` 으로
+ * 묻는다. 기본값에 맡기면 두 줄 높이를 돌려줘 모든 카드 아래가 비었다.
+ */
+private object OneOrTwoLines : MultiContentMeasurePolicy {
+    override fun MeasureScope.measure(measurables: List<List<Measurable>>, constraints: Constraints): MeasureResult {
+        val (oneLine, twoLines) = measurables
+        val single = oneLine.single().measure(Constraints())
+        val placeable = if (single.width <= constraints.maxWidth) {
+            single
+        } else {
+            twoLines.single().measure(constraints.copy(minWidth = 0))
+        }
+        return layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(
+        measurables: List<List<IntrinsicMeasurable>>,
+        width: Int
+    ): Int = pick(measurables, width).minIntrinsicHeight(width)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(
+        measurables: List<List<IntrinsicMeasurable>>,
+        width: Int
+    ): Int = pick(measurables, width).maxIntrinsicHeight(width)
+
+    private fun pick(measurables: List<List<IntrinsicMeasurable>>, width: Int): IntrinsicMeasurable {
+        val (oneLine, twoLines) = measurables
+        val single = oneLine.single()
+        return if (single.maxIntrinsicWidth(Constraints.Infinity) <= width) single else twoLines.single()
+    }
+}
 
 /** 한 면 — `앞` / `뒤` 글자와 칸들. 칸 사이 3. */
 @Composable
@@ -93,7 +129,12 @@ private fun FaceCells(label: String, face: PillCandidateFace) {
     val colors = NmTheme.semanticColors
     Row(horizontalArrangement = Arrangement.spacedBy(CellGap), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = SideLabel, color = colors.textTertiary)
-        if (face.isEmpty) {
+        // 그릴 칸이 하나도 없으면 「—」. [PillCandidateFace.isEmpty] 와 다르다 — 그쪽은 구분선 「없음」을 빈 것으로
+        // 세지만 여기서는 원판으로 그린다(카탈로그가 없다고 말한 것과 모르는 것은 다르다).
+        val drawable = !face.imprint.isNullOrBlank() ||
+            (face.dividingLine != null && face.dividingLine != DividingLine.UNKNOWN) ||
+            face.hasMark
+        if (!drawable) {
             Text("—", style = NmV2Type.caption, color = colors.textTertiary)
             return@Row
         }

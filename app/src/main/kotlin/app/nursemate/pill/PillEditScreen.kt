@@ -23,10 +23,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,12 +99,9 @@ fun PillEditScreen(
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
 
-    // 어느 메뉴를 열었는지는 화면만의 사정이라 뷰모델에 두지 않는다. 회전해도 남게 Saveable.
-    var open by rememberSaveable { mutableStateOf<AttributePanel?>(null) }
-    LaunchedEffect(open) { onPanelChange(open) }
-
-    // 각인을 치는 중인 면. null 이면 입력 줄이 안 떠 있다(정본 ⑧).
-    var editingSide by remember { mutableStateOf<FaceSide?>(null) }
+    // 외형 메뉴 · 면 메뉴 · 각인 입력 줄 — 한 번에 하나만 연다([EditMenus]).
+    val menus = remember { EditMenus() }
+    LaunchedEffect(menus.open) { onPanelChange(menus.open) }
     // 치는 동안의 **초안**이다. 글자의 주인은 뷰모델([faces])이고, 확인을 눌러야 넘어간다 —
     // 한 글자마다 넘기면 후보가 글자 수만큼 왕복한다. 커서 자리는 기호를 끼워 넣을 때 쓴다.
     var draft by remember { mutableStateOf(TextFieldValue()) }
@@ -122,8 +119,7 @@ fun PillEditScreen(
                 faces.copy(back = change(faces.back))
             }
         )
-        editingSide = null
-        focusManager.clearFocus()
+        menus.stopImprint()
     }
 
     // ⚠️ 포커스만 보고 입력 줄을 띄우면 안 된다. 뒤로 키로 키보드를 내려도 각인 칸은 포커스를 쥔 채라
@@ -132,17 +128,19 @@ fun PillEditScreen(
     // 뒤로 키로 키보드를 내린 것은 「그만 친다」다. 쳐 둔 글자가 있으면 넘기고, 비었으면 그대로 둔다 —
     // 빈 칸을 「없음」으로 읽으면 사용자가 무심코 하드 조건을 건다(spec §각인 입력).
     LaunchedEffect(imeVisible) {
-        val side = editingSide
+        val side = menus.editingSide
         if (!imeVisible && side != null) {
             val typed = draft.text.trim()
             if (typed.isEmpty()) {
-                editingSide = null
-                focusManager.clearFocus()
+                menus.stopImprint()
             } else {
                 applyFace(side) { it.typed(typed) }
             }
         }
     }
+
+    // 입력 줄이 닫히면 각인 칸의 포커스도 놓는다 — 쥔 채로 두면 키보드가 다시 올라온다.
+    LaunchedEffect(menus.editingSide) { if (menus.editingSide == null) focusManager.clearFocus() }
 
     Box(modifier.fillMaxSize().background(colors.surface)) {
         Column(
@@ -170,26 +168,19 @@ fun PillEditScreen(
                         conditions = conditions,
                         faces = faces,
                         auto = !manual && !attribute.failed,
-                        editingSide = editingSide,
-                        open = open,
-                        onToggle = { panel ->
-                            open = panel.takeIf { it != open }
-                            // 외형 메뉴를 열면 각인 줄은 내린다 — 둘이 같이 떠 있으면 키보드가 메뉴를 가린다.
-                            if (open != null) {
-                                editingSide = null
-                                focusManager.clearFocus()
-                            }
-                        },
+                        editingSide = menus.editingSide,
+                        open = menus.open,
+                        faceMenu = menus.faceMenu,
+                        onFaceMenu = menus::face,
+                        onToggle = menus::toggle,
                         // 색만 여러 개를 고른다 — 같은 색을 다시 누르면 뺀다.
                         onColorToggle = { color -> onConditionsChange(conditions.toggled(color)) },
                         onChange = onConditionsChange,
                         onFacesChange = onFacesChange,
                         onEditImprint = { side ->
-                            open = null
-                            val current = if (side == FaceSide.Front) faces.front else faces.back
-                            val value = current.imprint.orEmpty()
+                            val value = (if (side == FaceSide.Front) faces.front else faces.back).imprint.orEmpty()
                             draft = TextFieldValue(value, selection = TextRange(value.length))
-                            editingSide = side
+                            menus.startImprint(side)
                         }
                     )
                 }
@@ -221,9 +212,9 @@ fun PillEditScreen(
             // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이 키보드와
             // 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
             EditBottom(
-                editingSide = editingSide,
+                editingSide = menus.editingSide,
                 draft = draft,
-                original = editingSide?.let { side -> if (side == FaceSide.Front) reading?.imprint else null },
+                original = menus.editingSide?.let { side -> if (side == FaceSide.Front) reading?.imprint else null },
                 selected = selected != null,
                 onDraftChange = { draft = it },
                 onFace = ::applyFace,
@@ -413,4 +404,45 @@ private fun CandidateUiState.headerLabel(): String = when {
     !searched || failed -> "후보"
     truncated -> "후보 ${ids.size}개+"
     else -> "후보 ${ids.size}개"
+}
+
+/**
+ * 수정 화면에서 열려 있는 것 — 외형 메뉴([open]) · 면 메뉴([faceMenu]) · 각인 입력 줄([editingSide]).
+ *
+ * **한 번에 하나만** 연다. 둘이 같이 떠 있으면 메뉴끼리 겹치거나 키보드가 메뉴를 가린다. 하나를 열면 나머지를 닫는
+ * 규칙을 여기 한 곳에 둔다.
+ */
+@Stable
+internal class EditMenus {
+    var open by mutableStateOf<AttributePanel?>(null)
+        private set
+    var faceMenu by mutableStateOf<FaceMenuKey?>(null)
+        private set
+    var editingSide by mutableStateOf<FaceSide?>(null)
+        private set
+
+    /** 외형 메뉴 — 같은 칩을 다시 누르면 닫는다. */
+    fun toggle(panel: AttributePanel) {
+        open = panel.takeIf { it != open }
+        faceMenu = null
+        if (open != null) editingSide = null
+    }
+
+    fun face(key: FaceMenuKey?) {
+        faceMenu = key
+        if (key != null) {
+            open = null
+            editingSide = null
+        }
+    }
+
+    fun startImprint(side: FaceSide) {
+        open = null
+        faceMenu = null
+        editingSide = side
+    }
+
+    fun stopImprint() {
+        editingSide = null
+    }
 }

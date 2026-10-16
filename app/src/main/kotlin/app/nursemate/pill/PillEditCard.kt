@@ -72,6 +72,8 @@ internal fun PillEditCard(
     auto: Boolean,
     editingSide: FaceSide?,
     open: AttributePanel?,
+    faceMenu: FaceMenuKey?,
+    onFaceMenu: (FaceMenuKey?) -> Unit,
     onToggle: (AttributePanel) -> Unit,
     onColorToggle: (PillColor) -> Unit,
     onChange: (PillConditions) -> Unit,
@@ -103,6 +105,8 @@ internal fun PillEditCard(
                     title = "앞면",
                     input = faces.front,
                     editing = editingSide == FaceSide.Front,
+                    menu = faceMenu?.takeIf { it.side == FaceSide.Front }?.menu,
+                    onMenu = { onFaceMenu(it?.let { menu -> FaceMenuKey(FaceSide.Front, menu) }) },
                     onChange = { onFacesChange(faces.copy(front = it)) },
                     onEditImprint = { onEditImprint(FaceSide.Front) },
                     modifier = Modifier.weight(1f)
@@ -111,6 +115,8 @@ internal fun PillEditCard(
                     title = "뒷면",
                     input = faces.back,
                     editing = editingSide == FaceSide.Back,
+                    menu = faceMenu?.takeIf { it.side == FaceSide.Back }?.menu,
+                    onMenu = { onFaceMenu(it?.let { menu -> FaceMenuKey(FaceSide.Back, menu) }) },
                     onChange = { onFacesChange(faces.copy(back = it)) },
                     onEditImprint = { onEditImprint(FaceSide.Back) },
                     modifier = Modifier.weight(1f)
@@ -263,11 +269,12 @@ private fun FacePanel(
     title: String,
     input: FaceInput,
     editing: Boolean,
+    menu: FaceMenu?,
+    onMenu: (FaceMenu?) -> Unit,
     onChange: (FaceInput) -> Unit,
     onEditImprint: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var menu by remember { mutableStateOf<FaceMenu?>(null) }
     Column(
         modifier
             .clip(RoundedCornerShape(NmRadius.md))
@@ -293,11 +300,11 @@ private fun FacePanel(
                     EditChip(
                         certain = input.dividingLine != null,
                         active = menu == FaceMenu.Line,
-                        onClick = { menu = FaceMenu.Line }
+                        onClick = { onMenu(FaceMenu.Line) }
                     ) { ChipText(input.lineText(), input.lineTone()) }
                 }
                 if (menu == FaceMenu.Line) {
-                    AttributeMenuPopup(onDismiss = { menu = null }) {
+                    AttributeMenuPopup(onDismiss = { onMenu(null) }) {
                         DividingLineMenu(
                             selected = input.dividingLine,
                             unknown = input.lineUnknown,
@@ -314,7 +321,7 @@ private fun FacePanel(
                     EditChip(
                         certain = input.hasMark != null,
                         active = menu == FaceMenu.Mark,
-                        onClick = { menu = FaceMenu.Mark }
+                        onClick = { onMenu(FaceMenu.Mark) }
                     ) { ChipText(input.markText(), input.markTone()) }
                 }
                 if (menu == FaceMenu.Mark) {
@@ -322,9 +329,9 @@ private fun FacePanel(
                         input = input,
                         onSelect = {
                             onChange(input.mark(it))
-                            menu = null
+                            onMenu(null)
                         },
-                        onDismiss = { menu = null }
+                        onDismiss = { onMenu(null) }
                     )
                 }
             }
@@ -332,7 +339,11 @@ private fun FacePanel(
     }
 }
 
-private enum class FaceMenu { Line, Mark }
+/** 면 칸의 메뉴 — 구분선 · 마크. 화면이 하나만 열리게 쥔다(외형 메뉴 · 각인 입력 줄과 함께). */
+internal enum class FaceMenu { Line, Mark }
+
+/** 어느 면의 어느 메뉴인가. */
+internal data class FaceMenuKey(val side: FaceSide, val menu: FaceMenu)
 
 /** 사용자가 고른 모양 · 제형 그림 — 확실한 값이라 파랗다. */
 private val CertainGlyph = NmColor.Primary.C600

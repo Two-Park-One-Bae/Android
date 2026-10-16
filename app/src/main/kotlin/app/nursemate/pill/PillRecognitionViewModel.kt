@@ -593,6 +593,51 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
         }
     }
 
+    /**
+     * 수정 화면을 연 동안의 **되돌릴 값**과 **고른 후보**. 화면이 아니라 여기 둔다 — 수정 화면에서 탭 바로 다른 탭에
+     * 다녀오면 화면 상태는 사라지지만 하던 수정은 남아야 한다. 확인 · 취소에서 [endEdit] 로 비운다.
+     */
+    private val originals = mutableMapOf<String, PillEdit?>()
+    private val pendings = mutableMapOf<String, PillCandidate>()
+
+    /**
+     * 수정을 시작할 때 이 알약에 **사용자가 고친 값이 있었는가** — 처음 부를 때 붙잡고 이후에는 그 값을 돌려준다.
+     *
+     * 손대기 전이었으면 null 이다. 그때 화면에 보이던 값을 붙잡으면 안 된다 — 온디바이스 각인 · 마크 판독은
+     * 수정 화면에 들어온 **뒤에** 도착할 수 있어서, 붙잡은 값으로 되돌리면 판독값이 빠진다.
+     */
+    fun originalOf(pillId: String): PillEdit? {
+        if (pillId !in originals) originals[pillId] = state.value.edits[pillId]
+        return originals[pillId]
+    }
+
+    /** 취소 — 수정을 시작할 때로 되돌린다. 손대기 전이었으면 고친 값을 지워 모델값 · 판독값에서 다시 만든다. */
+    fun revert(pillId: String) {
+        val original = originalOf(pillId)
+        state.update {
+            if (original ==
+                null
+            ) {
+                it.copy(edits = it.edits - pillId)
+            } else {
+                it.copy(edits = it.edits + (pillId to original))
+            }
+        }
+    }
+
+    /** 아직 `선택` 을 누르지 않고 고른 후보. */
+    fun pendingOf(pillId: String): PillCandidate? = pendings[pillId]
+
+    fun choose(pillId: String, candidate: PillCandidate) {
+        pendings[pillId] = candidate
+    }
+
+    /** 확인 · 취소 — 붙잡아 둔 값을 놓는다. */
+    fun endEdit(pillId: String) {
+        originals.remove(pillId)
+        pendings.remove(pillId)
+    }
+
     /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다. */
     fun nextManualPillId(): String = manualPillId(manualSequence++)
 
