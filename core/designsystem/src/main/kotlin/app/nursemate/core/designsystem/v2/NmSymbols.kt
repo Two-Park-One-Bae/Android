@@ -3,7 +3,8 @@ package app.nursemate.core.designsystem.v2
 import app.nursemate.core.designsystem.R
 
 /**
- * V2.1.0 아이콘 — Material Symbols Rounded 굵기 600, 58종. 정본은 DESIGN.pen「Icons · V2.1.0」.
+ * V2.1.0 아이콘 — Material Symbols Rounded 굵기 600, 59종. 정본은 DESIGN.pen「Icons · V2.1.0」.
+ * 진동(`vibration`)만 정본에 없다 — Android 만 울림 방식이 셋이라 NM-614 가 더했다.
  *
  * 리소스 이름은 `nm_sym_<심볼 이름>` 이다. 출시된 화면의 lucide 아이콘(`nm_ic_*`)과 섞이지 않게 접두사를 나눴다.
  * SVG 는 Google Fonts 의 `materialsymbolsrounded/<이름>/wght600/24px.svg` 를 그대로 옮겼다(채움 0).
@@ -67,6 +68,7 @@ object NmSymbols {
     val Tune = R.drawable.nm_sym_tune
     val VolumeOff = R.drawable.nm_sym_volume_off
     val VolumeUp = R.drawable.nm_sym_volume_up
+    val Vibration = R.drawable.nm_sym_vibration
     val Warning = R.drawable.nm_sym_warning
     val WifiOff = R.drawable.nm_sym_wifi_off
 }

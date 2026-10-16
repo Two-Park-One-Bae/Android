@@ -3,12 +3,8 @@ package app.nursemate.core.designsystem.v2
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,7 +12,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +22,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmRadius
@@ -59,7 +55,7 @@ enum class NmV2ButtonKind {
 /** 버튼 모서리 12. */
 val NmV2ButtonShape = RoundedCornerShape(NmRadius.md)
 
-private val ButtonPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+internal val ButtonPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
 
 @Composable
 fun NmV2Button(
@@ -72,34 +68,18 @@ fun NmV2Button(
     shape: Shape = NmV2ButtonShape,
     contentPadding: PaddingValues = ButtonPadding
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val look = kind.look(pressed = pressed, enabled = enabled)
-    Row(
-        modifier = modifier
-            .v2Raised(look, shape)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                enabled = enabled,
-                role = Role.Button,
-                onClick = onClick
-            )
-            .padding(contentPadding),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    NmV2RaisedButton(onClick, modifier, kind, enabled, shape = shape, contentPadding = contentPadding) { content ->
         if (icon !=
             null
         ) {
             Icon(
                 painterResource(icon),
                 contentDescription = null,
-                tint = look.content,
+                tint = content,
                 modifier = Modifier.size(18.dp)
             )
         }
-        Text(text, style = NmV2Type.button, color = look.content, textAlign = TextAlign.Center, maxLines = 1)
+        Text(text, style = NmV2Type.button, color = content, textAlign = TextAlign.Center, maxLines = 1)
     }
 }
 
@@ -147,7 +127,8 @@ internal data class RaisedLook(
     val stroke: Color?,
     val shadow: Color?,
     val highlight: Color?,
-    val content: Color
+    val content: Color,
+    val strokeWidth: Dp = 1.dp
 )
 
 @Composable
@@ -244,7 +225,7 @@ internal fun Modifier.v2Raised(look: RaisedLook, shape: Shape): Modifier {
         }
     }
     if (look.highlight != null) m = m.v2InnerShadows(listOf(V2Shadow(look.highlight, y = 1.dp, blur = 0.dp)), shape)
-    if (look.stroke != null) m = m.border(1.dp, look.stroke, shape)
+    if (look.stroke != null) m = m.border(look.strokeWidth, look.stroke, shape)
     return m
 }
 

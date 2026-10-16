@@ -387,7 +387,9 @@ private fun NmNavHost(
                 tab = NmTab.Timer,
                 usage = homeUsage,
                 pillTabLimitReached = pillTabLimitReached,
-                onDismissPillTabLimit = { pillTabLimitReached = false }
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                // V2.1.0 화면 바탕은 흰색이다 — 탭 바 뒤까지 같은 색이어야 경계가 생기지 않는다.
+                background = NmTheme.semanticColors.surface
             ) {
                 TimerListRoute(
                     startPresetId = startPresetId,

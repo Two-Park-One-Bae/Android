@@ -16,8 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.AlertMode
 import app.nursemate.timer.alarm.TimerPermissions
 
@@ -88,7 +88,7 @@ fun TimerGateHost(
         is TimerGate.AlertMode -> {
             var picked by remember { mutableStateOf(AlertMode.SOUND) }
             TimerNoticeSheet(
-                icon = DsR.drawable.nm_ic_bell_ring,
+                icon = NmSymbols.NotificationsActive,
                 iconTint = NmColor.Primary.C600,
                 iconBackground = NmColor.Primary.C50,
                 title = "알람을 어떻게 알릴까요?",
@@ -128,7 +128,7 @@ fun TimerGateHost(
 @Composable
 private fun PermissionSheet(step: PermissionStep, denied: Boolean, onRequest: () -> Unit, onDismiss: () -> Unit) {
     TimerNoticeSheet(
-        icon = if (denied) DsR.drawable.nm_ic_bell_off else DsR.drawable.nm_ic_bell,
+        icon = if (denied) NmSymbols.NotificationsOff else NmSymbols.Notifications,
         iconTint = if (denied) NmColor.Error.C600 else NmColor.Primary.C600,
         iconBackground = if (denied) NmColor.Error.C50 else NmColor.Primary.C50,
         title = step.title(denied),
@@ -172,7 +172,7 @@ internal fun PermissionStep.primaryLabel(): String = if (this == PermissionStep.
 private fun AlertModeNotice() {
     Text(
         text = ALERT_MODE_NOTICE,
-        style = NmTypography.caption.copy(lineHeight = 17.sp),
+        style = NmV2Type.rowSubtitle.copy(lineHeight = 17.sp),
         color = NmTheme.semanticColors.textTertiary,
         textAlign = TextAlign.Center,
         modifier = Modifier.padding(top = 4.dp)

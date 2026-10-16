@@ -115,15 +115,24 @@ enum class NmV2TagTone(val container: Color, val content: Color) {
     Primary(NmColor.Primary.C50, NmColor.Primary.C700)
 }
 
-/** `Tag` — 분류 표시. */
+/**
+ * `Tag` — 분류 표시. [container] 는 바탕이 같은 계열색이라 태그가 묻히는 자리(만료 카드의 살구 면)에서
+ * `neutral-0` 으로 바꿔 쓴다.
+ */
 @Composable
-fun NmV2Tag(label: String, modifier: Modifier = Modifier, tone: NmV2TagTone = NmV2TagTone.Secondary) {
+fun NmV2Tag(
+    label: String,
+    modifier: Modifier = Modifier,
+    tone: NmV2TagTone = NmV2TagTone.Secondary,
+    container: Color = tone.container
+) {
     Text(
         label,
         style = NmV2Type.tag,
         color = tone.content,
+        maxLines = 1,
         modifier = modifier
-            .background(tone.container, RoundedCornerShape(NmRadius.sm))
+            .background(container, RoundedCornerShape(NmRadius.sm))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
 }

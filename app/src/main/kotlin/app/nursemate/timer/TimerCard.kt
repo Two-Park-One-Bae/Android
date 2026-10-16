@@ -1,5 +1,6 @@
 package app.nursemate.timer
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,17 +34,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -51,10 +51,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2ButtonKind
+import app.nursemate.core.designsystem.v2.NmV2Color
+import app.nursemate.core.designsystem.v2.NmV2RaisedButton
+import app.nursemate.core.designsystem.v2.NmV2Surface
+import app.nursemate.core.designsystem.v2.NmV2SurfaceStyle
+import app.nursemate.core.designsystem.v2.NmV2Tag
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.CareTimer
-import app.nursemate.core.model.TimerCategory
 import app.nursemate.core.model.TimerState
 import app.nursemate.core.model.formatDuration
 import app.nursemate.core.model.formatOverdue
@@ -80,164 +85,153 @@ fun TimerCard(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(CardElevation, CardShape, spotColor = ShadowColor, ambientColor = ShadowColor)
-            .clip(CardShape)
-            .background(colors.surface, CardShape)
-            .padding(CardPadding),
-        verticalArrangement = Arrangement.spacedBy(CardGap)
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TopRowGap),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ProgressRing(timer, now)
+    NmV2Surface(NmV2SurfaceStyle.Card, modifier.fillMaxWidth()) {
+        Column(Modifier.padding(CardPadding), verticalArrangement = Arrangement.spacedBy(CardGap)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(TopRowGap),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ProgressRing(timer, now)
 
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 긴 제목이 태그를 밀어내지 않게 한 줄로 말줄임한다.
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 긴 제목이 태그를 밀어내지 않게 한 줄로 말줄임한다.
+                        Text(
+                            text = timer.label,
+                            style = NmV2Type.button,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        NmV2Tag(timer.category.label, tone = timer.category.v2Tone)
+                    }
                     Text(
-                        text = timer.label,
-                        style = LabelStyle,
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        formatDuration(timer.durationSeconds),
+                        style = NmV2Type.rowSubtitle,
+                        color = colors.textTertiary
                     )
-                    CategoryTag(timer.category)
                 }
-                Text(formatDuration(timer.durationSeconds), style = TotalStyle, color = colors.textTertiary)
+
+                // 정본 30 동그라미 볼록. 누르는 영역은 넓히지 않는다 — 카드 오른쪽 끝이라 옆에 잘못 누를
+                // 것이 없고, 넓히면 윗줄 높이가 커져 정본과 어긋난다.
+                NmV2RaisedButton(
+                    onClick = onStop,
+                    modifier = Modifier.size(StopSize),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues()
+                ) {
+                    Icon(
+                        painter = painterResource(NmSymbols.Close),
+                        contentDescription = "정지",
+                        tint = NmColor.Neutral.C500,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
             }
 
-            Box(
-                Modifier
-                    .size(StopSize)
-                    .clip(CircleShape)
-                    .background(NmColor.Neutral.C100, CircleShape)
-                    .clickable(onClick = onStop),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(DsR.drawable.nm_ic_close),
-                    contentDescription = "정지",
-                    tint = NmColor.Neutral.C500,
-                    modifier = Modifier.size(15.dp)
+            if (memoEditing) {
+                MemoField(initial = timer.memo.orEmpty(), onSave = onMemoSave)
+            } else {
+                timer.memo?.takeIf { it.isNotBlank() }?.let { memo ->
+                    Text(memo, style = NmV2Type.rowSubtitle, color = colors.textSecondary)
+                }
+            }
+
+            // [일시정지|재개] [+1분] [메모] — 3등분.
+            //
+            // ⚠️ **[+1분] 은 디자인 정본에 없다.** spec(NM-438 재작성본)이 카드 버튼으로 넣었는데
+            // `타이머 / C1 리스트` 프레임의 Actions 에는 버튼이 둘뿐이다(V2.1.0 정본도 같다). iOS 가 먼저
+            // 3등분(`.fillEqually`)으로 만들고 [+1분]만 아이콘 없이 뒀기에 그대로 맞췄다 — 같은 화면을
+            // 두 플랫폼이 다르게 줄 수는 없어서다. 디자인 정본화 요청 대상이다.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ActionGap)) {
+                val paused = timer.state == TimerState.PAUSED
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = if (paused) NmSymbols.PlayArrow else NmSymbols.Pause,
+                    label = if (paused) "재개" else "일시정지",
+                    emphasized = paused,
+                    onClick = onPauseOrResume
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = null,
+                    label = "+1분",
+                    emphasized = false,
+                    onClick = onExtend
+                )
+                ActionButton(
+                    modifier = Modifier.weight(1f),
+                    icon = NmSymbols.StickyNote2,
+                    label = "메모",
+                    emphasized = false,
+                    onClick = onMemoToggle
                 )
             }
-        }
-
-        if (memoEditing) {
-            MemoField(initial = timer.memo.orEmpty(), onSave = onMemoSave)
-        } else {
-            timer.memo?.takeIf { it.isNotBlank() }?.let { memo ->
-                Text(memo, style = MemoStyle, color = colors.textSecondary)
-            }
-        }
-
-        // [일시정지|재개] [+1분] [메모] — 3등분.
-        //
-        // ⚠️ **[+1분] 은 디자인 정본에 없다.** spec(NM-438 재작성본)이 카드 버튼으로 넣었는데
-        // `타이머 / C1 리스트` 프레임의 Actions 에는 버튼이 둘뿐이다. iOS 가 먼저 3등분
-        // (`.fillEqually`)으로 만들고 [+1분]만 아이콘 없이 뒀기에 그대로 맞췄다 — 같은 화면을
-        // 두 플랫폼이 다르게 줄 수는 없어서다. 디자인 정본화 요청 대상이다.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ActionGap)) {
-            val paused = timer.state == TimerState.PAUSED
-            ActionButton(
-                modifier = Modifier.weight(1f),
-                icon = painterResource(if (paused) DsR.drawable.nm_ic_play else DsR.drawable.nm_ic_pause),
-                label = if (paused) "재개" else "일시정지",
-                emphasized = paused,
-                onClick = onPauseOrResume
-            )
-            ActionButton(
-                modifier = Modifier.weight(1f),
-                icon = null,
-                label = "+1분",
-                emphasized = false,
-                onClick = onExtend
-            )
-            ActionButton(
-                modifier = Modifier.weight(1f),
-                icon = painterResource(DsR.drawable.nm_ic_sticky_note),
-                label = "메모",
-                emphasized = false,
-                onClick = onMemoToggle
-            )
         }
     }
 }
 
 /**
- * 만료 카드 — 정본은 `warning-50` 바탕에 `warning-300` 테두리다.
+ * 만료 카드 — 정본 `Surface Card Caution`(살구 면 `caution-50` · 테두리 `caution-300`).
  *
  * 조작이 [완료] 하나뿐이다. 울리는 중에는 일시정지도 [+1분]도 없다(spec §상태).
+ * [완료] 는 살구 볼록 버튼(`Button Caution`)이다 — 이 자리에만 쓴다(design README).
  */
 @Composable
 fun ExpiredTimerCard(timer: CareTimer, now: Long, onComplete: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(CardShape)
-            .background(NmColor.Warning.C50, CardShape)
-            .border(ExpiredStroke, NmColor.Warning.C300, CardShape)
-            .padding(CardPadding),
-        verticalArrangement = Arrangement.spacedBy(CardGap)
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(DsR.drawable.nm_ic_bell_ring),
-                    contentDescription = null,
-                    tint = NmColor.Warning.C600,
-                    modifier = Modifier.size(20.dp)
-                )
+    NmV2Surface(NmV2SurfaceStyle.CardCaution, modifier.fillMaxWidth()) {
+        Column(Modifier.padding(CardPadding), verticalArrangement = Arrangement.spacedBy(CardGap)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(NmSymbols.NotificationsActive),
+                        contentDescription = null,
+                        tint = NmV2Color.Caution.C600,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = timer.label,
+                        style = NmV2Type.sectionTitle,
+                        color = NmV2Color.Caution.C700,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // 만료 카드의 태그만 배경이 흰색이다 — 살구 바탕에서 계열색 배경이 묻힌다.
+                    NmV2Tag(timer.category.label, tone = timer.category.v2Tone, container = NmColor.Neutral.C0)
+                }
+                // 정본은 `00:00` 고정인데, 놓친 지 얼마나 됐는지를 알 수 없다.
                 Text(
-                    text = timer.label,
-                    style = ExpiredLabelStyle,
-                    color = NmColor.Warning.C900,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
+                    text = formatOverdue(timer.overdueAt(now)),
+                    style = NmV2Type.sectionTitle,
+                    color = NmV2Color.Caution.C600,
+                    maxLines = 1
                 )
-                // 만료 카드의 태그만 배경이 흰색이다 — 경고색 바탕에서 계열색 배경이 묻힌다.
-                CategoryTag(timer.category, background = NmColor.Neutral.C0)
             }
-            // 정본은 `00:00` 고정인데, 놓친 지 얼마나 됐는지를 알 수 없다.
-            Text(
-                text = formatOverdue(timer.overdueAt(now)),
-                style = ExpiredLabelStyle,
-                color = NmColor.Warning.C600,
-                maxLines = 1
-            )
-        }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(CompleteShape)
-                .background(NmColor.Warning.C600, CompleteShape)
-                .clickable(onClick = onComplete)
-                .padding(vertical = 11.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(DsR.drawable.nm_ic_check),
-                contentDescription = null,
-                tint = NmColor.Neutral.C0,
-                modifier = Modifier.size(16.dp)
-            )
-            Text("완료", style = CompleteStyle, color = NmColor.Neutral.C0, modifier = Modifier.padding(start = 6.dp))
+            NmV2RaisedButton(
+                onClick = onComplete,
+                modifier = Modifier.fillMaxWidth(),
+                kind = NmV2ButtonKind.Caution,
+                contentPadding = CompletePadding
+            ) { content ->
+                Icon(
+                    painter = painterResource(NmSymbols.Check),
+                    contentDescription = null,
+                    tint = content,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text("완료", style = NmV2Type.textButton, color = content, maxLines = 1)
+            }
         }
     }
 }
@@ -317,9 +311,9 @@ private fun MemoField(initial: String, onSave: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bringIntoView)
-            .clip(ActionShape)
-            .background(NmColor.Neutral.C50, ActionShape)
-            .border(MemoStroke, NmColor.Primary.C500, ActionShape)
+            .clip(MemoShape)
+            .background(NmColor.Neutral.C50, MemoShape)
+            .border(MemoStroke, NmColor.Primary.C500, MemoShape)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -341,11 +335,11 @@ private fun MemoField(initial: String, onSave: (String) -> Unit) {
                 .size(MemoSaveSize)
                 .clip(CircleShape)
                 .background(NmColor.Primary.C500, CircleShape)
-                .clickable { onSave(value) },
+                .clickable(role = Role.Button) { onSave(value) },
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(DsR.drawable.nm_ic_check),
+                painter = painterResource(NmSymbols.Check),
                 contentDescription = "메모 저장",
                 tint = NmColor.Neutral.C0,
                 modifier = Modifier.size(16.dp)
@@ -354,46 +348,23 @@ private fun MemoField(initial: String, onSave: (String) -> Unit) {
     }
 }
 
-@Composable
-private fun CategoryTag(category: TimerCategory, background: Color = tagBackground(category)) {
-    Text(
-        text = category.label,
-        style = TagStyle,
-        color = tagForeground(category),
-        modifier = Modifier
-            .clip(TagShape)
-            .background(background, TagShape)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
-    )
-}
-
-/** 카드 하단 액션 버튼. [emphasized] 는 재개(primary 계열)를 뜻한다. */
+/**
+ * 카드 아래 버튼 — 볼록 보조 버튼(9 · 아이콘 14 · 13/600). [emphasized] 는 재개다 — 면은 그대로 두고
+ * 글자와 아이콘만 `primary-700` 으로 바꾼다(정본 `재개 버튼`).
+ */
 @Composable
 private fun ActionButton(
-    icon: Painter?,
+    @DrawableRes icon: Int?,
     label: String,
     emphasized: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    val background = if (emphasized) NmColor.Primary.C50 else NmColor.Neutral.C50
-    val stroke = if (emphasized) NmColor.Primary.C300 else colors.border
-    val content = if (emphasized) NmColor.Primary.C700 else colors.textPrimary
-
-    Row(
-        modifier = modifier
-            .clip(ActionShape)
-            .background(background, ActionShape)
-            .border(1.dp, stroke, ActionShape)
-            .clickable(onClick = onClick)
-            .padding(vertical = 9.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    NmV2RaisedButton(onClick = onClick, modifier = modifier, contentPadding = ActionPadding) {
         if (icon != null) {
             Icon(
-                painter = icon,
+                painter = painterResource(icon),
                 contentDescription = null,
                 tint = if (emphasized) NmColor.Primary.C700 else colors.textSecondary,
                 modifier = Modifier.size(14.dp)
@@ -401,24 +372,21 @@ private fun ActionButton(
         }
         Text(
             text = label,
-            style = ActionStyle,
-            color = content,
-            modifier = Modifier.padding(start = if (icon != null) 6.dp else 0.dp)
+            style = NmV2Type.chipConfirmed,
+            color = if (emphasized) NmColor.Primary.C700 else colors.textPrimary,
+            maxLines = 1
         )
     }
 }
 
 // 정본 수치 — `타이머 / C1 리스트`
-private val CardShape = RoundedCornerShape(20.dp)
-private val ActionShape = RoundedCornerShape(10.dp)
-private val CompleteShape = RoundedCornerShape(12.dp)
-private val TagShape = RoundedCornerShape(6.dp)
+private val MemoShape = RoundedCornerShape(10.dp)
 private val CardPadding = 16.dp
 private val CardGap = 12.dp
 private val TopRowGap = 14.dp
 private val ActionGap = 8.dp
-private val CardElevation = 3.dp
-private val ExpiredStroke = 1.5.dp
+private val ActionPadding = PaddingValues(vertical = 9.dp)
+private val CompletePadding = PaddingValues(vertical = 11.dp)
 private val MemoStroke = 1.5.dp
 private val MemoSaveSize = 28.dp
 private val RingSize = 64.dp
@@ -426,21 +394,14 @@ private val RingSize = 64.dp
 /** 정본 `innerRadius: 0.86` → 도넛 두께 = 32dp x 0.14. */
 private val RingStroke = 4.5.dp
 private val StopSize = 30.dp
-private val ShadowColor = Color(0x1E1E293B)
 private const val HOUR_SECONDS = 3600
 private const val FULL_TURN = 360f
 private const val TOP_ANGLE = -90f
 
-private val LabelStyle = NmTypography.body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-private val ExpiredLabelStyle = NmTypography.body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold)
-private val TotalStyle = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
-private val MemoStyle = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
-private val MemoInputStyle = NmTypography.body.copy(fontSize = 14.sp)
-private val TagStyle = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
-private val ActionStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-private val CompleteStyle = NmTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-private val RingText = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
-private val RingTextSmall = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold)
+/** 메모 입력 — 정본 14/400. */
+private val MemoInputStyle = NmV2Type.menu.copy(fontWeight = FontWeight.Normal)
+private val RingText = NmV2Type.chip.copy(fontWeight = FontWeight.Bold)
+private val RingTextSmall = NmV2Type.caption.copy(fontWeight = FontWeight.Bold)
 
 /**
  * 화면이 이미 사라졌으면 조용히 넘어간다.
