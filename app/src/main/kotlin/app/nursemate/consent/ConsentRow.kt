@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
@@ -55,7 +57,13 @@ internal fun ConsentRow(
             .fillMaxWidth()
             // 체크 토글은 행 전체가 받고, '보기'만 따로 가로챈다. 체크박스만 누르게 하면
             // 22dp 과녁이라 손가락으로 맞추기 어렵다.
-            .clickable(enabled = enabled && !locked, role = Role.Checkbox, onClick = onToggle)
+            // `toggleable` 이라야 낭독기가 체크 상태까지 읽는다. 굳은 필수 항목은 「체크됨 · 사용 중지됨」으로 읽힌다.
+            .toggleable(
+                value = checked || locked,
+                enabled = enabled && !locked,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() }
+            )
             .padding(vertical = 14.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -147,3 +155,6 @@ internal fun NmConsentCheckBox(
 private val Badge = NmV2Type.groupLabel
 private val ItemLabel = NmV2Type.field
 private val ViewLabel = NmV2Type.cardBody
+
+/** 약관을 못 불러왔을 때 안내 — 정본 14/400. 동의 온보딩 · 약관 및 동의가 함께 쓴다. */
+internal val ConsentLoadFailed = NmV2Type.menu.copy(fontWeight = FontWeight.Normal)

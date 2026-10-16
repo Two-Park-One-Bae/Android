@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
@@ -25,7 +24,6 @@ import app.nursemate.core.designsystem.v2.NmV2SurfaceStyle
 import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.ConsentDefinition
 import app.nursemate.core.model.ConsentType
-import app.nursemate.ui.SystemBarIcons
 
 /**
  * 설정 / 약관 및 동의 — 디자인 `설정 / 약관 및 동의 — 동의함 · 변경 없음` · `… 선택 해제 · 저장 가능`.
@@ -41,8 +39,8 @@ import app.nursemate.ui.SystemBarIcons
  * 한 번이면 끝난다.
  *
  * ## 탭 바 안이다 (V2.1.0)
- * 설정 탭 안의 화면이라 셸(`NmTabScaffold`)이 탭 바를 두르고 상태 표시줄 · 아래 인셋을 먹는다. 그래서 여기서는
- * 인셋을 다시 받지 않는다 — `저장` 은 탭 바 바로 위에 붙는다.
+ * 설정 탭 안의 화면이라 셸(`NmTabScaffold`)이 탭 바를 두르고 상태 표시줄 · 아래 인셋 · 시스템 바 아이콘을 맡는다.
+ * 그래서 여기서는 다시 받지 않는다 — `저장` 은 탭 바 바로 위에 붙는다.
  */
 @Composable
 fun ConsentSettingsScreen(
@@ -55,8 +53,6 @@ fun ConsentSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    SystemBarIcons(darkIcons = true)
-
     Column(modifier = modifier.fillMaxSize()) {
         NmV2NavBar(title = "약관 및 동의", onBack = onBack)
 
@@ -76,7 +72,7 @@ fun ConsentSettingsScreen(
                 ) {
                     Text(
                         text = state.message ?: "약관을 불러오지 못했어요",
-                        style = NmV2Type.menu.copy(fontWeight = FontWeight.Normal),
+                        style = ConsentLoadFailed,
                         color = colors.textSecondary,
                         textAlign = TextAlign.Center
                     )

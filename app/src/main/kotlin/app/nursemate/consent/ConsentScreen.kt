@@ -3,7 +3,6 @@ package app.nursemate.consent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -34,7 +34,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +44,7 @@ import app.nursemate.core.designsystem.R as DsR
 import app.nursemate.core.designsystem.v2.NmV2ButtonPrimary
 import app.nursemate.core.designsystem.v2.NmV2ButtonSecondary
 import app.nursemate.core.designsystem.v2.NmV2ButtonText
-import app.nursemate.core.designsystem.v2.NmV2ModalOverlay
+import app.nursemate.core.designsystem.v2.NmV2Modal
 import app.nursemate.core.designsystem.v2.NmV2Radius
 import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.ConsentDefinition
@@ -126,18 +125,19 @@ fun ConsentScreen(
         // 안내가 먼저다. 취소 확인과 겹칠 일은 없다 — 안내가 떠 있는 동안은 시트도 뒤로가기도
         // 닿지 않는다(모달이 화면 전체를 덮는다).
         if (showingNotice) {
-            NmV2ModalOverlay(
+            NmV2Modal(
                 title = "약관이 변경되었어요",
                 message = "서비스를 계속 이용하려면 변경된 약관에 다시 동의해 주세요.",
                 confirmText = "확인",
                 // 고를 것이 없는 알림이다 — 「취소」를 두면 동의하지 않고 빠져나가는 길이
-                // 있는 것처럼 읽힌다. iOS 도 확인 하나다.
-                onConfirm = { noticeDismissed = true }
+                // 있는 것처럼 읽힌다. iOS 도 확인 하나다. 뒤로가기 · 바깥 누름도 닫지 않는다.
+                onConfirm = { noticeDismissed = true },
+                onDismissRequest = {}
             )
         }
 
         if (confirmingCancel) {
-            NmV2ModalOverlay(
+            NmV2Modal(
                 title = "로그인 화면으로 돌아갈까요?",
                 message = "동의하지 않으면 이용이 제한돼요",
                 confirmText = "로그아웃",
@@ -145,8 +145,8 @@ fun ConsentScreen(
                     confirmingCancel = false
                     onCancel()
                 },
-                dismissText = "취소",
-                onDismiss = { confirmingCancel = false }
+                onDismissRequest = { confirmingCancel = false },
+                dismissText = "취소"
             )
         }
     }
@@ -200,7 +200,7 @@ private fun Sheet(
             ) {
                 Text(
                     text = state.message ?: "약관을 불러오지 못했어요",
-                    style = NmV2Type.menu.copy(fontWeight = FontWeight.Normal),
+                    style = ConsentLoadFailed,
                     color = colors.textSecondary,
                     textAlign = TextAlign.Center
                 )
@@ -262,7 +262,12 @@ private fun ConsentGroup(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !state.submitting, role = Role.Checkbox, onClick = onToggleAll)
+                .toggleable(
+                    value = allChecked,
+                    enabled = !state.submitting,
+                    role = Role.Checkbox,
+                    onValueChange = { onToggleAll() }
+                )
                 .padding(vertical = 16.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)

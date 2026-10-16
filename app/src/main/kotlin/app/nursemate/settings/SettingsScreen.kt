@@ -19,14 +19,13 @@ import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.designsystem.v2.NmV2ButtonKind
 import app.nursemate.core.designsystem.v2.NmV2ListRow
-import app.nursemate.core.designsystem.v2.NmV2ModalOverlay
+import app.nursemate.core.designsystem.v2.NmV2Modal
 import app.nursemate.core.designsystem.v2.NmV2Surface
 import app.nursemate.core.designsystem.v2.NmV2SurfaceStyle
 import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.AlertMode
 import app.nursemate.timer.ALERT_MODE_NOTICE
 import app.nursemate.timer.AlertModePicker
-import app.nursemate.ui.SystemBarIcons
 
 /**
  * 설정 — 디자인 `설정 — 타이머 섹션 (NM-308)` · `설정 — 약관 및 동의 행 (NM-548)`.
@@ -45,9 +44,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    SystemBarIcons(darkIcons = true)
-
-    // 바탕(흰색)은 탭 셸이 칠한다.
+    // 바탕(흰색) · 시스템 바 아이콘은 탭 셸이 맡는다.
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Text(
@@ -125,29 +122,27 @@ private fun SectionLabel(text: String) =
     Text(text = text, style = NmV2Type.chipConfirmed, color = NmTheme.semanticColors.textSecondary)
 
 /**
- * 설정의 확인 모달 — V2 `Modal`.
- *
- * **화면이 아니라 셸이 그린다.** [SettingsScreen] 안에서 그리면 막이 탭바를 덮지 못해
- * 모달을 띄운 채 탭을 눌러 빠져나갈 수 있다 — `NmTabScaffold` 의 overlay 자리에 넣는다.
+ * 설정의 확인 모달 — V2 `Modal`(창). 창이라 막이 탭 바까지 덮고, 뒤로가기는 「취소」와 같다.
+ * 셸(`NmTabScaffold`)의 overlay 자리에서 띄운다 — 확인 상태를 셸 쪽이 쥐고 있어서다.
  */
 @Composable
 fun SettingsConfirmDialog(confirm: SettingsConfirm, onConfirmed: () -> Unit, onDismiss: () -> Unit) {
     when (confirm) {
-        SettingsConfirm.SignOut -> NmV2ModalOverlay(
+        SettingsConfirm.SignOut -> NmV2Modal(
             title = "로그아웃할까요?",
             confirmText = "로그아웃",
             onConfirm = onConfirmed,
-            dismissText = "취소",
-            onDismiss = onDismiss
+            onDismissRequest = onDismiss,
+            dismissText = "취소"
         )
 
-        SettingsConfirm.Delete -> NmV2ModalOverlay(
+        SettingsConfirm.Delete -> NmV2Modal(
             title = "계정을 삭제할까요?",
             message = "삭제하면 되돌릴 수 없어요",
             confirmText = "삭제",
             onConfirm = onConfirmed,
+            onDismissRequest = onDismiss,
             dismissText = "취소",
-            onDismiss = onDismiss,
             confirmKind = NmV2ButtonKind.Destructive
         )
     }
