@@ -5,6 +5,8 @@ import app.nursemate.core.designsystem.R
 /**
  * V2.1.0 아이콘 — Material Symbols Rounded 굵기 600, 59종. 정본은 DESIGN.pen「Icons · V2.1.0」.
  * 진동(`vibration`)만 정본에 없다 — Android 만 울림 방식이 셋이라 NM-614 가 더했다.
+ * 촬영 화면 넷(`bedtime` · `bedtime` 채움 · `lock` 채움 · `lock_open_right`)도 정본에 없다 — 시스템 카메라 조작을
+ * 정본 개정보다 먼저 옮긴 NM-630 이 더했다. 채움 1 은 이름 끝에 `_fill` 을 붙였다.
  *
  * 리소스 이름은 `nm_sym_<심볼 이름>` 이다. 출시된 화면의 lucide 아이콘(`nm_ic_*`)과 섞이지 않게 접두사를 나눴다.
  * SVG 는 Google Fonts 의 `materialsymbolsrounded/<이름>/wght600/24px.svg` 를 그대로 옮겼다(채움 0).
@@ -15,6 +17,8 @@ object NmSymbols {
     val Add = R.drawable.nm_sym_add
     val AddCircle = R.drawable.nm_sym_add_circle
     val ArrowForward = R.drawable.nm_sym_arrow_forward
+    val Bedtime = R.drawable.nm_sym_bedtime
+    val BedtimeFill = R.drawable.nm_sym_bedtime_fill
     val Bolt = R.drawable.nm_sym_bolt
     val Category = R.drawable.nm_sym_category
     val Check = R.drawable.nm_sym_check
@@ -41,6 +45,8 @@ object NmSymbols {
     val KeyboardArrowDown = R.drawable.nm_sym_keyboard_arrow_down
     val KeyboardArrowUp = R.drawable.nm_sym_keyboard_arrow_up
     val Link = R.drawable.nm_sym_link
+    val LockFill = R.drawable.nm_sym_lock_fill
+    val LockOpenRight = R.drawable.nm_sym_lock_open_right
     val Logout = R.drawable.nm_sym_logout
     val Menu = R.drawable.nm_sym_menu
     val MoreHoriz = R.drawable.nm_sym_more_horiz
