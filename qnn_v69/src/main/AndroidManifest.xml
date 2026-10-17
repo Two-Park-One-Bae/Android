@@ -24,7 +24,6 @@
         <dist:fusing dist:include="true" />
     </dist:module>
 
-    <!-- 세대별 Skel/Stub `.so` 만 싣는다 — 코드가 없다. 표시하지 않으면 릴리스 번들(bundletool)이
-         「dex 가 없는데 hasCode 가 false 가 아니다」로 실패한다. debug 빌드 · CI 는 이 검사를 안 거친다. -->
+    <!-- 코드 없음 — 까닭은 QnnFeatureConventionPlugin KDoc 「세대 모듈은 hasCode="false" 다」. -->
     <application android:hasCode="false" />
 </manifest>
