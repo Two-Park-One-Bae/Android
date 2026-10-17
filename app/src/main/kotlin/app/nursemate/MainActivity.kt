@@ -89,9 +89,10 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
-        // 새로 열렸을 때만 권한다 — 회전 · 복귀 때마다 Play 에 묻지 않는다.
-        if (savedInstanceState == null) {
-            lifecycleScope.launch { inAppUpdater.offerIfDue(updateFlow) }
+        // 사용자가 직접 새로 연 실행에서만 — 회전 · 복귀 때마다 Play 에 묻지 않고, 알람 · 위젯으로 열렸으면
+        // 그 일을 먼저 하게 둔다(업데이트 창이 타이머 위를 덮거나, 설치가 하던 일을 끊으면 안 된다).
+        if (savedInstanceState == null && !openTimerTab.value && startPresetId.value == null) {
+            lifecycleScope.launch { inAppUpdater.onColdStart(updateFlow) }
         }
 
         // 서버가 값을 게시하면 앱이 떠 있는 동안에도 받는다. 보장 장치는 아니다
@@ -140,10 +141,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         lifecycleScope.launch {
             PresetWidgetRefresher.refreshAll(this@MainActivity)
-        }
-        // 다 받아 둔 업데이트는 앱이 뒤로 갈 때 조용히 설치한다. 회전은 「뒤로 감」이 아니다.
-        if (!isChangingConfigurations) {
-            lifecycleScope.launch { inAppUpdater.installIfDownloaded() }
         }
     }
 
