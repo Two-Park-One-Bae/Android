@@ -160,6 +160,7 @@ dependencies {
     // 폰↔워치 동기화(NM-445). WearableListenerService 를 앱이 직접 상속하므로 GMS 도 함께 쓴다.
     implementation(projects.core.datalayer)
     implementation(libs.play.services.wearable)
+    implementation(libs.play.app.update.ktx)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

@@ -21,6 +21,7 @@ wearOngoing = "1.1.0"
 wearTiles = "1.6.2"
 wearProtolayout = "1.4.2"
 playServicesWearable = "20.0.1"
+playAppUpdate = "2.1.0"
 
 # DI / 네트워크 / 직렬화
 hilt = "2.59"
@@ -103,6 +104,8 @@ wear-compose-material3 = { group = "androidx.wear.compose", name = "compose-mate
 wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
 wear-compose-navigation = { group = "androidx.wear.compose", name = "compose-navigation", version.ref = "wearCompose" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+# 인앱 업데이트(유연 모드) — NM-626. ktx 가 코어(app-update)를 끌고 온다.
+play-app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "playAppUpdate" }
 
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }

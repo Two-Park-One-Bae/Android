@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +20,7 @@ import app.nursemate.remoteconfig.RemoteConfigService
 import app.nursemate.timer.alarm.TimerAlarmIntents
 import app.nursemate.timer.widget.PresetWidgetLaunch
 import app.nursemate.timer.widget.PresetWidgetRefresher
+import app.nursemate.update.InAppUpdater
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -29,6 +31,13 @@ class MainActivity : ComponentActivity() {
     /** 강제 업데이트·점검 게이트 (NM-448). */
     @Inject
     lateinit var remoteConfig: RemoteConfigService
+
+    /** 인앱 업데이트 권유 — 유연 모드 (NM-626). */
+    @Inject
+    lateinit var inAppUpdater: InAppUpdater
+
+    /** Play 업데이트 확인 창의 결과. 수락 · 거절 모두 [InAppUpdater] 가 간격으로 다루므로 따로 할 일이 없다. */
+    private val updateFlow = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {}
 
     /**
      * 만료 알람에서 들어왔는가 — spec §만료·알람 "알람 확인·탭 후 랜딩 = C1".
@@ -80,6 +89,11 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
+        // 새로 열렸을 때만 권한다 — 회전 · 복귀 때마다 Play 에 묻지 않는다.
+        if (savedInstanceState == null) {
+            lifecycleScope.launch { inAppUpdater.offerIfDue(updateFlow) }
+        }
+
         // 서버가 값을 게시하면 앱이 떠 있는 동안에도 받는다. 보장 장치는 아니다
         // (`RemoteConfigService.startListening` 주석) — 책임은 아래 onStart 의 refresh 가 진다.
         remoteConfig.startListening()
@@ -126,6 +140,10 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         lifecycleScope.launch {
             PresetWidgetRefresher.refreshAll(this@MainActivity)
+        }
+        // 다 받아 둔 업데이트는 앱이 뒤로 갈 때 조용히 설치한다. 회전은 「뒤로 감」이 아니다.
+        if (!isChangingConfigurations) {
+            lifecycleScope.launch { inAppUpdater.installIfDownloaded() }
         }
     }
 
