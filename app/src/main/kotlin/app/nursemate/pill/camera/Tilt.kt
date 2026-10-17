@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.view.Surface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import app.nursemate.core.designsystem.NmColor
 import kotlin.math.abs
@@ -33,24 +35,25 @@ internal data class Tilt(val x: Float, val y: Float)
 /**
  * 중력 센서로 기울기를 읽는다. 화면이 아래를 보면(뒤집으면) null.
  *
+ * 센서 값은 **기기 축**이다. 화면이 가로로 돌면(태블릿 등) 화면의 좌우 · 위아래와 어긋나므로
+ * 화면 회전만큼 축을 돌려 화면 기준으로 바꾼다(`SensorManager.remapCoordinateSystem` 표와 같다).
+ *
  * 0.5° 단위로 묶어 바뀔 때만 올린다 — 센서는 초당 수십 번 오는데 그대로 올리면 화면이 그만큼 다시 그려져
  * 발열로 돌아온다(초점 거리에서 이미 겪었다).
  */
 @Composable
-internal fun rememberTilt(): Tilt? {
+private fun rememberTilt(): Tilt? {
     val context = LocalContext.current
+    val view = LocalView.current
     var tilt by remember { mutableStateOf<Tilt?>(null) }
     DisposableEffect(Unit) {
         val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor = sm.getDefaultSensor(Sensor.TYPE_GRAVITY)
         val listener = object : SensorEventListener {
             override fun onSensorChanged(e: SensorEvent) {
-                val (gx, gy, gz) = Triple(e.values[0], e.values[1], e.values[2])
-                val next = if (gz <= 0f) {
-                    null
-                } else {
-                    Tilt(deg(gx, gz), deg(gy, gz))
-                }
+                val (gx, gy) = toScreen(e.values[0], e.values[1], view.display?.rotation ?: Surface.ROTATION_0)
+                val gz = e.values[2]
+                val next = if (gz <= 0f) null else Tilt(deg(gx, gz), deg(gy, gz))
                 if (next != tilt) tilt = next
             }
 
@@ -62,6 +65,14 @@ internal fun rememberTilt(): Tilt? {
     return tilt
 }
 
+/** 기기 축(x 오른쪽 · y 위)을 화면 축으로. */
+private fun toScreen(x: Float, y: Float, rotation: Int): Pair<Float, Float> = when (rotation) {
+    Surface.ROTATION_90 -> y to -x
+    Surface.ROTATION_180 -> -x to -y
+    Surface.ROTATION_270 -> -y to x
+    else -> x to y
+}
+
 private fun deg(a: Float, gz: Float): Float = (Math.toDegrees(atan2(a, gz).toDouble()) * 2).roundToInt() / 2f
 
 /**
@@ -71,7 +82,9 @@ private fun deg(a: Float, gz: Float): Float = (Math.toDegrees(atan2(a, gz).toDou
  * **알약은 위에서 내려다 찍어야** 모양 · 크기가 덜 일그러진다 — 기본 카메라보다 이 화면에서 더 쓸모 있다.
  */
 @Composable
-internal fun LevelGuide(tilt: Tilt?) {
+internal fun LevelGuide() {
+    // 기울기는 여기서만 읽는다 — 바깥에서 읽으면 0.5° 바뀔 때마다 촬영 화면 전체가 다시 구성된다(발열).
+    val tilt = rememberTilt()
     val haptic = LocalHapticFeedback.current
     // 바닥과 거의 나란히 들었을 때만 기울기를 쓴다.
     val near = tilt?.takeIf { abs(it.x) < SHOW_DEG && abs(it.y) < SHOW_DEG }

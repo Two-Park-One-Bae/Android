@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,8 +31,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -89,7 +93,6 @@ import app.nursemate.pill.camera.LevelGuide
 import app.nursemate.pill.camera.OutsideMask
 import app.nursemate.pill.camera.PillCamera
 import app.nursemate.pill.camera.PillCameraState
-import app.nursemate.pill.camera.rememberTilt
 import app.nursemate.ui.SystemBarIcons
 import java.util.Locale
 import kotlin.coroutines.cancellation.CancellationException
@@ -184,7 +187,7 @@ fun PillCameraScreen(
         busy = true
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         scope.launch {
-            blink.snapTo(0.7f)
+            blink.snapTo(1f)
             blink.animateTo(0f, tween(220))
         }
         camera.shoot(flashOn) { uri ->
@@ -202,6 +205,9 @@ fun PillCameraScreen(
         modifier
             .fillMaxSize()
             .background(Color.Black)
+            // 위아래는 상태 표시줄을 숨기고 끝까지 그리되(배치는 [CameraLayout]), 가로로 돌았을 때 옆에 오는
+            // 내비 바 · 카메라 구멍은 비켜 선다.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .semantics { paneTitle = "알약 촬영" }
             .focusRequester(keys)
             .focusable()
@@ -228,9 +234,10 @@ fun PillCameraScreen(
 
         Box(previewModifier.clipToBounds().testTag(PREVIEW_TAG)) {
             Grid()
-            LevelGuide(rememberTilt())
+            LevelGuide()
             CameraFocusOverlay(state, camera, previewView)
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = blink.value)))
+            // 깜빡임은 그리기 단계에서만 읽는다 — 구성 단계에서 읽으면 깜빡이는 프레임마다 화면 전체가 다시 구성된다.
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = blink.value }.background(Color.Black.copy(alpha = 0.7f)))
         }
 
         TopIcons(
@@ -241,6 +248,8 @@ fun PillCameraScreen(
             onNight = {
                 if (!busy) {
                     busy = true
+                    // 배율 애니메이션이 새 세션에 옛 목표를 이어 쓰지 않게 먼저 멈춘다 — 다시 묶으면 배율은 1 로 돌아간다.
+                    zoomJob?.cancel()
                     scope.launch {
                         camera.bindOrIgnore(owner, previewView, night = !state.night)
                         busy = false

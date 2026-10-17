@@ -18,12 +18,17 @@ internal fun OutsideMask(layout: CameraLayout) {
         val side = layout.previewSide.toPx()
         val bottom = top + side
         val right = left + side
-        drawRect(Color.Black, Offset.Zero, Size(size.width, top))
-        drawRect(Color.Black, Offset(0f, bottom), Size(size.width, size.height - bottom))
-        drawRect(Color.Black, Offset(0f, top), Size(left, side))
-        drawRect(Color.Black, Offset(right, top), Size(size.width - right, side))
+        // 이 Canvas 는 가로 인셋(옆 내비 바 · 카메라 구멍) 안쪽에 놓인다. SurfaceView 는 그 바깥까지 넘칠 수 있어
+        // 막을 Canvas 경계 너머로 넉넉히 그린다(Canvas 는 자기 경계로 자르지 않는다).
+        val far = OVERSCAN.toPx()
+        drawRect(Color.Black, Offset(-far, -far), Size(size.width + 2 * far, top + far))
+        drawRect(Color.Black, Offset(-far, bottom), Size(size.width + 2 * far, size.height - bottom + far))
+        drawRect(Color.Black, Offset(-far, top), Size(left + far, side))
+        drawRect(Color.Black, Offset(right, top), Size(size.width - right + far, side))
     }
 }
+
+private val OVERSCAN = 200.dp
 
 /** 격자 3×3 — 기본 카메라 「격자선」. */
 @Composable

@@ -15,6 +15,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.MeteringPoint
 import androidx.camera.core.Preview
+import androidx.camera.core.ZoomState
 import androidx.camera.extensions.ExtensionMode
 import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -22,6 +23,7 @@ import androidx.camera.lifecycle.awaitInstance
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LiveData
 import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -89,6 +91,10 @@ class PillCamera(private val context: Context) {
     private var extensions: ExtensionsManager? = null
     private var camera: Camera? = null
     private var capture: ImageCapture? = null
+    private var observedZoom: LiveData<ZoomState>? = null
+
+    /** 탭할 때마다 하나씩 는다. 늦게 끝난(취소된) 옛 탭의 결과가 새 탭 상태를 덮지 않게 가른다. */
+    private var focusGeneration = 0
 
     /**
      * 탭한 뒤 **능동 AF 결과가 올 때까지** 연속 AF 값(PASSIVE_*)을 무시한다.
@@ -127,13 +133,21 @@ class PillCamera(private val context: Context) {
             .build()
 
         cameraProvider.unbindAll()
+        // 옛 카메라는 이미 풀렸다 — 새로 묶다 실패하면 셔터가 풀린 ImageCapture 를 쥔 채 열려 있지 않게 먼저 비운다.
+        camera = null
+        capture = null
+        observedZoom?.removeObservers(owner)
+        observedZoom = null
+        _state.update { it.copy(bound = false) }
         val cam = cameraProvider.bindToLifecycle(owner, selector, preview, shot)
         camera = cam
         capture = shot
         zoomTarget = cam.cameraInfo.zoomState.value?.zoomRatio ?: 1f
-        cam.cameraInfo.zoomState.removeObservers(owner)
-        cam.cameraInfo.zoomState.observe(owner) { z ->
-            _state.update { it.copy(zoom = z.zoomRatio, minZoom = z.minZoomRatio, maxZoom = z.maxZoomRatio) }
+        // 확장(야간) 카메라의 CameraInfo 는 기본 카메라와 다른 객체라, 지울 때는 **관찰했던 그 LiveData** 에서 지운다.
+        observedZoom = cam.cameraInfo.zoomState.also { zoom ->
+            zoom.observe(owner) { z ->
+                _state.update { it.copy(zoom = z.zoomRatio, minZoom = z.minZoomRatio, maxZoom = z.maxZoomRatio) }
+            }
         }
         val exposure = cam.cameraInfo.exposureState
         _state.update {
@@ -156,6 +170,7 @@ class PillCamera(private val context: Context) {
         provider?.unbindAll()
         camera = null
         capture = null
+        observedZoom = null
     }
 
     /**
@@ -207,10 +222,14 @@ class PillCamera(private val context: Context) {
             .apply { if (lock) disableAutoCancel() else setAutoCancelDuration(AUTO_CANCEL_S, TimeUnit.SECONDS) }
             .build()
         setExposure(0)
+        val generation = ++focusGeneration
         awaitingActive = true
         _state.update { it.copy(af = Af.Searching, locked = lock) }
         val future = cam.cameraControl.startFocusAndMetering(action)
         future.addListener({
+            // 빠르게 다시 탭하면 CameraX 가 이 요청을 취소하고, 이 리스너는 새 탭 **뒤에** 돈다.
+            // 그때 awaitingActive 를 풀면 새 요청이 실리기 전 프레임의 「연속 AF 맞음」이 올라온다 — 새 탭 것이 아니면 버린다.
+            if (generation != focusGeneration) return@addListener
             val ok = runCatching { future.get().isFocusSuccessful }.getOrNull()
             // 결과 콜백이 없는 세션(Extensions)에서도 링이 결과를 보이도록 여기서도 적는다.
             awaitingActive = false
