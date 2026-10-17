@@ -23,4 +23,7 @@
         </dist:delivery>
         <dist:fusing dist:include="true" />
     </dist:module>
+
+    <!-- 코드 없음 — 까닭은 QnnFeatureConventionPlugin KDoc 「세대 모듈은 hasCode="false" 다」. -->
+    <application android:hasCode="false" />
 </manifest>

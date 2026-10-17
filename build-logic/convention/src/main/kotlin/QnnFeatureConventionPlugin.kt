@@ -44,6 +44,12 @@ import org.gradle.kotlin.dsl.register
  * 방식이라 artifact 에 새 세대가 생기면 조용히 모든 모듈에 딸려 들어갔다. 지금은 적은 것만
  * 들어간다.
  *
+ * ## 세대 모듈은 `hasCode="false"` 다
+ * `qnn_v##` 는 `.so` 만 실어 dex 가 없다. 매니페스트에 `<application android:hasCode="false" />` 가 없으면
+ * bundletool 이 **릴리스 번들에서만** 실패한다(debug · CI 는 이 검사를 안 거친다 — NM-600 에서 드러났다).
+ * 유니버설 APK 로 모듈을 합쳐도 이 속성은 base 로 넘어가지 않는다(2026-10-17 bundletool 로 확인, 실행 정상).
+ * `qnn_core` 는 dex 가 있어 두지 않는다.
+ *
  * ## 무엇을 버리나
  * - **`libQnnHtpPrepare.so` (80MB)** — 기기에서 모델을 컴파일하는 **컴파일러**. EPContext 를
  *   미리 구워 실으므로 필요 없다

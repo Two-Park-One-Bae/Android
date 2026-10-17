@@ -44,6 +44,7 @@ include(":app")
 include(":wear")
 // 조건부 전달 — Hexagon 세대마다 하나씩. 기기는 자기 세대 모듈 하나만 받는다.
 // 세대를 더할 때는 모듈 디렉터리 · app 의 dynamicFeatures · 기기그룹 셋을 같이 손본다.
+// 새 qnn_v## 매니페스트에는 `<application android:hasCode="false" />` 를 넣는다 — 빠지면 bundleRelease 만 깨진다(NM-600).
 // 세대와 무관한 토대. 세대 모듈들이 이걸 문다.
 include(":qnn_core")
 include(":qnn_v69")
