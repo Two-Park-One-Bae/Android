@@ -75,7 +75,7 @@ class PillRecognitionViewModel @Inject constructor(
     /** 앱 전체가 공유하는 값. 미리보기의 "오늘 남은 횟수"가 이걸 본다. */
     val usage = usageHolder.usage
 
-    /** ONNX 세션은 로드에 수백 ms가 걸린다. 한 번 만들고 플로우 내내 재사용한다. */
+    /** 모델 열기에 1~3초가 걸린다(LiteRT · GPU 셰이더 준비). 한 번 만들고 플로우 내내 재사용한다. */
     private var detector: PillDetector? = null
 
     /**
@@ -302,8 +302,8 @@ class PillRecognitionViewModel @Inject constructor(
      * 찍힌 면의 각인·마크를 읽어 [PillUiState.faceReadings] 에 쌓는다 — NM-485 · NM-515.
      *
      * ## 결과 화면을 막지 않는다
-     * 알약 하나에 2초다(각인 144장 1796 ms + 마크 8장 178 ms, S24 · WebGPU). 셋이면 6초인데,
-     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 두 배 넘게 는다.**
+     * 알약 하나에 약 0.9초다(각인 144장 680 ms + 마크 8장 157 ms, S24 · LiteRT GPU — NM-628). 셋이면 2.6초이고
+     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 그만큼 는다.**
      * 그래서 별도 코루틴으로 띄우고 한 장씩 들어오는 대로 상태에 넣는다.
      *
      * ## 하나씩 넣는다

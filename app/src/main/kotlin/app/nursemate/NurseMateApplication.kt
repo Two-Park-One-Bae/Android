@@ -10,7 +10,6 @@ import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.pill.GpuPolicy
 import app.nursemate.pill.OnDeviceBackendReporter
-import app.nursemate.pill.QnnDeliveryReporter
 import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
@@ -72,9 +71,6 @@ class NurseMateApplication :
     @Inject
     lateinit var onDeviceBackendReporter: OnDeviceBackendReporter
 
-    @Inject
-    lateinit var qnnDeliveryReporter: QnnDeliveryReporter
-
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
@@ -103,9 +99,6 @@ class NurseMateApplication :
         gpuPolicy.install()
         // 어느 가속기로 열렸는지 모델마다 앱 버전당 한 번 보고한다 (NM-628). 모델이 열리기 전에 꽂는다.
         onDeviceBackendReporter.install()
-
-        // 퀄컴 기기가 QNN 모듈을 받았는지 버전마다 한 번 보고한다 (NM-603). 디스크를 보므로 뒤로 미룬다.
-        applicationScope.launch(Dispatchers.IO) { qnnDeliveryReporter.reportOnce() }
 
         // App Check provider 는 **FirebaseApp 초기화 직후 한 번**만 설치한다.
         // 늦게 설치하면 그 사이에 나간 요청이 토큰 없이 간다.

@@ -9,7 +9,7 @@ android {
     /*
      * 계측 테스트 APK 의 ABI 를 하나로 줄이는 탈출구 — **Firebase Test Lab 에 올릴 때만** 쓴다.
      *
-     * OpenCV 와 ONNX Runtime 이 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 267MB 다.
+     * OpenCV 와 LiteRT 가 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 크다.
      * 올리는 데만 한참 걸리는데 Test Lab 실기기는 전부 arm64 다.
      *
      * ```
@@ -26,56 +26,13 @@ android {
      * 테스트 메서드마다 프로세스를 새로 띄운다 (NM-577).
      *
      * 두 가지를 막는다.
-     *  - **세그폴트가 나머지를 날리는 것.** Adreno 에서 각인이 죽으면 그 뒤 EP 를 하나도 못 쟀다.
-     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 119MB 검출 모델을 EP 마다 열면
+     *  - **세그폴트가 나머지를 날리는 것.** GPU 드라이버가 죽으면 그 뒤 테스트를 하나도 못 잰다(ORT 시절 Adreno 각인).
+     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 큰 검출 모델을 여러 번 열면
      *    뒤쪽 테스트가 압박을 받아 메시지도 없이 죽는다(2026-10-13 실측).
      *
      * Test Lab 은 `--use-orchestrator`, 로컬은 이 설정이 같은 일을 한다.
      */
     testOptions.execution = "ANDROIDX_TEST_ORCHESTRATOR"
-
-    /*
-     * QNN 런타임에서 **쓰지 않는 것**을 덜어낸다 — NM-577.
-     *
-     * `qnn-runtime` 이 arm64 비압축 214MB 다. 그중 실제로 필요한 것은 넷뿐이다.
-     *  - `libQnnHtp.so` · `libQnnSystem.so` — 백엔드와 그래프 직렬화
-     *  - `libQnnHtpPrepare.so`(84MB) — **기기에서 ONNX 그래프를 컴파일**할 때만 쓴다.
-     *    `ep.context_file_path` 로 컴파일 결과를 캐시하면 둘째 실행부터는 안 들어가고,
-     *    미리 컴파일한 EPContext 모델을 싣는다면 아예 빼도 된다.
-     *  - `libQnnHtpV##Skel/Stub.so` — HTP 세대별. Skel 은 DSP 쪽에서 돌고 앱이 실어 줘야 한다.
-     *
-     * 덜어내는 것:
-     *  - `libQnnGpu.so`(11.8MB) — QNN 의 OpenCL 백엔드. 우리 GPU 길은 ORT WebGPU 다.
-     *  - `libQnnDsp*.so`(4.3MB) — Hexagon **DSP(v66)**, 스냅드래곤 855 세대. 대상에 없다.
-     *  - `V68` skel — 888 세대. HTP 가 부동소수 연산을 못 받아 우리 모델이 안 돈다(S21 실측).
-     *
-     * 남기는 세대: **V69**(8 Gen 1 · S22) · **V73**(8 Gen 2 · S23) · **V75**(8 Gen 3 · S24) ·
-     * **V79**(8 Elite · S25) · **V81**(8 Elite Gen 5 · S26). 기기의 `htp_arch` 와 안 맞으면 세션
-     * 생성부터 실패하므로 넉넉히 둔다.
-     */
-    /*
-     * `.so` 를 APK **밖으로 풀어** 설치한다 — QNN 이 그걸 요구한다(NM-577).
-     *
-     * AGP 기본은 `useLegacyPackaging=false` 다. 그래도 `dlopen` 은 되는데(ORT 가 그렇게 돈다)
-     * HTP 는 다르다. DSP 쪽 skel(`libQnnHtpV73Skel.so`)은 **cDSP 데몬이 파일 경로로** 연다 —
-     * `base.apk!/lib/arm64-v8a/...` 를 열 수 없어 `errno 2` 로 실패하고, 그러면 QNN EP 가
-     * 노드를 하나도 안 가져가 **전부 CPU 로 돌면서 테스트는 통과한다.**
-     *
-     * ⚠️ **라이브러리 모듈의 packaging 은 이 모듈의 계측 테스트 APK 에만 먹는다.** 운영 AAB 의
-     *    QNN 구성은 `app` 의 같은 설정과 세대별 feature module(`QnnFeatureConventionPlugin` 허용목록)이
-     *    정한다. 운영 용량을 줄이려고 아래 excludes 를 고쳐도 아무것도 안 바뀐다.
-     */
-    packaging.jniLibs.useLegacyPackaging = true
-
-    // 테스트 APK 용 — 쓰지 않는 백엔드와 옛 세대를 덜어 Test Lab 업로드를 줄인다.
-    packaging.jniLibs.excludes += setOf(
-        "**/libQnnGpu.so",
-        "**/libQnnDsp.so",
-        "**/libQnnDspV66Skel.so",
-        "**/libQnnDspV66Stub.so",
-        "**/libQnnHtpV68Skel.so",
-        "**/libQnnHtpV68Stub.so"
-    )
 }
 
 /*
@@ -122,23 +79,6 @@ dependencies {
     implementation(libs.litert)
     implementation(libs.litert.gpu)
 
-    // ⚠️ ONNX Runtime 은 전환 중에만 남는다 — 운영 경로는 더 이상 쓰지 않는다. NM-628 이 함께 걷어낸다.
-    //
-    // 프리빌트 Maven 배포본에 **CPU · WebGPU · NNAPI · XNNPACK** 이 들어 있다. NM-396 스파이크
-    // 때는 WebGPU 를 쓰려면 소스 빌드가 필요했는데 그 뒤 프리빌트에 들어왔다 — 지금은 WebGPU 가
-    // 운영 경로다(`OrtBackend`). EP 별 실측은 같은 KDoc 의 비교표.
-    implementation(libs.onnxruntime.android)
-
-    // 퀄컴 Hexagon NPU(HTP) — **컴파일만 한다.** 실제 `.so` 와 클래스는 조건부 전달 모듈
-    // `:qnn` 이 들고 있고, Play 가 퀄컴 기기에만 설치한다.
-    //
-    // 위 표준 배포본을 그대로 두고 **덧붙는 플러그인 EP** 라서(카탈로그 주석에 근거) base 의
-    // ORT 를 건드리지 않는다 — 그래서 모듈 하나를 더하고 빼는 것으로 갈라진다.
-    //
-    // ⚠️ `compileOnly` 다. 런타임에 없을 수 있으므로 **부르기 전에 [QNN_BUNDLED] 를 본다.**
-    //    그냥 부르면 NoClassDefFoundError 다.
-    compileOnly(libs.onnxruntime.qnn.plugin)
-
     // 각인 OCR 전처리(NM-485) — CLAHE(clip 3.0, 8×8) · morphologyEx(CLOSE) ·
     // connectedComponents · floodFill · warpAffine · resize(INTER_AREA).
     //
@@ -167,13 +107,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
 
-    // 측정 하네스는 QNN 을 **실제로** 돌려야 한다. 운영 경로는 `:qnn` 모듈이 받지만 이
-    // 테스트 APK 는 그 모듈을 못 쓰므로(계측 테스트는 base 만 본다) 여기서 직접 문다.
-    // 운영 APK 에는 들어가지 않는다 — androidTest 구성이다.
-    androidTestImplementation(libs.onnxruntime.qnn.plugin)
-    androidTestImplementation(libs.qnn.runtime)
-
-    // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
+    // 메서드마다 프로세스를 새로 띄운다 — GPU 드라이버가 세그폴트를 내도 나머지 테스트를 끝까지 돈다.
     // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
     androidTestUtil(libs.androidx.test.orchestrator)
 }

@@ -22,12 +22,13 @@ import kotlinx.coroutines.withContext
  * 같은 면의 각인을 읽었으면 마크 유무 임계가 0.80, 못 읽었으면 0.60 이다([MarkPresence]).
  * 순서를 바꾸면 임계가 늘 느슨한 쪽으로 고정돼 **마크 오탐이 하드 필터로 나간다.**
  *
- * ## 알약 하나에 2초가 든다
- * 각인이 144장(1796 ms), 마크가 8장(178 ms)이다 — Galaxy S24 · WebGPU 기준. 셋을 찍으면
- * 6초다. 그래서 **결과 화면을 막지 않는다** — 서버 속성 추출과 나란히 돌고, 늦게 와서
+ * ## 알약 하나에 약 0.9초가 든다
+ * 각인이 144장(680 ms), 마크가 8장(157 ms)이다 — Galaxy S24 · LiteRT GPU 기준(NM-628). 셋을 찍으면
+ * 2.6초다. 그래서 **결과 화면을 막지 않는다** — 서버 속성 추출과 나란히 돌고, 늦게 와서
  * 수정 화면에 얹힌다([PillRecognitionViewModel.readFaces]).
  *
- * 저사양 기기 대기 시간은 아직 안 쟀다(NM-485 「정할 것」 1번 · NM-515 DoD).
+ * 기기별 시간은 ML 실측표(`_handoff/litert-ondevice-migration.md`)에 있다 — 플래그십 8종 각인 0.4~1.2초.
+ * GPU 를 못 쓰는 기기는 CPU 로 1.4~5.0초다. 중급 · 구형은 ML 이 재는 중이다.
  */
 class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) : Closeable {
 
