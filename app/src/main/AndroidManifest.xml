@@ -32,6 +32,15 @@
         tools:node="remove" />
 
     <!--
+        LiteRT AAR 이 「Android NPU Manager」 용으로 병합하는 권한(NM-628). 우리는 NPU 도, 그걸 받는
+        AI Pack(`play:ai-delivery` — `core:vision` 에서 뺐다)도 쓰지 않아 이 권한을 쓰는 서비스가 없다.
+        남겨 두면 Play 가 포그라운드 서비스 용도 신고를 요구한다. **런타임을 올릴 때마다 병합 매니페스트를 다시 본다.**
+    -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
+        tools:node="remove" />
+
+    <!--
         처치 타이머 (NM-441).
 
         spec §만료·알람이 "앱을 완전히 종료한 상태에서도 만료 시각에 알린다"를 타이머의

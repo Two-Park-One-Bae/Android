@@ -76,8 +76,16 @@ dependencies {
     // 앱에 싣는다(Play 서비스 판이 아니다) — ML 이 이 판(2.3.0 CompiledModel)으로 정확도를 쟀고,
     // 버전이 우리 모르게 바뀌지 않아야 기기별 출력 차이를 추적할 수 있다. arm64 약 8.9MB.
     // NPU 런타임(`litert-npu-*`)은 넣지 않는다 — 2.1.0 범위 밖.
-    implementation(libs.litert)
-    implementation(libs.litert.gpu)
+    //
+    // ⚠️ **`play:ai-delivery` 를 뺀다.** `litert-api` 가 Play for On-device AI 의 AI Pack 받기(알파)를 끌고 오고,
+    // 그게 `asset-delivery` → `work-runtime` 을 끌고 온다. 그러면 WorkManager 가 androidx.startup 으로 프로세스
+    // 시작 때 돌다 **release(R8)에서 `WorkDatabase` 생성에 실패해 앱이 바로 죽는다** — PR #21(Glance)과 같은
+    // 결함이다(2026-10-19 에뮬레이터 릴리스 스모크). 덤으로 `FOREGROUND_SERVICE_DATA_SYNC` 권한과 서비스 · 리시버
+    // 여럿이 병합돼 Play 에 포그라운드 서비스 신고까지 요구된다.
+    // 우리는 모델을 assets 에서 파일로 연다 — AI Pack 을 쓰는 클래스는 `deployment.AiPackModelProvider` 하나뿐이고
+    // 부르지 않는다(남는 빈 참조는 `proguard-rules.pro` 의 `-dontwarn`). Play AI Pack 으로 옮길 때 되살린다.
+    implementation(libs.litert) { exclude(group = "com.google.android.play", module = "ai-delivery") }
+    implementation(libs.litert.gpu) { exclude(group = "com.google.android.play", module = "ai-delivery") }
 
     // 각인 OCR 전처리(NM-485) — CLAHE(clip 3.0, 8×8) · morphologyEx(CLOSE) ·
     // connectedComponents · floodFill · warpAffine · resize(INTER_AREA).

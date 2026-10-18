@@ -31,6 +31,11 @@
 # ONNX Runtime 시절 사정(0.2.1~0.2.3 릴리스 100% SIGABRT)은 docs/KNOWN-ISSUES.md ⑩.
 -keep class com.google.ai.edge.litert.** { *; }
 
+# `core:vision` 이 LiteRT 에서 `play:ai-delivery`(AI Pack 받기, 알파)를 뺐다 — 그게 WorkManager 를 끌고 와
+# 릴리스에서 앱이 시작하자마자 죽었다(사정은 core/vision/build.gradle.kts). 그 패키지를 부르는 것은
+# `com.google.ai.edge.litert.deployment.AiPackModelProvider` 하나이고 우리는 쓰지 않는다 — 빈 참조만 넘긴다.
+-dontwarn com.google.android.play.core.aipacks.**
+
 # OpenCV — 각인 OCR 전처리(NM-485). LiteRT 와 **같은 부류의 위험**이다(⑩).
 # 네이티브 쪽이 JVM 으로 값을 돌려줄 때 클래스를 이름으로 찾으므로, R8 이 이름을 바꾸면
 # 빌드는 멀쩡히 성공하고 릴리스에서만 죽는다. Java API 표면이 작아 남겨도 크기 영향이 없다.
