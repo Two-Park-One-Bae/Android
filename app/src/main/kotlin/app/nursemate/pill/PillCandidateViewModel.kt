@@ -55,7 +55,7 @@ data class CandidateUiState(
  * **이전 요청을 취소**하고 짧게 기다렸다 보낸다 — 안 그러면 늦게 도착한 옛 응답이
  * 최신 결과를 덮어쓴다.
  *
- * 후보 조회는 Gemini 를 쓰지 않아 **식별 횟수를 깎지 않는다.** 자주 불러도 된다.
+ * 후보 조회는 식별 횟수 제한 대상이 아니라 **식별 횟수를 깎지 않는다.** 자주 불러도 된다(속성 추출만 깎는다).
  */
 @HiltViewModel
 class PillCandidateViewModel @Inject constructor(private val pillRepository: PillRepository) : ViewModel() {

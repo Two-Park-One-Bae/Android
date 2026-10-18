@@ -230,8 +230,8 @@ class PillRecognitionViewModel @Inject constructor(
 
         val pillIds = result.pills.indices.map(::pillId)
 
-        // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 Gemini 를
-        // 부르면 5~8초씩 기다리고 하루 15회 한도가 오후에 바닥난다. 릴리스에서는 늘 null 이다.
+        // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 속성 추출을 부르면
+        // 회원별 일 15회 한도가 금방 바닥난다. ⚠️ 다른 사진의 값이다(정확도를 보면 안 된다). 릴리스에서는 늘 null 이다.
         attributeCache.load(pillIds)?.let { cached ->
             analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = cached.size)
             _state.update { it.copy(attributes = AttributePhase.Done(cached.associateBy(PillAttribute::pillId))) }
