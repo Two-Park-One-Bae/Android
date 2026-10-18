@@ -24,7 +24,10 @@ import javax.inject.Singleton
  * |---|---|---|
  * | GPU 로 못 열면 CPU | 드라이버가 모델을 거절 | 없음(`LiteRtModel.open` 이 한다) |
  * | **크래시 마커**(여기) | GPU 를 쓰다 프로세스째 죽음 | 그 기기에서 **1회** 죽는다 |
- * | 모델별 CPU 고정(여기) | 돌기는 하는데 답이 틀림 — 첫 실행 자가 점검이 잡는다 | 그 모델만 느리다 |
+ * | 모델별 CPU 고정(여기) | 열리기는 하는데 GPU **실행**이 예외를 던짐 — `LiteRtModel.run` 이 CPU 로 대체하며 알린다 | 그 모델만 느리다 |
+ *
+ * ⚠️ **조용히 틀린 답은 여기서 못 잡는다.** 앱 안 자가 점검은 하지 않기로 했다(2026-10-19 — 유지보수 비용) — 그건
+ * **출시 전 기기별 검증**(ML 공식 세트 · Test Lab 대조 테스트)이 막고, 운영 기기 분포는 `ondevice_backend` 이벤트로 본다.
  *
  * ## 막은 기록은 (앱 버전 · 기기 빌드) 단위다
  * 드라이버는 OS 업데이트로 바뀐다. 한 번 죽은 기기를 영영 CPU 로 두면 고쳐진 뒤에도 느리다. 그래서
@@ -72,7 +75,9 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
         cpuModels = prefs.getStringSet(KEY_CPU_MODELS, emptySet()).orEmpty()
 
         VisionBackend.allowGpu = ::allow
-        VisionBackend.onGpuModelOpened = { markAttempt() }
+        VisionBackend.onGpuUse = { gpuUse(+1) }
+        VisionBackend.onGpuReleased = { gpuUse(-1) }
+        VisionBackend.onGpuRunFailed = ::pinToCpu
 
         Log.i(
             TAG,
@@ -85,10 +90,10 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
     private fun allow(modelFileName: String): Boolean = !blockedByCrash && modelFileName !in cpuModels
 
     /**
-     * 이 모델은 이 기기 · 이 빌드에서 CPU 로만 연다 — 자가 점검에서 GPU 답이 틀렸을 때 부른다.
-     * 다음에 열 때부터 먹는다(이미 열린 모델은 호출부가 닫고 다시 연다).
+     * 이 모델은 이 기기 · 이 빌드에서 CPU 로만 연다 — GPU 실행이 실패했을 때 `LiteRtModel` 이 알린다.
+     * 다음에 열 때부터 먹는다(지금 열린 것은 `LiteRtModel` 이 이미 CPU 로 다시 열었다).
      */
-    fun pinToCpu(modelFileName: String) {
+    private fun pinToCpu(modelFileName: String) {
         cpuModels = cpuModels + modelFileName
         prefs.edit().putStringSet(KEY_CPU_MODELS, cpuModels).apply()
         Log.w(TAG, "$modelFileName 은 이 기기에서 CPU 로 연다")
@@ -97,11 +102,25 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
     /** SoC 모델 이름 — 로그용. `SOC_MODEL` 이 API 31 부터라 그 아래는 `HARDWARE` 로 받는다. */
     private fun soc(): String = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else Build.HARDWARE
 
-    /** 이 프로세스가 GPU 로 모델을 열었다고 적어 둔다. 이미 있으면 건드리지 않는다. */
-    private fun markAttempt() {
-        runCatching { if (!sentinel.exists()) sentinel.writeText(MARK) }
-            .onFailure { Log.w(TAG, "GPU 흔적을 남기지 못했다", it) }
+    /**
+     * 지금 열린(또는 여는 중인) GPU 모델 수. 하나라도 있으면 흔적을 남기고, 0 이 되면 지운다.
+     *
+     * 흔적을 **GPU 를 쓰는 동안만** 두는 이유: 식별을 끝낸 뒤 GPU 와 무관한 네이티브 크래시(OpenCV · SDK 등)가 나도
+     * 흔적이 남아 있으면 GPU 크래시로 잘못 읽고, 그 빌드 내내 전 모델이 CPU 로 돈다. 모델은 식별 플로우가 끝나면 닫힌다.
+     */
+    @Synchronized
+    private fun gpuUse(delta: Int) {
+        gpuOpen = (gpuOpen + delta).coerceAtLeast(0)
+        runCatching {
+            if (gpuOpen > 0) {
+                if (!sentinel.exists()) sentinel.writeText(MARK)
+            } else {
+                sentinel.delete()
+            }
+        }.onFailure { Log.w(TAG, "GPU 흔적을 고치지 못했다", it) }
     }
+
+    private var gpuOpen = 0
 
     /**
      * **직전 프로세스가 네이티브로 죽었고, 그때 GPU 를 쓰고 있었는가.**

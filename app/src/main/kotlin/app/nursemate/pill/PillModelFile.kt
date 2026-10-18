@@ -65,6 +65,14 @@ class PillModelFile @Inject constructor(@param:ApplicationContext private val co
         return target
     }
 
+    /**
+     * 개발용 우회 — 앱 전용 외부 저장소에 파일을 밀어 넣으면 그쪽을 쓴다.
+     * ```
+     * adb push rfdetr_seg_small_f16w.tflite /sdcard/Android/data/app.nursemate.debug/files/
+     * ```
+     * 다른 변환본을 실기기에서 비교할 때 앱을 다시 빌드하지 않아도 된다. 각인은 조각 파일마다 따로 본다.
+     * **디버그 빌드에서만** 본다 — 릴리스에서 외부 파일을 읽으면 남이 바꿔치기할 수 있다.
+     */
     private fun developerOverride(name: String): File? {
         if (!BuildConfig.DEBUG) return null
         return File(context.getExternalFilesDir(null), name).takeIf { it.isFile }

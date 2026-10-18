@@ -131,6 +131,11 @@ class MarkReader(modelFile: File) : Closeable {
         return logits to embedding
     }
 
+    /**
+     * `lo.softmax(-1).numpy().mean(0)` — 방향마다 소프트맥스를 걸고 평균한다.
+     *
+     * ⚠️ **평균 뒤에 소프트맥스를 걸면 안 된다.** 순서가 바뀌면 값이 달라진다.
+     */
     private fun meanProbability(logits: Array<FloatArray>): FloatArray {
         val out = FloatArray(logits[0].size)
         for (row in logits) {

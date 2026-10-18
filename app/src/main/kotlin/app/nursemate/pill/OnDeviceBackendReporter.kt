@@ -14,8 +14,10 @@ import javax.inject.Singleton
 /**
  * 온디바이스 모델이 어느 가속기로 열렸는지 보고한다 — [AnalyticsEvent.OnDeviceBackend] (NM-628).
  *
- * **모델 파일마다 앱 버전당 한 번**이다. 모델은 식별 플로우마다 다시 열릴 수 있는데, 매번 보내면 많이 쓰는
- * 사용자가 비율을 끌고 간다. 기기 하나가 한 표다.
+ * **(모델 파일 · 결과)마다 앱 버전당 한 번**이다. 모델은 식별 플로우마다 다시 열릴 수 있는데, 매번 보내면 많이 쓰는
+ * 사용자가 비율을 끌고 간다. 기기 하나가 한 표다. 결과까지 키에 넣는 이유: 처음엔 GPU(`ok`)로 열렸다가 그 버전에서
+ * 죽어 막히면(`gpu_blocked`) · 실행이 실패하면(`gpu_run_failed`) — **바로 그 신호**가 「같은 버전엔 이미 보냈다」로
+ * 빠지면 안 된다.
  *
  * GPU 열기 실패가 늘면 그 칩을 ML 측정 목록에 올린다 — 앱 안 자가 점검 대신 **출시 전 기기별 검증**으로
  * 막기로 했고(2026-10-19 결정), 이 이벤트가 어느 기기를 재야 하는지 알려 준다.
@@ -35,7 +37,7 @@ class OnDeviceBackendReporter @Inject constructor(
 
     /** 모델을 여는 스레드에서 불린다 — 가볍게 끝낸다. */
     private fun report(modelFileName: String, outcome: OpenOutcome) {
-        val key = KEY_PREFIX + modelFileName
+        val key = KEY_PREFIX + modelFileName + "|" + outcome.label
         if (prefs.getInt(key, 0) == BuildConfig.VERSION_CODE) return
         analytics.track(event(modelFileName, outcome, soc()))
         prefs.edit().putInt(key, BuildConfig.VERSION_CODE).apply()

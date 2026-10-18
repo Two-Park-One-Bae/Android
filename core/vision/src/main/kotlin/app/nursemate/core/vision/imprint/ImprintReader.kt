@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -142,18 +143,7 @@ class ImprintReader(parts: List<File>) : Closeable {
      * @return `[시간][후보][글자]` — ONNX 시절과 같은 시간축 먼저. p5 출력 `[T,24,37]` 을 후보 자리에 꽂는다.
      */
     private fun runPipeline(): Array<Array<FloatArray>> {
-        val chunks = (0 until ImprintPreprocess.SAMPLES / CHUNK).map { c ->
-            val image = input.copyOfRange(c * CHUNK * PLANE, (c + 1) * CHUNK * PLANE)
-            // p2 만 입력이 둘(크롭 · 제어점)이고 나머지는 앞 조각 출력 하나를 받는다.
-            var flow = CompletableFuture.supplyAsync({ models[0].run(image)[0] }, lanes[0])
-                .thenApplyAsync({ points -> models[1].run(image, points)[0] }, lanes[1])
-            for (i in 2 until models.size) {
-                flow = flow.thenApplyAsync({ x -> models[i].run(x)[0] }, lanes[i])
-            }
-            flow
-        }
-        val outs = chunks.map { it.awaitUnwrapped() }
-
+        val outs = if (models.any { it.onGpu }) runOnLanes() else runInOrder()
         val steps = outs[0].size / (CHUNK * CLASSES)
         return Array(steps) { t ->
             Array(ImprintPreprocess.SAMPLES) { n ->
@@ -162,6 +152,36 @@ class ImprintReader(parts: List<File>) : Closeable {
             }
         }
     }
+
+    /** 묶음이 조각 전용 스레드를 차례로 흐른다(클래스 KDoc). p2 만 입력이 둘(크롭 · 제어점)이다. */
+    private fun runOnLanes(): List<FloatArray> {
+        val chunks = (0 until ImprintPreprocess.SAMPLES / CHUNK).map { c ->
+            val image = chunkOf(c)
+            var flow = CompletableFuture.supplyAsync({ models[0].run(image)[0] }, lanes[0])
+                .thenApplyAsync({ points -> models[1].run(image, points)[0] }, lanes[1])
+            for (i in 2 until models.size) {
+                flow = flow.thenApplyAsync({ x -> models[i].run(x)[0] }, lanes[i])
+            }
+            flow
+        }
+        // ⚠️ 하나가 실패해도 **나머지가 다 끝날 때까지** 기다린 뒤 던진다. 먼저 던지면 남은 묶음이 조각 스레드에서
+        //    계속 돌아, 다음 판독 · close() 와 겹쳐 같은 모델을 건드린다.
+        chunks.forEach { it.handle { _, _ -> }.join() }
+        return chunks.map { it.awaitUnwrapped() }
+    }
+
+    /**
+     * 다섯 조각이 **모두 CPU** 면 겹쳐 돌리지 않고 이 스레드에서 차례로 돈다 — 조각마다 4스레드라 겹치면 최대 20개가
+     * 코어를 나눠 써 리틀코어로 넘친다(GPU 가 막힌 기기의 경로다).
+     */
+    private fun runInOrder(): List<FloatArray> = (0 until ImprintPreprocess.SAMPLES / CHUNK).map { c ->
+        val image = chunkOf(c)
+        var x = models[1].run(image, models[0].run(image)[0])[0]
+        for (i in 2 until models.size) x = models[i].run(x)[0]
+        x
+    }
+
+    private fun chunkOf(c: Int): FloatArray = input.copyOfRange(c * CHUNK * PLANE, (c + 1) * CHUNK * PLANE)
 
     /**
      * 후보 144개를 각각 풀어 `best_pair` 점수가 가장 높은 것을 고른다.
@@ -194,9 +214,19 @@ class ImprintReader(parts: List<File>) : Closeable {
         )
     }
 
+    /**
+     * 조각 스레드가 멈출 때까지 기다린 뒤 모델을 닫는다 — 아직 도는 묶음이 닫힌 네이티브 모델을 건드리면 SIGSEGV 고,
+     * 그 프로세스는 GPU 를 열었으니 GPU 크래시로 잘못 판정된다.
+     *
+     * 기다림은 **별도 스레드**에서 한다. 이 메서드는 화면을 떠날 때 메인 스레드(`onCleared`)에서 불려, 판독 중이면
+     * 몇 초를 막아 ANR 이 날 수 있다.
+     */
     override fun close() {
         lanes.forEach { it.shutdown() }
-        models.forEach { it.close() }
+        Thread({
+            lanes.forEach { it.awaitTermination(CLOSE_TIMEOUT_S, TimeUnit.SECONDS) }
+            models.forEach { it.close() }
+        }, "imprint-close").apply { isDaemon = true }.start()
     }
 
     /**
@@ -247,6 +277,9 @@ class ImprintReader(parts: List<File>) : Closeable {
 
         private const val PLANE = ImprintPreprocess.SIDE * ImprintPreprocess.SIDE
         private const val NANOS_PER_MS = 1_000_000L
+
+        /** 한 면 판독이 CPU 로도 5초 안팎이다. 그보다 넉넉히 기다린다. */
+        private const val CLOSE_TIMEOUT_S = 15L
 
         /** 하나라도 못 열면 이미 연 것을 닫고 던진다 — 반쯤 열린 채 새지 않게. */
         private fun openAll(parts: List<File>): List<LiteRtModel> {

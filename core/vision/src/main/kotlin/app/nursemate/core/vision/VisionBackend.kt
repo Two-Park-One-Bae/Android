@@ -26,17 +26,29 @@ object VisionBackend {
     var allowGpu: (modelFileName: String) -> Boolean = { true }
 
     /**
-     * GPU 로 **실제로 열렸을 때** 불린다. 꽂은 쪽이 디스크에 흔적을 남겨, 이 프로세스가 네이티브로
-     * 죽으면 다음 실행에서 알아채게 한다.
+     * 모델을 GPU 로 **열기 직전**에 불린다. 꽂은 쪽이 디스크에 흔적을 남겨, 이 프로세스가 네이티브로 죽으면 다음
+     * 실행에서 알아채게 한다. 열기 전에 부르는 이유는 드라이버가 셰이더 준비(`create`) 중에도 죽기 때문이다.
      *
      * ⚠️ **여기서 오래 걸리면 안 된다.** 모델 여는 경로 한가운데다.
      */
     @Volatile
-    var onGpuModelOpened: (modelFileName: String) -> Unit = {}
+    var onGpuUse: (modelFileName: String) -> Unit = {}
+
+    /** [onGpuUse] 로 알린 GPU 모델을 닫았다(또는 열기 실패 · CPU 대체). 열린 GPU 모델이 없으면 흔적을 지울 수 있다. */
+    @Volatile
+    var onGpuReleased: (modelFileName: String) -> Unit = {}
+
+    /**
+     * GPU 로 열린 모델이 **실행에서** 실패해 CPU 로 대체했다. 꽂은 쪽이 이 기기 · 이 빌드에서 그 모델을 CPU 에 고정해
+     * 다음에 열 때부터 GPU 를 시도하지 않게 한다.
+     */
+    @Volatile
+    var onGpuRunFailed: (modelFileName: String) -> Unit = {}
 
     /**
      * 모델이 **어느 가속기로** 열렸는지 — 열 때마다 불린다. 운영에서 기기별로 GPU 가 실제로 붙는지 보려는
-     * 분석 이벤트가 쓴다(NM-628). [onGpuModelOpened] 와 달리 크래시 판정과 무관하다.
+     * 분석 이벤트가 쓴다(NM-628). [onGpuUse] 와 달리 크래시 판정과 무관하다. GPU 실행 실패로 CPU 로 바뀌었을 때도 한 번 더
+     * 불린다([OpenOutcome.GPU_RUN_FAILED]).
      */
     @Volatile
     var onModelOpened: (modelFileName: String, outcome: OpenOutcome) -> Unit = { _, _ -> }
@@ -53,6 +65,9 @@ enum class OpenOutcome(val label: String, val onGpu: Boolean) {
     /** GPU 로 열다 실패해 CPU 로 대체했다 — 드라이버가 모델을 거절했다. */
     GPU_OPEN_FAILED("gpu_open_failed", onGpu = false),
 
-    /** [VisionBackend.allowGpu] 가 막았다 — 전에 네이티브로 죽은 기기 등. */
-    GPU_BLOCKED("gpu_blocked", onGpu = false)
+    /** [VisionBackend.allowGpu] 가 막았다 — 전에 네이티브로 죽은 기기 · GPU 실행이 실패해 CPU 에 고정된 모델. */
+    GPU_BLOCKED("gpu_blocked", onGpu = false),
+
+    /** GPU 로 열렸는데 실행에서 실패해 CPU 로 다시 열었다. */
+    GPU_RUN_FAILED("gpu_run_failed", onGpu = false)
 }
