@@ -75,7 +75,9 @@ private fun AttributeMenuWindow(
         // ⚠️ 포커스를 주지 않는다. 포커스를 가진 팝업은 바깥 탭을 **자기가 먹고** 닫기만 해서,
         //    메뉴가 열린 채 다른 칩을 누르면 메뉴만 닫히고 그 칩은 안 열린다 — 두 번 눌러야 했다.
         //    포커스를 안 가지면 그 탭이 아래 칩까지 가서 색 → 모양 → 제형을 한 번씩만 눌러도 넘어간다.
-        properties = PopupProperties(focusable = false)
+        // ⚠️ 바깥 탭으로 **스스로 닫지 않는다.** 닫으면 열린 칩을 다시 눌렀을 때 그 탭이 닫기와 칩 클릭(다시 열기)
+        //    둘 다로 가서 닫히지 않았다. 바깥 탭 닫기는 수정 화면이 한다(`EditMenus.onDown`). [onDismiss] 는 뒤로가기만.
+        properties = PopupProperties(focusable = false, dismissOnClickOutside = false)
     ) {
         // 포커스를 안 가지면 뒤로가기가 팝업으로 안 온다. 안 받아 두면 메뉴를 열어 둔 채
         // 뒤로가기를 눌렀을 때 화면이 통째로 닫힌다.
