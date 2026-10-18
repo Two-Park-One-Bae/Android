@@ -4,7 +4,11 @@
 # (`s3://nursemate-ml-models/files/md5/<앞2>/<나머지>`), 이 파일 하나로 받는 경로와 검사가
 # 동시에 정해진다. Gradle 가드와 CI 가 **같은 파일**을 읽으므로 둘이 갈라질 수 없다.
 #
-# 절차는 docs/RELEASE.md 「검출 모델」.
-cb20efc7d45a9104226fd86a1c019885  rfdetr_seg_small.onnx
-8e574cd5f9db305414f836ccdf20ee2e  reader_ep60_s1.onnx
-b87ab569eb08dbcd7ee4823a6254b9d3  mark_species_fp16.onnx
+# 절차는 docs/RELEASE.md 「검출 모델」. LiteRT(NM-628) — 각인은 다섯 조각(p1~p5)이 한 모델이다.
+f92baeefa1a68129580332e346fe6564  rfdetr_seg_small_f16w.tflite
+905774ae81ffcc8f30b054792aa661de  mark_m4_f16w.tflite
+8f05e999616f01a8a85f33103819df35  p1_loc.tflite
+83ae532760f9773b81c1684c3b164cdd  p2_tps.tflite
+4499aa1eadfc152bcb78c19cd24508be  p3_trunk.tflite
+eb22da14f217c13aa98a4074c7568a9c  p4_frm.tflite
+c52617b06e241999daa267353c9cb89d  p5_lstm_head.tflite

@@ -19,11 +19,15 @@ import org.opencv.core.Mat
  *
  * | 구간 | 성격 |
  * |---|---|
- * | 세션 생성 | 21MB 모델을 여는 비용. **한 번만** 든다 |
+ * | 모델 열기 | 조각 다섯을 여는 비용(GPU 셰이더 준비 포함). **한 번만** 든다 |
  * | 전처리 | TTA 144장. 지배적이면 장수를 줄이는 것이 답 |
  * | 추론 | 144장 한 배치. 지배적이면 스레드·배치를 손봐야 한다 |
  *
- * ## 실측 (Galaxy S24 · SM-S921N · Exynos 2400 · 4스레드 · TTA 144장)
+ * ## LiteRT G5 (NM-628)
+ * 추론은 조각 다섯이 묶음 6개를 파이프라인으로 흘린다. ML 벤치 실측은 면당 0.4~1.2초(Exynos 2600 ~
+ * SD 8 Gen 1, `_handoff/litert-ondevice-migration.md`). 이 테스트로 **앱 코드가 그 수준인지** 본다.
+ *
+ * ## 옛 실측 — ORT (Galaxy S24 · SM-S921N · Exynos 2400 · 4스레드 · TTA 144장)
  *
  * NM-534 로 [ImprintReader] 가 WebGPU + `cpu(/rnn/)` 로 열린다. 그 전후를 같이 적는다.
  * ```
@@ -45,14 +49,11 @@ import org.opencv.core.Mat
  * 깎을 여지가 없고, `rnn` 은 1796 ms 중 135 ms 라 손볼 대상이 아니다. 장수는 iOS·서버와 답을
  * 맞추는 문제라 144 로 두고 서버 연동 때 다시 본다(NM-528 결정 1).
  *
- * ⚠️ **에뮬레이터 값은 믿지 말 것.** 에뮬레이터는 데스크톱 CPU 위에서 돌아 실기기보다
- * 빠르다. 위 숫자가 실기기 값이고, **저사양 기기는 이보다 느리다** — DoD 가 요구하는 그
- * 값은 아직 없다(armeabi-v7a 기기에서 세션 생성이 `SIGBUS` 로 죽는 건이 먼저다.
- * [OrtSessionOpenTest] 참조).
+ * ⚠️ **에뮬레이터 값은 믿지 말 것.** 에뮬레이터는 데스크톱 CPU 위에서 돌아 실기기와 다르고 GPU(OpenCL)가 없다.
  *
  * ## 모델이 없으면 건너뛴다
  * ```
- * adb push reader_ep60_s1.onnx /sdcard/Android/data/app.nursemate.core.vision.test/files/
+ * adb push app/src/main/assets/p?_*.tflite /sdcard/Android/data/app.nursemate.core.vision.test/files/
  * ```
  */
 @RunWith(AndroidJUnit4::class)
@@ -63,15 +64,15 @@ class ImprintReaderBenchmark {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
 
         val context = InstrumentationRegistry.getInstrumentation().context
-        val model = File(context.getExternalFilesDir(null), ImprintReader.MODEL_FILE_NAME)
-        assumeTrue("모델이 없어 건너뛴다", model.isFile && model.length() > 0)
+        val parts = ImprintReader.PART_FILE_NAMES.map { File(context.getExternalFilesDir(null), it) }
+        assumeTrue("조각이 없어 건너뛴다", parts.all { it.isFile && it.length() > 0 })
 
         val bytes = context.assets.open("imprint/input_gray.bin").use { it.readBytes() }
         val gray = Mat(ImprintPreprocess.SIDE, ImprintPreprocess.SIDE, CvType.CV_8UC1)
             .also { it.put(0, 0, bytes) }
 
         val openStart = System.nanoTime()
-        val reader = ImprintReader(model)
+        val reader = ImprintReader(parts)
         val openMs = (System.nanoTime() - openStart) / 1_000_000
 
         try {
@@ -84,7 +85,7 @@ class ImprintReaderBenchmark {
             val dec = runs.map { it.decodeMs }
             val tot = runs.map { it.totalMs }
 
-            Log.i(TAG, "세션 생성 ${openMs}ms (한 번만)")
+            Log.i(TAG, "모델 열기 ${openMs}ms (한 번만)")
             Log.i(TAG, "전처리  중앙값 ${pre.median()}ms  최소 ${pre.min()}  최대 ${pre.max()}")
             Log.i(TAG, "추론    중앙값 ${inf.median()}ms  최소 ${inf.min()}  최대 ${inf.max()}")
             Log.i(TAG, "디코딩  중앙값 ${dec.median()}ms  최소 ${dec.min()}  최대 ${dec.max()}")
@@ -95,45 +96,6 @@ class ImprintReaderBenchmark {
         }
     }
 
-    /**
-     * 스레드 수를 쓸어 본다.
-     *
-     * Mac(ORT CPU)에서 1→2→4→8 이 3212 → 1757 → 963 → 648ms 로 **거의 선형**이라, 기기에서도
-     * 스레드를 늘리면 줄어들 것으로 봤다. **실기기는 달랐다.**
-     *
-     * ```
-     * Galaxy S24 추론 중앙값   1스레드 13345 · 2스레드 6765 · 4스레드 4124 · 6스레드 6939 · 8스레드 8059 ms
-     * ```
-     * 4에서 최소이고 6·8 에서 **되레 느려진다.** big.LITTLE 이라 스레드를 늘리면 느린 코어가
-     * 섞여 배리어를 끌고, Mac 의 동질 코어에서 본 선형은 그대로 옮겨오지 않는다.
-     *
-     * ⚠️ 기본 4 는 원래 **검출 모델 기준**이었는데(`PillDetector.DEFAULT_THREADS` — seg 도 6·8 에서
-     * 느려졌다), 각인은 CRNN+CTC 로 모양이 다르므로 물려받을 근거가 없어 따로 쟀다. **같은 4가 답이다.**
-     */
-    @Test
-    fun `스레드_수를_쓸어_본다`() {
-        check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
-        val context = InstrumentationRegistry.getInstrumentation().context
-        val model = File(context.getExternalFilesDir(null), ImprintReader.MODEL_FILE_NAME)
-        assumeTrue("모델이 없어 건너뛴다", model.isFile && model.length() > 0)
-
-        val bytes = context.assets.open("imprint/input_gray.bin").use { it.readBytes() }
-        val gray = Mat(ImprintPreprocess.SIDE, ImprintPreprocess.SIDE, CvType.CV_8UC1)
-            .also { it.put(0, 0, bytes) }
-
-        Log.i(TAG, "코어 ${Runtime.getRuntime().availableProcessors()}개")
-        for (threads in intArrayOf(1, 2, 4, 6, 8)) {
-            ImprintReader(model, threads).use { reader ->
-                reader.readGray(gray)
-                val runs = (1..SWEEP_ROUNDS).map { reader.readGray(gray).inferenceMsOf() }
-                Log.i(TAG, "${threads}스레드 추론 중앙값 ${runs.median()}ms  최소 ${runs.min()} 최대 ${runs.max()}")
-            }
-        }
-        gray.release()
-    }
-
-    private fun ImprintReader.Result.inferenceMsOf() = timings.inferenceMs
-
     private fun List<Long>.median(): Long = sorted().let {
         if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2
     }
@@ -141,6 +103,5 @@ class ImprintReaderBenchmark {
     private companion object {
         const val TAG = "NM485"
         const val ROUNDS = 7
-        const val SWEEP_ROUNDS = 5
     }
 }

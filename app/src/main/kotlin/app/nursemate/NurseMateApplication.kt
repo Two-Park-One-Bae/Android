@@ -8,8 +8,8 @@ import app.nursemate.core.network.di.PlainClient
 import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
+import app.nursemate.pill.GpuPolicy
 import app.nursemate.pill.QnnDeliveryReporter
-import app.nursemate.pill.WebGpuPolicy
 import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
 import app.nursemate.timer.alarm.TimerOngoingNotifier
@@ -66,7 +66,7 @@ class NurseMateApplication :
     lateinit var telemetryIdentity: TelemetryIdentity
 
     @Inject
-    lateinit var webGpuPolicy: WebGpuPolicy
+    lateinit var gpuPolicy: GpuPolicy
 
     @Inject
     lateinit var qnnDeliveryReporter: QnnDeliveryReporter
@@ -91,12 +91,12 @@ class NurseMateApplication :
         // 이유 자체가 그것이라 앞뒤가 맞지 않는다(iOS `AppEnvironment` 주석도 같은 판단).
         telemetryIdentity.start(applicationScope)
 
-        // 어느 모델을 GPU 로 돌릴지 정한다 (NM-574). **온디바이스 추론이 처음 돌기 전**이어야
-        // 하므로 여기다 — 늦게 꽂으면 그 사이에 열린 세션이 막아야 할 WebGPU 로 열린다.
+        // 어느 모델을 GPU 로 돌릴지 정한다 (NM-574 → NM-628). **온디바이스 추론이 처음 돌기 전**이어야
+        // 하므로 여기다 — 늦게 꽂으면 그 사이에 열린 모델이 막아야 할 GPU 로 열린다.
         //
-        // Adreno 드라이버가 각인 모델을 받다 죽는데, 그 죽음이 예외가 아니라 SIGSEGV 라
-        // 어떤 catch 로도 못 막는다. 들어가기 전에 거르는 유일한 자리다.
-        webGpuPolicy.install()
+        // 드라이버 크래시는 예외가 아니라 SIGSEGV 라 어떤 catch 로도 못 막는다. 전에 죽은 기기를
+        // 들어가기 전에 거르는 유일한 자리다.
+        gpuPolicy.install()
 
         // 퀄컴 기기가 QNN 모듈을 받았는지 버전마다 한 번 보고한다 (NM-603). 디스크를 보므로 뒤로 미룬다.
         applicationScope.launch(Dispatchers.IO) { qnnDeliveryReporter.reportOnce() }

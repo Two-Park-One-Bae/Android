@@ -3,7 +3,7 @@ package app.nursemate.core.vision.mark
 import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.nursemate.core.vision.EpOverride
+import app.nursemate.core.vision.GpuOverride
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -31,9 +31,9 @@ import org.opencv.android.OpenCVLoader
  *
  * ## 모델이 없으면 건너뛴다
  * ```
- * adb push mark_species_fp16.onnx /sdcard/Android/data/app.nursemate.core.vision.test/files/
+ * adb push mark_m4_f16w.tflite /sdcard/Android/data/app.nursemate.core.vision.test/files/
  * ```
- * 53MB 를 저장소에 둘 수 없어 계측 테스트는 밀어 넣은 파일을 쓴다. 릴리스는 `app/models.md5`
+ * 57MB 를 저장소에 둘 수 없어 계측 테스트는 밀어 넣은 파일을 쓴다. 릴리스는 `app/models.md5`
  * 가 정한 경로로 받는다(`docs/RELEASE.md`).
  */
 @RunWith(AndroidJUnit4::class)
@@ -46,8 +46,8 @@ class MarkReaderParityTest {
     @Before
     fun setUp() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
-        // 리더를 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 EP 로 돈다.
-        EpOverride.apply()
+        // 리더를 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 가속기로 돈다.
+        GpuOverride.apply()
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         fixtures = JSONObject(assets.open("mark/fixtures.json").use { it.readBytes().decodeToString() })
         answers = JSONObject(assets.open("mark/answers.json").use { it.readBytes().decodeToString() })

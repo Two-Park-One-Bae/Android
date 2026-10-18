@@ -1,13 +1,8 @@
 package app.nursemate.core.vision
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtLoggingLevel
-import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
 import java.io.Closeable
 import java.io.File
-import java.nio.FloatBuffer
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -21,7 +16,7 @@ data class Timings(
     val decodeImageMs: Long,
     val preprocessMs: Long,
     val inferenceMs: Long,
-    /** 출력 읽기 + 디코딩 + 크롭. ONNX 출력을 JVM으로 가져오는 비용이 여기 포함된다. */
+    /** 디코딩 + 크롭. */
     val postprocessMs: Long
 ) {
     val totalMs: Long get() = decodeImageMs + preprocessMs + inferenceMs + postprocessMs
@@ -45,48 +40,33 @@ data class DetectionResult(
 )
 
 /**
- * RF-DETR-Seg 온디바이스 검출기 (ONNX Runtime).
+ * RF-DETR-Seg 온디바이스 검출기 (LiteRT, NM-628).
  *
- * 모델은 iOS가 쓰는 CoreML(`.mlpackage`)을 만든 **바로 그 원본 그래프**다. 입출력 이름이
- * CoreML과 동일하고(`image` / `pred_logits` / `pred_boxes` / `pred_masks`),
- * CoreML 결과와 박스 IoU 1.0000으로 일치한다.
+ * 모델은 iOS 가 쓰는 CoreML(`.mlpackage`)을 만든 원본 그래프를 LiteRT 로 옮긴 것이다(가중치 fp16 저장 ·
+ * `rfdetr_seg_small_f16w.tflite`). ONNX 시절과 입출력 **배치가 다르다**.
  *
- * 세션 로드가 수백 ms 걸리므로 한 번만 만들고 재사용한다.
+ * | | ONNX(이전) | LiteRT |
+ * |---|---|---|
+ * | 입력 | [1,3,576,576] NCHW | [1,576,576,3] **NHWC** |
+ * | 마스크 | [1,100,144,144] 쿼리가 앞 | [1,144,144,100] **쿼리가 마지막 축** |
  *
- * ## 실행 백엔드는 WebGPU, 없으면 CPU (NM-534)
- * NM-396에서 가속 경로를 전부 재 봤다(Galaxy S24 / Exynos 2400, fp32).
- * ```
- * CPU      1550 ms
- * XNNPACK  3410 ms   (오히려 느림)
- * NNAPI    실패      (Android 15에서 deprecated된 API이기도 하다)
- * WebGPU    845 ms
- * ```
- * 이 모델이 Conv 1.4% · MatMul 13%인 Transformer라 가속기 이득이 구조적으로 제한되는데,
- * 그런데도 WebGPU가 유일하게 살아남은 경로다.
+ * 전처리는 NCHW 로 써 두고([RfDetrPreprocess] · 그 단위 테스트 그대로) 넣기 직전에 돌린다.
  *
- * ⚠️ **당시에는 채택하지 않았다** — 프리빌트 Maven 배포본에 EP가 없어 11 MB 커스텀 AAR을
- * 저장소에 넣고 minSdk를 28로 올려야 했다. **공식 `onnxruntime-android` 1.30.0부터는 들어
- * 있다**(ABI 4개 전부 · minSdk 24). 저장소가 1.22.0에 머물러 있었을 뿐이다.
- * ORT 1.30 재측정은 CPU 1572 ms / WebGPU 813 ms다. 세션 여는 일은 [OrtBackend]가 한다.
+ * ## 실행: GPU FP32, 안 되면 CPU
+ * ML 계약. FP16 은 Exynos 2500 에서 개수 일치 93.3% 로 탈락했고 2400 · 2600 도 여유가 1~2장뿐이었다.
+ * FP32 로 공식 세트 60장 개수 일치 **98.3%**(가중치 fp16 저장 탓 1장), 466~942ms/장(Exynos 2600 ~ SD 8 Gen 1).
+ *
+ * 모델 열기가 수백 ms~수 초 걸리므로 한 번만 열고 재사용한다.
  */
-class PillDetector(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
+class PillDetector(modelFile: File) : Closeable {
 
-    private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
+    private val model = LiteRtModel.open(modelFile, PLAN)
 
-    private val session: OrtSession = OrtBackend.openSession(env, modelFile) {
-        setIntraOpNumThreads(threads)
-        setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-        // ⚠️ VERBOSE는 디스패치마다 로그를 찍어 성능을 크게 왜곡한다. 측정할 일이 있어
-        //    노드 배정을 봐야 한다면 그때만 올리고, 그때 잰 시간은 믿지 말 것.
-        setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING)
-    }
+    /** 전처리 출력(NCHW) · 모델 입력(NHWC). 4 MB 씩, 매 추론마다 재할당하지 않는다. */
+    private val nchw = FloatArray(3 * RfDetrSpec.INPUT_SIZE * RfDetrSpec.INPUT_SIZE)
+    private val nhwc = FloatArray(nchw.size)
 
-    private val inputName: String = session.inputNames.first()
-
-    /** 전처리 출력 버퍼(4 MB). 매 추론마다 재할당하지 않는다. */
-    private val inputBuffer = FloatArray(3 * RfDetrSpec.INPUT_SIZE * RfDetrSpec.INPUT_SIZE)
-
-    /** [inputBuffer]를 공유하므로 동시 호출을 직렬화한다. */
+    /** 버퍼와 모델을 공유하므로 동시 호출을 직렬화한다. */
     private val lock = Mutex()
 
     /**
@@ -102,29 +82,19 @@ class PillDetector(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable 
         val height = bitmap.height
 
         val t0 = System.nanoTime()
-        RfDetrPreprocess.toInputTensor(bitmap.toRgb888(), width, height, inputBuffer)
+        RfDetrPreprocess.toInputTensor(bitmap.toRgb888(), width, height, nchw)
+        val side = RfDetrSpec.INPUT_SIZE
+        nchwToNhwc(nchw, nhwc, n = 1, c = 3, plane = side * side)
         val t1 = System.nanoTime()
 
-        val shape = longArrayOf(
-            1,
-            3,
-            RfDetrSpec.INPUT_SIZE.toLong(),
-            RfDetrSpec.INPUT_SIZE.toLong()
-        )
+        val outputs = model.run(nhwc)
+        val inferenceEnd = System.nanoTime()
 
-        var inferenceEnd: Long
-        val pills: List<DetectedPill>
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(inputBuffer), shape).use { input ->
-            session.run(mapOf(inputName to input)).use { result ->
-                inferenceEnd = System.nanoTime()
-
-                val logits = result.readFloats(RfDetrSpec.OUTPUT_LOGITS, RfDetrSpec.QUERY_COUNT * 2)
-                val boxes = result.readFloats(RfDetrSpec.OUTPUT_BOXES, RfDetrSpec.QUERY_COUNT * 4)
-                val detections = RfDetrPostprocess.decode(logits, boxes)
-
-                pills = cropDetections(bitmap, detections, result)
-            }
-        }
+        // 출력은 크기로 가른다 — 셋이 서로 다르고, 이름보다 변환 도구에 덜 흔들린다.
+        val logits = outputs.first { it.size == RfDetrSpec.QUERY_COUNT * 2 }
+        val boxes = outputs.first { it.size == RfDetrSpec.QUERY_COUNT * 4 }
+        val masks = outputs.first { it.size == RfDetrSpec.QUERY_COUNT * MASK_PLANE }
+        val pills = cropDetections(bitmap, RfDetrPostprocess.decode(logits, boxes), masks)
         val postprocessEnd = System.nanoTime()
 
         return DetectionResult(
@@ -141,27 +111,14 @@ class PillDetector(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable 
     }
 
     /**
-     * 검출별로 마스크를 꺼내 낱알을 오려낸다.
-     *
-     * ⚠️ **`pred_masks`는 반드시 [OnnxTensor.getFloatBuffer]로 읽어야 한다.**
-     * `[1,100,144,144]` = 207만 float인데, `OnnxValue.getValue()`로 꺼내면 중첩 배열로 박싱되어
-     * **1.2초**가 든다(스파이크에서 이걸 추론 시간으로 오인한 적이 있다). 버퍼로 읽고
-     * **임계값을 통과한 쿼리의 슬라이스만** 복사하면 검출 개수에 비례하는 비용만 낸다.
+     * 검출별로 마스크를 꺼내 낱알을 오려낸다. 마스크는 `[144,144,100]` — 한 화소에 쿼리 100개가 붙어 있어
+     * 쿼리 q 의 평면은 `(y·144 + x)·100 + q` 를 건너뛰며 모은다. 검출된 쿼리만 모으므로 비용은 검출 개수에 비례한다.
      */
-    private fun cropDetections(
-        source: Bitmap,
-        detections: List<Detection>,
-        result: OrtSession.Result
-    ): List<DetectedPill> {
+    private fun cropDetections(source: Bitmap, detections: List<Detection>, masks: FloatArray): List<DetectedPill> {
         if (detections.isEmpty()) return emptyList()
-
-        val masks = result.tensor(RfDetrSpec.OUTPUT_MASKS).floatBuffer
-        val plane = RfDetrSpec.MASK_SIZE * RfDetrSpec.MASK_SIZE
-        val slice = FloatArray(plane)
-
+        val slice = FloatArray(MASK_PLANE)
         return detections.mapNotNull { detection ->
-            masks.position(detection.query * plane)
-            masks.get(slice)
+            querySlice(masks, detection.query, slice)
             val bounds = RfDetrPostprocess.maskBounds(slice) ?: return@mapNotNull null
             val crop = cropWithMask(source, slice, bounds) ?: return@mapNotNull null
             DetectedPill(detection, crop)
@@ -216,28 +173,28 @@ class PillDetector(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable 
     }
 
     override fun close() {
-        session.close()
+        model.close()
     }
 
     companion object {
-        /**
-         * 실측에서 4스레드가 최적이었다 — 1스레드 6968 ms · 2스레드 3615 ms · 4스레드 2083 ms.
-         * 6·8스레드는 오히려 느려졌다(big.LITTLE에서 리틀코어로 넘치는 비용).
-         */
-        const val DEFAULT_THREADS = 4
+        /** 가중치 fp16 저장 · 63MB. 목록과 해시는 `app/models.md5`. */
+        const val MODEL_FILE_NAME = "rfdetr_seg_small_f16w.tflite"
 
-        /** fp32. 119 MB라 APK에 넣지 않는다 — 배포 방식은 별도 결정 사항이다. */
-        const val MODEL_FILE_NAME = "rfdetr_seg_small.onnx"
+        /** ML 실행 정밀도 계약 — GPU FP32. FP16 은 Exynos 2500 에서 탈락했다. */
+        private val PLAN = RunPlan(Placement.GPU, GpuPrecision.FP32)
+
+        private const val MASK_PLANE = RfDetrSpec.MASK_SIZE * RfDetrSpec.MASK_SIZE
     }
 }
 
-private fun OrtSession.Result.tensor(name: String): OnnxTensor =
-    get(name).orElseThrow { IllegalStateException("모델 출력 '$name' 을 찾지 못했습니다") } as OnnxTensor
-
-private fun OrtSession.Result.readFloats(name: String, size: Int): FloatArray {
-    val out = FloatArray(size)
-    tensor(name).floatBuffer.get(out)
-    return out
+/** `[H·W, Q]` 로 놓인 마스크에서 쿼리 [query] 의 평면 `[H·W]` 를 [out] 에 모은다. */
+internal fun querySlice(masks: FloatArray, query: Int, out: FloatArray) {
+    val queries = RfDetrSpec.QUERY_COUNT
+    var i = query
+    for (p in out.indices) {
+        out[p] = masks[i]
+        i += queries
+    }
 }
 
 /** ARGB_8888 비트맵 → RGB888 연속 바이트. [RfDetrPreprocess]가 요구하는 형식. */

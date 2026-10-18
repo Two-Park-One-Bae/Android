@@ -127,8 +127,8 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 # 테스트 메서드마다 프로세스를 새로 띄운다 — 네이티브 세그폴트가 나머지 테스트를 날리지 않게 (NM-577).
 androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version = "1.6.1" }
-# LiteRT(구 TFLite) — **계측 테스트 전용**이다. WebGPU 가 Mali 에서 전멸하고 Adreno 에서
-# 모델마다 갈리므로, OpenCL 기반 GPU 델리게이트가 대안이 되는지 재 본다 (NM-577).
+# LiteRT(구 TFLite) — 온디바이스 추론 런타임(NM-628). 검출 · 각인 · 마크 모두 `CompiledModel` 로 돈다.
+# ML 이 이 판으로 공식 세트 정확도를 쟀다 — 올릴 때는 그 표(`_handoff/litert-ondevice-migration.md`)를 다시 잰다.
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 litert-gpu = { group = "com.google.ai.edge.litert", name = "litert-gpu", version.ref = "litert" }
 

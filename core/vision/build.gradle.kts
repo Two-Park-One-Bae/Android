@@ -113,7 +113,16 @@ configurations.configureEach {
 }
 
 dependencies {
-    // 온디바이스 추론 — 검출·각인·마크 셋 다 이 런타임으로 돈다.
+    // 온디바이스 추론 — 검출 · 각인 · 마크 셋 다 LiteRT `CompiledModel` 로 돈다(NM-628).
+    //
+    // 전 기기 같은 모델 파일 · 기기별 분기 없음. GPU(OpenCL) 가 안 되면 같은 파일을 CPU 로 연다.
+    // 앱에 싣는다(Play 서비스 판이 아니다) — ML 이 이 판(2.3.0 CompiledModel)으로 정확도를 쟀고,
+    // 버전이 우리 모르게 바뀌지 않아야 기기별 출력 차이를 추적할 수 있다. arm64 약 8.9MB.
+    // NPU 런타임(`litert-npu-*`)은 넣지 않는다 — 2.1.0 범위 밖.
+    implementation(libs.litert)
+    implementation(libs.litert.gpu)
+
+    // ⚠️ ONNX Runtime 은 전환 중에만 남는다 — 운영 경로는 더 이상 쓰지 않는다. NM-628 이 함께 걷어낸다.
     //
     // 프리빌트 Maven 배포본에 **CPU · WebGPU · NNAPI · XNNPACK** 이 들어 있다. NM-396 스파이크
     // 때는 WebGPU 를 쓰려면 소스 빌드가 필요했는데 그 뒤 프리빌트에 들어왔다 — 지금은 WebGPU 가
@@ -167,10 +176,4 @@ dependencies {
     // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
     // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
     androidTestUtil(libs.androidx.test.orchestrator)
-
-    // LiteRT — **계측 테스트에만** 넣는다. 운영 APK 에는 안 들어간다.
-    // ONNX Runtime 을 대체하려는 것이 아니라, WebGPU 가 못 가는 기기(Mali 전멸,
-    // Adreno 각인·검출 사망)에서 OpenCL GPU 델리게이트가 대안이 되는지 재는 용도다.
-    androidTestImplementation(libs.litert)
-    androidTestImplementation(libs.litert.gpu)
 }

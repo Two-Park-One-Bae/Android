@@ -62,7 +62,7 @@ class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) :
     }
 
     private suspend fun loadMark(): MarkReader = mark ?: withContext(Dispatchers.IO) {
-        MarkReader(modelFile.prepare(PillModel.Mark)).also { mark = it }
+        MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
     }
 
     override fun close() {

@@ -352,7 +352,7 @@ class PillRecognitionViewModel @Inject constructor(
     val history = PillHistorySaving(_state, historyRepository, viewModelScope)
 
     private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
-        PillDetector(modelFile.prepare()).also { detector = it }
+        PillDetector(modelFile.prepare().single()).also { detector = it }
     }
 
     override fun onCleared() {

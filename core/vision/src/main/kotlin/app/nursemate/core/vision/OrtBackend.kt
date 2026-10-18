@@ -343,7 +343,7 @@ internal object OrtBackend {
 
         // 바깥이 막는 모델은 아예 시도하지 않는다 — 이 기기에서 터지는 것이 이미 알려진 조합이거나,
         // 전에 네이티브로 죽은 적이 있는 기기다(NM-574).
-        val allowed = VisionBackend.allowWebGpu(modelFile.name)
+        val allowed = VisionBackend.allowGpu(modelFile.name)
         if (!allowed) Log.i(TAG, "${modelFile.name} WebGPU 차단됨 — CPU 로 연다")
 
         val onWebGpu = if (allowed && webGpuEnabled && hasWebGpu) {
@@ -359,7 +359,7 @@ internal object OrtBackend {
             }.onSuccess {
                 // 열렸다는 것만 알린다. **추론은 아직 안 돌았다** — 터지는 것은 그다음이라,
                 // 기록하는 쪽이 「이 프로세스는 WebGPU 를 썼다」를 미리 남겨 둬야 죽고 나서 안다.
-                VisionBackend.onWebGpuSessionOpened(modelFile.name)
+                VisionBackend.onGpuModelOpened(modelFile.name)
             }.onFailure {
                 // 기기에 따라 드라이버가 못 받을 수 있다. 판독을 통째로 포기하는 것보다 느려도 도는 쪽이 낫다.
                 Log.w(TAG, "${modelFile.name} WebGPU 세션 실패 — CPU 로 연다: ${it.message}")
