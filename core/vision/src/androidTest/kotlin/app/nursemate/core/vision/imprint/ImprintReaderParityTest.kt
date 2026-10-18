@@ -56,6 +56,19 @@ class ImprintReaderParityTest {
 
         assertEquals("[$path] 확신 글자", "YS", result.imprint)
         assertEquals("[$path] best_pair", "YS", result.pair)
-        assertEquals("[$path] best_pair 점수", 0.969883f, result.score, 1e-4f)
+        val tolerance = if (GpuOverride.gpu) GPU_TOLERANCE else CPU_TOLERANCE
+        assertEquals("[$path] best_pair 점수", 0.969883f, result.score, tolerance)
+    }
+
+    private companion object {
+        /** CPU 는 fp32 라 기준 구현(ONNX CPU)과 소수 넷째 자리까지 같다 — S24 실측 통과. */
+        const val CPU_TOLERANCE = 1e-4f
+
+        /**
+         * GPU 는 계약상 p1 · p4 가 **FP16** 이라 점수가 조금 흔들린다 — S24(Exynos 2400) 실측 0.9723(+0.0024).
+         * 답과 pair 는 같다. ML 이 같은 계약으로 공식 세트 550면 응답 · 정답 · 오답이 fp32 와 같음을 확인했으므로
+         * 점수 한 장의 흔들림은 이 정도면 정상이다. 0.005 를 넘으면 정밀도 계약이 깨졌는지 본다.
+         */
+        const val GPU_TOLERANCE = 5e-3f
     }
 }

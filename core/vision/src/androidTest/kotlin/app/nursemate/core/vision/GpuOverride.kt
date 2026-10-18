@@ -22,13 +22,17 @@ internal object GpuOverride {
     /** 계측 인자 이름. Test Lab 의 `--environment-variables` 키와 같아야 한다. */
     private const val ARG = "nm_gpu"
 
+    /** GPU 를 허용했는가. 기준값 허용 오차를 고를 때 쓴다 — 계약상 FP16 으로 도는 조각이 있다. */
+    val gpu: Boolean
+        get() = InstrumentationRegistry.getArguments().getString(ARG)?.toBooleanStrictOrNull() ?: true
+
     /**
      * 인자를 읽어 [VisionBackend] 에 반영한다. 테스트의 `@Before` 에서 **모델을 열기 전에** 부른다.
      *
      * @return 로그 · 실패 메시지에 붙일 이름
      */
     fun apply(): String {
-        val gpu = InstrumentationRegistry.getArguments().getString(ARG)?.toBooleanStrictOrNull() ?: true
+        val gpu = gpu
         VisionBackend.allowGpu = { gpu }
         return if (gpu) "GPU(가능하면)" else "CPU 강제"
     }

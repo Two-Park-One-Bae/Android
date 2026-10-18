@@ -62,6 +62,9 @@ class PillDetector(modelFile: File) : Closeable {
 
     private val model = LiteRtModel.open(modelFile, PLAN)
 
+    /** 실제로 GPU 로 열렸는가 — 대체로 CPU 가 됐는지 테스트 · 진단이 본다. */
+    internal val onGpu: Boolean get() = model.onGpu
+
     /** 전처리 출력(NCHW) · 모델 입력(NHWC). 4 MB 씩, 매 추론마다 재할당하지 않는다. */
     private val nchw = FloatArray(3 * RfDetrSpec.INPUT_SIZE * RfDetrSpec.INPUT_SIZE)
     private val nhwc = FloatArray(nchw.size)
@@ -180,8 +183,13 @@ class PillDetector(modelFile: File) : Closeable {
         /** 가중치 fp16 저장 · 63MB. 목록과 해시는 `app/models.md5`. */
         const val MODEL_FILE_NAME = "rfdetr_seg_small_f16w.tflite"
 
-        /** ML 실행 정밀도 계약 — GPU FP32. FP16 은 Exynos 2500 에서 탈락했다. */
-        private val PLAN = RunPlan(Placement.GPU, GpuPrecision.FP32)
+        /**
+         * ML 실행 정밀도 계약 — GPU FP32. FP16 은 Exynos 2500 에서 탈락했다.
+         *
+         * ⚠️ **GPU 만이 아니라 GPU+CPU 로 연다.** GPU 만으로는 S24(Exynos 2400)에서 `Failed to compile model`
+         * 로 열리지 않았다(2026-10-19). ML 벤치도 단일 파일 모델을 GPU+CPU(`gpucpu32`)로 열어 잰 것이다.
+         */
+        private val PLAN = RunPlan(Placement.GPU_CPU, GpuPrecision.FP32)
 
         private const val MASK_PLANE = RfDetrSpec.MASK_SIZE * RfDetrSpec.MASK_SIZE
     }

@@ -193,8 +193,8 @@ class MarkReader(modelFile: File) : Closeable {
         /** assets · DVC 에서 이 이름으로 온다. 가중치 fp16 저장 · 57MB. 목록과 해시는 `app/models.md5`. */
         const val MODEL_FILE_NAME = "mark_m4_f16w.tflite"
 
-        /** ML 실행 정밀도 계약 — GPU FP32. */
-        private val PLAN = RunPlan(Placement.GPU, GpuPrecision.FP32)
+        /** ML 실행 정밀도 계약 — GPU FP32. 검출과 같이 GPU+CPU 로 연다(ML 벤치가 그렇게 쟀다 · `PillDetector.PLAN`). */
+        private val PLAN = RunPlan(Placement.GPU_CPU, GpuPrecision.FP32)
 
         /**
          * 임베딩을 뽑은 모델 버전 — **ML 레포 모델 폴더 이름 그대로**다.
