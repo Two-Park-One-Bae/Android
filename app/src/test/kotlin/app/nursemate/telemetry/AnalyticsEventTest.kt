@@ -68,7 +68,8 @@ class AnalyticsEventTest {
         AnalyticsEvent.PresetCreate(label = "항생제", category = "투약", durationSec = 1_800),
         AnalyticsEvent.PresetEdit(label = "항생제", category = "투약", durationSec = 1_800),
         AnalyticsEvent.PresetDelete(label = "항생제", category = "투약", durationSec = 1_800),
-        AnalyticsEvent.QnnDelivery(socModel = "SM8650", delivered = "core+skel")
+        AnalyticsEvent.QnnDelivery(socModel = "SM8650", delivered = "core+skel"),
+        AnalyticsEvent.OnDeviceBackend(model = "p3_trunk.tflite", backend = "gpu", cause = "ok", socModel = "s5e9945")
     )
 
     // ─────────────────────────── GA4 규격 ───────────────────────────

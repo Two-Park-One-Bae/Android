@@ -33,4 +33,26 @@ object VisionBackend {
      */
     @Volatile
     var onGpuModelOpened: (modelFileName: String) -> Unit = {}
+
+    /**
+     * 모델이 **어느 가속기로** 열렸는지 — 열 때마다 불린다. 운영에서 기기별로 GPU 가 실제로 붙는지 보려는
+     * 분석 이벤트가 쓴다(NM-628). [onGpuModelOpened] 와 달리 크래시 판정과 무관하다.
+     */
+    @Volatile
+    var onModelOpened: (modelFileName: String, outcome: OpenOutcome) -> Unit = { _, _ -> }
+}
+
+/** 모델이 실제로 어디서 열렸고, CPU 라면 왜인가. 이름(`label`)은 분석 이벤트 값이다 — 바꾸지 않는다. */
+enum class OpenOutcome(val label: String, val onGpu: Boolean) {
+    /** 계획대로 GPU. */
+    GPU("ok", onGpu = true),
+
+    /** 실행 정밀도 계약이 CPU 다(각인 p2 · p5). */
+    PLANNED_CPU("planned_cpu", onGpu = false),
+
+    /** GPU 로 열다 실패해 CPU 로 대체했다 — 드라이버가 모델을 거절했다. */
+    GPU_OPEN_FAILED("gpu_open_failed", onGpu = false),
+
+    /** [VisionBackend.allowGpu] 가 막았다 — 전에 네이티브로 죽은 기기 등. */
+    GPU_BLOCKED("gpu_blocked", onGpu = false)
 }

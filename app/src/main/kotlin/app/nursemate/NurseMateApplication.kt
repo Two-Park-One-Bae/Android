@@ -9,6 +9,7 @@ import app.nursemate.core.timer.TimerPresetRepository
 import app.nursemate.core.timer.TimerReplicaPublisher
 import app.nursemate.core.timer.TimerRepository
 import app.nursemate.pill.GpuPolicy
+import app.nursemate.pill.OnDeviceBackendReporter
 import app.nursemate.pill.QnnDeliveryReporter
 import app.nursemate.telemetry.TelemetryIdentity
 import app.nursemate.timer.alarm.TimerAlarmChannels
@@ -69,6 +70,9 @@ class NurseMateApplication :
     lateinit var gpuPolicy: GpuPolicy
 
     @Inject
+    lateinit var onDeviceBackendReporter: OnDeviceBackendReporter
+
+    @Inject
     lateinit var qnnDeliveryReporter: QnnDeliveryReporter
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -97,6 +101,8 @@ class NurseMateApplication :
         // 드라이버 크래시는 예외가 아니라 SIGSEGV 라 어떤 catch 로도 못 막는다. 전에 죽은 기기를
         // 들어가기 전에 거르는 유일한 자리다.
         gpuPolicy.install()
+        // 어느 가속기로 열렸는지 모델마다 앱 버전당 한 번 보고한다 (NM-628). 모델이 열리기 전에 꽂는다.
+        onDeviceBackendReporter.install()
 
         // 퀄컴 기기가 QNN 모듈을 받았는지 버전마다 한 번 보고한다 (NM-603). 디스크를 보므로 뒤로 미룬다.
         applicationScope.launch(Dispatchers.IO) { qnnDeliveryReporter.reportOnce() }

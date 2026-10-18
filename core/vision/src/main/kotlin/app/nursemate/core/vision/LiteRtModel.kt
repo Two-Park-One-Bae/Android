@@ -68,24 +68,36 @@ internal class LiteRtModel private constructor(
          */
         fun open(file: File, plan: RunPlan, threads: Int = CPU_THREADS): LiteRtModel {
             val name = file.name
-            if (plan.placement != Placement.CPU) {
-                if (VisionBackend.allowGpu(name)) {
-                    runCatching { CompiledModel.create(file.absolutePath, gpuOptions(plan, threads)) }
-                        .onSuccess {
-                            // 열렸다는 것만 알린다. **추론은 아직 안 돌았다** — 네이티브로 죽는 것은 그다음이라,
-                            // 꽂은 쪽이 「이 프로세스는 GPU 를 썼다」를 미리 남겨 둬야 죽고 나서 안다.
-                            VisionBackend.onGpuModelOpened(name)
-                            Log.i(TAG, "$name GPU(${plan.placement} · ${plan.precision})")
-                            return LiteRtModel(name, it, onGpu = true)
-                        }
-                        .onFailure { Log.w(TAG, "$name GPU 로 못 열었다 — CPU 로 연다: ${it.message}") }
-                } else {
-                    Log.i(TAG, "$name GPU 막힘 — CPU 로 연다")
-                }
+            val outcome = when {
+                plan.placement == Placement.CPU -> OpenOutcome.PLANNED_CPU
+                !VisionBackend.allowGpu(name) -> OpenOutcome.GPU_BLOCKED
+                else -> openOnGpu(file, plan, threads)?.let { return it.reported() } ?: OpenOutcome.GPU_OPEN_FAILED
             }
+            if (outcome == OpenOutcome.GPU_BLOCKED) Log.i(TAG, "$name GPU 막힘 — CPU 로 연다")
             val cpu = CompiledModel.create(file.absolutePath, cpuOptions(threads))
             Log.i(TAG, "$name CPU($threads 스레드)")
-            return LiteRtModel(name, cpu, onGpu = false)
+            return LiteRtModel(name, cpu, onGpu = false).reported(outcome)
+        }
+
+        /** GPU 로 열어 본다. 실패하면 null — 호출부가 CPU 로 연다. */
+        private fun openOnGpu(file: File, plan: RunPlan, threads: Int): LiteRtModel? {
+            val name = file.name
+            return runCatching { CompiledModel.create(file.absolutePath, gpuOptions(plan, threads)) }
+                .onSuccess {
+                    // 열렸다는 것만 알린다. **추론은 아직 안 돌았다** — 네이티브로 죽는 것은 그다음이라,
+                    // 꽂은 쪽이 「이 프로세스는 GPU 를 썼다」를 미리 남겨 둬야 죽고 나서 안다.
+                    VisionBackend.onGpuModelOpened(name)
+                    Log.i(TAG, "$name GPU(${plan.placement} · ${plan.precision})")
+                }
+                .onFailure { Log.w(TAG, "$name GPU 로 못 열었다 — CPU 로 연다: ${it.message}") }
+                .getOrNull()
+                ?.let { LiteRtModel(name, it, onGpu = true) }
+        }
+
+        private fun LiteRtModel.reported(outcome: OpenOutcome = OpenOutcome.GPU): LiteRtModel = also {
+            // 보고가 실패해도 모델 열기는 멈추지 않는다 — 관측일 뿐이다.
+            runCatching { VisionBackend.onModelOpened(name, outcome) }
+                .onFailure { Log.w(TAG, "$name 열림 보고 실패", it) }
         }
 
         private fun cpuOptions(threads: Int) = CompiledModel.Options(Accelerator.CPU).apply {

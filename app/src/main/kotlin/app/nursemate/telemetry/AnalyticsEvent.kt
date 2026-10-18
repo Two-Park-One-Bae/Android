@@ -267,10 +267,30 @@ sealed interface AnalyticsEvent {
         override val params get() = mapOf("soc_model" to socModel, "delivered" to delivered)
     }
 
+    /**
+     * 온디바이스 모델이 **어느 가속기로 열렸는지** — 모델 파일마다 **앱 버전당 한 번** 보낸다 (NM-628).
+     *
+     * LiteRT 는 GPU 로 못 열면 조용히 CPU 로 돈다. 사용자에게는 느린 것 말고 증상이 없어서, 기기별로 GPU 가
+     * 실제로 붙는 비율과 안 붙는 칩을 여기서 본다. ML 이 재지 못한 중급 · 구형 기기를 가려내는 자리다.
+     *
+     * 기기 식별자 · 사용자 정보는 넣지 않는다 — 칩 이름과 모델 · 가속기뿐이다.
+     *
+     * @param model 모델 파일 이름 (예: `p3_trunk.tflite`) — 각인은 조각마다 따로 온다
+     * @param backend `gpu` · `cpu`
+     * @param cause `ok` · `planned_cpu` · `gpu_open_failed` · `gpu_blocked` — `OpenOutcome` 참조
+     * @param socModel `Build.SOC_MODEL` (API 31 아래는 `Build.HARDWARE`)
+     */
+    data class OnDeviceBackend(val model: String, val backend: String, val cause: String, val socModel: String) :
+        AnalyticsEvent {
+        override val name = "ondevice_backend"
+        override val params
+            get() = mapOf("model" to model, "backend" to backend, "cause" to cause, "soc_model" to socModel)
+    }
+
     companion object {
 
         /** iOS 카탈로그에 없는 이벤트 이름. 대조 테스트가 이 집합을 빼고 비교한다. */
-        val ANDROID_ONLY: Set<String> = setOf("qnn_delivery")
+        val ANDROID_ONLY: Set<String> = setOf("qnn_delivery", "ondevice_backend")
 
         private fun presetParams(label: String, category: String, durationSec: Int) = mapOf(
             "preset_label" to label,
