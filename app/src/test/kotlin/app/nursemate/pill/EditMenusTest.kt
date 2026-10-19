@@ -67,6 +67,17 @@ class EditMenusTest {
     }
 
     @Test
+    fun `열린 면 메뉴 칩을 다시 누르면 닫힌다`() {
+        val mark = FaceMenuKey(FaceSide.Front, FaceMenu.Mark)
+        tapChip(shapeChip) { menus.face(mark) }
+        menus.anchorAt(shapeChip)
+
+        tapChip(shapeChip) { menus.face(mark) }
+
+        assertNull(menus.faceMenu)
+    }
+
+    @Test
     fun `열린 메뉴가 없으면 터치가 아무것도 바꾸지 않는다`() {
         menus.startImprint(FaceSide.Front)
         menus.onDown(inside)

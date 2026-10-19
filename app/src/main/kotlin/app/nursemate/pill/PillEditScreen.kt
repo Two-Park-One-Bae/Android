@@ -462,8 +462,9 @@ internal class EditMenus {
         if (open != null) editingSide = null
     }
 
+    /** 구분선 · 마크 면 메뉴 — 외형 메뉴처럼 같은 칩을 다시 누르면 닫는다. null 은 닫기(항목을 골랐을 때). */
     fun face(key: FaceMenuKey?) {
-        faceMenu = key
+        faceMenu = key.takeIf { it != faceMenu }
         if (key != null) {
             open = null
             editingSide = null
