@@ -68,6 +68,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -444,7 +445,11 @@ private fun IconCell(onClick: () -> Unit, content: @Composable () -> Unit) {
 @Composable
 private fun NightCapturing(visible: Boolean, modifier: Modifier = Modifier) {
     if (!visible) return
-    Box(modifier.background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+    // 아래(좁은 배치의 배율 선택기 등)로 터치가 새지 않게 먹는다 — 찍는 몇 초 동안 배율이 바뀌면 사진이 흔들린다.
+    val swallow = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+    }
+    Box(modifier.then(swallow).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             CircularProgressIndicator(color = NmColor.Warning.C300, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
             Text(text = "움직이지 마세요", style = GuideHintStyle, color = Color.White)

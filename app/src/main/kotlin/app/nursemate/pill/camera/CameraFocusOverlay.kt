@@ -71,7 +71,8 @@ import kotlinx.coroutines.delay
  * 흰색 깜빡임 = 맞추는 중 → 노랑 = 맞음 → 빨강 = 못 맞춤. 기본 카메라는 흰 링 하나로만 보여 주는데,
  * 알약은 맞았는지가 결과를 가르므로 상태를 색으로 더 드러냈다.
  *
- * [showRing] 이 거짓이면 링을 그리지 않는다 — 야간 촬영 진행 표시가 같은 가운데 자리에 뜬다.
+ * [showRing] 이 거짓이면 링을 그리지 않고 **손짓도 받지 않는다** — 야간 촬영 진행 표시가 같은 가운데 자리에 뜨고, 그 몇 초
+ * 동안 초점 · 배율 · 노출을 바꾸면 찍히는 사진이 흔들린다.
  */
 @Composable
 internal fun CameraFocusOverlay(
@@ -118,7 +119,15 @@ internal fun CameraFocusOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .pointerInput(g) { awaitEachGesture { with(g) { handle(current) } } }
+            .then(
+                if (showRing) {
+                    Modifier.pointerInput(g) {
+                        awaitEachGesture { with(g) { handle(current) } }
+                    }
+                } else {
+                    Modifier
+                }
+            )
     ) {
         if (!showRing) return@Box
         val p = g.ring
