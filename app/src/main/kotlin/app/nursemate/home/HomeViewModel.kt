@@ -61,7 +61,8 @@ class HomeViewModel @Inject constructor(
     }
 
     /** 마지막으로 받은 시각(`SystemClock.elapsedRealtime`). 테스트가 시계를 바꿔 끼운다. */
-    private var fetchedAt = Long.MIN_VALUE
+    // 마지막으로 받기 시작한 시각. 없음(null)은 「아직 · 실패해서 다시 받아야 함」 — 최솟값을 쓰면 뺄셈이 넘친다.
+    private var fetchedAt: Long? = null
     internal var clock: () -> Long = SystemClock::elapsedRealtime
 
     /**
@@ -70,7 +71,8 @@ class HomeViewModel @Inject constructor(
      * 기록이 바뀐 것은 [fetchRecent] 가 따로 받으므로 놓치지 않는다.
      */
     fun refreshRecent() {
-        if (clock() - fetchedAt < FRESH_MS) return
+        val last = fetchedAt
+        if (last != null && clock() - last < FRESH_MS) return
         fetchRecent()
     }
 
@@ -82,7 +84,7 @@ class HomeViewModel @Inject constructor(
             _recent.value = historyRepository.latest().fold(
                 onSuccess = { summary -> summary?.toHomeRecent() ?: HomeRecent.None },
                 onFailure = {
-                    fetchedAt = Long.MIN_VALUE // 실패는 다음 표시 때 다시 받는다
+                    fetchedAt = null // 실패는 다음 표시 때 다시 받는다
                     HomeRecent.Failed
                 }
             )
