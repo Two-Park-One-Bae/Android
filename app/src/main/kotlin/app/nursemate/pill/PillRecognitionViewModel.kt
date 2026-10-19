@@ -75,14 +75,8 @@ class PillRecognitionViewModel @Inject constructor(
     /** 앱 전체가 공유하는 값. 미리보기의 "오늘 남은 횟수"가 이걸 본다. */
     val usage = usageHolder.usage
 
-    /** 모델 열기에 1~3초가 걸린다(LiteRT · GPU 셰이더 준비). 한 번 만들고 플로우 내내 재사용한다. */
-    private var detector: PillDetector? = null
-
-    /**
-     * 각인·마크 세션도 같은 수명을 갖는다. Hilt 로 주입하지 않고 여기서 만든다 —
-     * 의존이 [modelFile] 하나뿐이고, 주입하면 생성자만 길어진다.
-     */
-    private val faceReader = PillFaceReader(modelFile)
+    /** 검출 · 각인 · 마크 모델 — 플로우 내내 재사용하고 촬영 화면에서 미리 연다([prewarm]). */
+    private val ondevice = PillOnDeviceModels(modelFile)
 
     /**
      * 촬영·선택한 사진을 읽는다.
@@ -146,7 +140,7 @@ class PillRecognitionViewModel @Inject constructor(
         // 기록 키는 식별을 시작할 때 정한다 — 저장을 다시 시도해도 같은 키라 기록이 늘지 않는다(spec §식별 기록 — 저장).
         _state.update { it.copy(detection = DetectionPhase.Running, historyId = UUID.randomUUID().toString()) }
         viewModelScope.launch {
-            runCatching { loadDetector().detect(bitmap) }
+            runCatching { ondevice.detector().detect(bitmap) }
                 .onSuccess { result ->
                     Log.i(
                         TAG,
@@ -322,7 +316,7 @@ class PillRecognitionViewModel @Inject constructor(
         viewModelScope.launch {
             result.pills.forEachIndexed { index, pill ->
                 val id = pillId(index)
-                runCatching { faceReader.read(pill.crop) }
+                runCatching { ondevice.faceReader.read(pill.crop) }
                     .onSuccess { reading -> applyReading(id, reading) }
                     .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
             }
@@ -351,15 +345,14 @@ class PillRecognitionViewModel @Inject constructor(
     /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). */
     val history = PillHistorySaving(_state, historyRepository, viewModelScope)
 
-    private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
-        PillDetector(modelFile.prepare().single()).also { detector = it }
-    }
+    /**
+     * 모델을 **미리 연다** — 촬영 화면에 들어오면 부른다. 사용자가 구도를 잡는 몇 초 동안 GPU 준비를 끝내,
+     * 「이 사진 사용」 뒤 기다림을 없앤다. 앱을 새로 연 뒤 첫 식별이 3초 늦던 것(2026-10-19 실기기, NM-632 체크리스트 3번).
+     * 실패는 삼킨다 — 실제 검출 때 다시 드러난다.
+     */
+    fun prewarm() = ondevice.prewarm()
 
-    override fun onCleared() {
-        detector?.close()
-        detector = null
-        faceReader.close()
-    }
+    override fun onCleared() = ondevice.close()
 
     private companion object {
         const val TAG = "NM394"

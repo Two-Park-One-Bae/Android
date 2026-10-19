@@ -9,6 +9,8 @@ import app.nursemate.core.vision.mark.MarkReader
 import java.io.Closeable
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -35,6 +37,9 @@ class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) :
     private var imprint: ImprintReader? = null
     private var mark: MarkReader? = null
 
+    /** 미리 열기([prewarm])와 판독이 겹쳐도 모델을 두 번 열지 않게 연다 · 닫는 것을 줄 세운다. */
+    private val opening = Mutex()
+
     /**
      * @param crop 마스크로 오려낸 낱알 한 면(`DetectedPill.crop`)
      * @return 읽은 값. 모델이 확신하지 못한 항목은 null 이다 — **빈 값이 아니다**
@@ -58,12 +63,22 @@ class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) :
         )
     }
 
-    private suspend fun loadImprint(): ImprintReader = imprint ?: withContext(Dispatchers.IO) {
-        ImprintReader(modelFile.prepare(PillModel.Imprint)).also { imprint = it }
+    /** 각인 · 마크 모델을 미리 연다(촬영 화면 진입 — `PillRecognitionViewModel.prewarm`). */
+    suspend fun prewarm() {
+        loadImprint()
+        loadMark()
     }
 
-    private suspend fun loadMark(): MarkReader = mark ?: withContext(Dispatchers.IO) {
-        MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
+    private suspend fun loadImprint(): ImprintReader = opening.withLock {
+        imprint ?: withContext(Dispatchers.IO) {
+            ImprintReader(modelFile.prepare(PillModel.Imprint)).also { imprint = it }
+        }
+    }
+
+    private suspend fun loadMark(): MarkReader = opening.withLock {
+        mark ?: withContext(Dispatchers.IO) {
+            MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
+        }
     }
 
     override fun close() {
@@ -72,6 +87,9 @@ class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) :
         imprint = null
         mark = null
     }
+
+    /** 여는 중이면 다 연 뒤 닫는다 — 열기와 닫기가 엇갈려 열린 모델이 새지 않게. */
+    suspend fun closeAfterOpening() = opening.withLock { close() }
 
     private companion object {
         const val TAG = "NM515"
