@@ -61,6 +61,9 @@ class MarkReader(modelFile: File) : Closeable {
 
     private val model = LiteRtModel.open(modelFile, PLAN)
 
+    /** 지금 GPU 로 도는가 — 대체됐으면 false. 벤치 · 대조 테스트가 요청값이 아니라 실제 경로를 남기려고 본다. */
+    internal val onGpu: Boolean get() = model.onGpu
+
     private val input = FloatArray(MarkPreprocess.BATCH)
     private val nhwc = FloatArray(MarkPreprocess.BATCH)
 

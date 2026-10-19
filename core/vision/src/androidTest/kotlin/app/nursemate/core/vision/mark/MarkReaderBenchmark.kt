@@ -7,9 +7,11 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.nursemate.core.vision.GpuOverride
+import app.nursemate.core.vision.VisionBackend
 import java.io.File
 import java.nio.ByteBuffer
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,6 +58,12 @@ import org.opencv.android.OpenCVLoader
 @RunWith(AndroidJUnit4::class)
 class MarkReaderBenchmark {
 
+    /** 바꾼 전역 GPU 허용을 되돌린다 — 같은 계측 프로세스의 다음 테스트가 순서에 따라 CPU 로 돌지 않게. */
+    @After
+    fun restore() {
+        VisionBackend.allowGpu = { true }
+    }
+
     @Test
     fun `한_면_판독_소요를_단계별로_잰다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
@@ -90,6 +98,7 @@ class MarkReaderBenchmark {
                 reader.readGray(gray)
 
                 val runs = (1..ROUNDS).map { reader.readGray(gray).timings }
+                Log.i(TAG, "실제 경로 ${if (reader.onGpu) "GPU" else "CPU"}(잰 뒤)")
                 Log.i(TAG, "세션 생성 ${openMs}ms (한 번만) · 모델 ${model.length() / 1024 / 1024}MB")
                 Log.i(TAG, "전처리  중앙값 ${runs.map { it.preprocessMs }.median()}ms")
                 Log.i(TAG, "추론    중앙값 ${runs.map { it.inferenceMs }.median()}ms")

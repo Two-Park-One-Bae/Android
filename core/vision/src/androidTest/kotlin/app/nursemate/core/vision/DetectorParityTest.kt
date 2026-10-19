@@ -45,6 +45,8 @@ class DetectorParityTest {
         assumeTrue("모델 · 사진이 없어 건너뛴다", model.isFile && photo.isFile)
         val bitmap = requireNotNull(BitmapFactory.decodeFile(photo.path)) { "사진을 못 읽었다" }
 
+        // nm_gpu=false(CPU 강제)면 GPU 를 열지 않는다 — GPU 가 프로세스째 죽는 기기를 피하려고 준 인자다.
+        assumeTrue("CPU 강제(nm_gpu=false) — GPU 대조를 건너뛴다", GpuOverride.gpu)
         VisionBackend.allowGpu = { true }
         val gpu = runBlocking {
             PillDetector(model).use {
@@ -52,7 +54,10 @@ class DetectorParityTest {
                 // 동작이다(Pixel 3 · Adreno 630 은 세그를 GPU 로 컴파일하지 못한다 — 2026-10-19 Test Lab). 실패로 두면
                 // 기기 목록에서 대조 결과와 「GPU 를 못 쓰는 기기」가 섞인다.
                 assumeTrue("GPU 로 열리지 않았다(대체됨) — logcat 「LiteRt」", it.onGpu)
-                it.detect(bitmap)
+                val result = it.detect(bitmap)
+                // 열린 뒤 실행에서 실패하면 그 자리에서 CPU 로 다시 돌린다(`LiteRtModel.run`) — 그 결과도 GPU 답이 아니다.
+                assumeTrue("실행 중 CPU 로 대체됐다 — logcat 「GPU 실행 실패」", it.onGpu)
+                result
             }
         }
         VisionBackend.allowGpu = { false }
