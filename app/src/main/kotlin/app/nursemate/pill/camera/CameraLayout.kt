@@ -73,7 +73,8 @@ internal data class CameraLayout(
             }
 
             val shutterTop = height - navBottom - SHUTTER_CENTER - SHUTTER_HEIGHT / 2
-            val room = shutterTop - INSET - topBound
+            // 분할 화면 · 팝업 창처럼 아주 짧으면 자리가 음수가 된다 — 크기는 음수가 될 수 없어 0 에서 멈춘다.
+            val room = (shutterTop - INSET - topBound).coerceAtLeast(0.dp)
             val side = min(width, room)
             return CameraLayout(
                 iconsTop = iconsTop,

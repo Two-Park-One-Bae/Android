@@ -94,6 +94,8 @@ private fun NavGraphBuilder.capture(navController: NavController, tabbed: PillTa
     val fromHome = entry.cameFromHome()
     // 시스템 뒤로도 닫기와 같다 — 홈에서 왔으면 홈으로(spec §재촬영 · 뒤로).
     BackHandler(enabled = fromHome) { navController.leavePillScreen(fromHome = true) }
+    // 구도를 잡는 동안 모델을 미리 연다 — 「이 사진 사용」 뒤 첫 식별의 GPU 준비(약 3초)를 감춘다.
+    LaunchedEffect(viewModel) { viewModel.prewarm() }
     PillCaptureRoute(
         session = viewModel.analyticsSession,
         onPhotoSelected = { uri ->

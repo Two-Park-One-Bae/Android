@@ -48,6 +48,13 @@ class CameraLayoutTest {
     }
 
     @Test
+    fun `아주 짧은 창(분할 화면)에서도 크기가 음수가 되지 않는다`() {
+        val l = CameraLayout.of(width = 400.dp, height = 180.dp, navBottom = 0.dp, cutoutTop = 0.dp)
+
+        assertEquals(0f, l.previewSide.value, 0f)
+    }
+
+    @Test
     fun `배율 표기는 기본 카메라와 같다`() {
         assertEquals(".6", zoomLabel(0.6f))
         assertEquals("1", zoomLabel(1f))

@@ -2,6 +2,8 @@ package app.nursemate.pill
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,14 +24,22 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
@@ -142,84 +152,93 @@ fun PillEditScreen(
     // 입력 줄이 닫히면 각인 칸의 포커스도 놓는다 — 쥔 채로 두면 키보드가 다시 올라온다.
     LaunchedEffect(menus.editingSide) { if (menus.editingSide == null) focusManager.clearFocus() }
 
-    Box(modifier.fillMaxSize().background(colors.surface)) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                // ⚠️ 아래쪽 여백은 **하단 묶음만** 먹는다. 여기서 통째로 먹으면 키보드가 뜰 때 목록까지
-                //    키보드 높이만큼 줄어, 조건을 고치는 동안 후보가 거의 안 보인다.
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
-                )
-        ) {
-            NmV2NavBar(title = if (manual) "알약 추가" else "알약 $number 수정", onBack = onCancel)
-
-            // LazyColumn 이라야 목록 끝에 닿았는지 알 수 있다 — 이어서 조회의 전제다.
-            LazyColumn(
-                Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+    // 입력 줄의 「원래 값」 — 앞면만 자동 판독이 있다.
+    val originalImprint = menus.editingSide?.let { side -> if (side == FaceSide.Front) reading?.imprint else null }
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(colors.surface)
+            .closesMenusOnOutsideDown(menus)
+    ) {
+        CompositionLocalProvider(LocalMenuAnchor provides menus::anchorAt) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    // ⚠️ 아래쪽 여백은 **하단 묶음만** 먹는다. 여기서 통째로 먹으면 키보드가 뜰 때 목록까지
+                    //    키보드 높이만큼 줄어, 조건을 고치는 동안 후보가 거의 안 보인다.
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                    )
             ) {
-                item(key = "card") {
-                    PillEditCard(
-                        title = if (manual) "새 알약" else "알약 $number",
-                        crop = crop,
-                        attribute = attribute,
-                        conditions = conditions,
-                        faces = faces,
-                        auto = !manual && !attribute.failed,
-                        editingSide = menus.editingSide,
-                        open = menus.open,
-                        faceMenu = menus.faceMenu,
-                        onFaceMenu = menus::face,
-                        onToggle = menus::toggle,
-                        // 색만 여러 개를 고른다 — 같은 색을 다시 누르면 뺀다.
-                        onColorToggle = { color -> onConditionsChange(conditions.toggled(color)) },
-                        onChange = onConditionsChange,
-                        onFacesChange = onFacesChange,
-                        onEditImprint = { side ->
-                            val value = (if (side == FaceSide.Front) faces.front else faces.back).imprint.orEmpty()
-                            draft = TextFieldValue(value, selection = TextRange(value.length))
-                            menus.startImprint(side)
-                        }
+                NmV2NavBar(title = if (manual) "알약 추가" else "알약 $number 수정", onBack = onCancel)
+
+                // LazyColumn 이라야 목록 끝에 닿았는지 알 수 있다 — 이어서 조회의 전제다.
+                LazyColumn(
+                    Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item(key = "card") {
+                        PillEditCard(
+                            title = if (manual) "새 알약" else "알약 $number",
+                            crop = crop,
+                            attribute = attribute,
+                            conditions = conditions,
+                            faces = faces,
+                            auto = !manual && !attribute.failed,
+                            editingSide = menus.editingSide,
+                            open = menus.open,
+                            faceMenu = menus.faceMenu,
+                            onFaceMenu = menus::face,
+                            onToggle = menus::toggle,
+                            // 색만 여러 개를 고른다 — 같은 색을 다시 누르면 뺀다.
+                            onColorToggle = { color -> onConditionsChange(conditions.toggled(color)) },
+                            onChange = onConditionsChange,
+                            onFacesChange = onFacesChange,
+                            onEditImprint = { side ->
+                                val value = (if (side == FaceSide.Front) faces.front else faces.back).imprint.orEmpty()
+                                draft = TextFieldValue(value, selection = TextRange(value.length))
+                                menus.startImprint(side)
+                            }
+                        )
+                    }
+                    item(key = "header") {
+                        Text(
+                            candidates.headerLabel(),
+                            style = NmV2Type.tileTitle,
+                            color = colors.textPrimary,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                    candidateSection(
+                        state = candidates,
+                        selected = selected,
+                        actions = CandidateActions(
+                            onSelect = onSelect,
+                            onDetail = onDetail,
+                            onThumbnail = {
+                                onCompare()
+                                comparing = it
+                            },
+                            onLoadMore = onLoadMore,
+                            onRetry = onRetry,
+                            onRetryLoadMore = onRetryLoadMore
+                        )
                     )
                 }
-                item(key = "header") {
-                    Text(
-                        candidates.headerLabel(),
-                        style = NmV2Type.tileTitle,
-                        color = colors.textPrimary,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-                }
-                candidateSection(
-                    state = candidates,
-                    selected = selected,
-                    actions = CandidateActions(
-                        onSelect = onSelect,
-                        onDetail = onDetail,
-                        onThumbnail = {
-                            onCompare()
-                            comparing = it
-                        },
-                        onLoadMore = onLoadMore,
-                        onRetry = onRetry,
-                        onRetryLoadMore = onRetryLoadMore
-                    )
+
+                // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이 키보드와
+                // 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
+                EditBottom(
+                    editingSide = menus.editingSide,
+                    draft = draft,
+                    original = originalImprint,
+                    selected = selected != null,
+                    onDraftChange = { draft = it },
+                    onFace = ::applyFace,
+                    onConfirm = onConfirm
                 )
             }
-
-            // 하단 묶음 — 키보드가 뜨면 그 **위**에 선다. `safeDrawing.only(Bottom)` 이 키보드와
-            // 내비게이션 바 중 큰 쪽을 골라 주므로 둘을 따로 더하지 않는다.
-            EditBottom(
-                editingSide = menus.editingSide,
-                draft = draft,
-                original = menus.editingSide?.let { side -> if (side == FaceSide.Front) reading?.imprint else null },
-                selected = selected != null,
-                onDraftChange = { draft = it },
-                onFace = ::applyFace,
-                onConfirm = onConfirm
-            )
         }
     }
 
@@ -411,6 +430,15 @@ private fun CandidateUiState.headerLabel(): String = when {
  *
  * **한 번에 하나만** 연다. 둘이 같이 떠 있으면 메뉴끼리 겹치거나 키보드가 메뉴를 가린다. 하나를 열면 나머지를 닫는
  * 규칙을 여기 한 곳에 둔다.
+ *
+ * ## 바깥 탭으로 닫는 것은 팝업이 아니라 화면이 한다
+ * 메뉴 팝업은 다른 칩으로 한 번에 넘어가려고 포커스를 안 가진다. 그 상태로 팝업이 바깥 탭에 스스로 닫히면 탭 하나가
+ * **팝업 닫기와 아래 칩 클릭 둘 다**로 가서, 열린 칩을 다시 누르면 닫혔다가 곧바로 다시 열렸다(2026-10-19 실기기).
+ * 시간 창으로 두 번째를 먹는 땜질은 길게 누르면 새고, 일부러 바로 다시 연 탭까지 먹었다.
+ *
+ * 그래서 팝업은 바깥 탭에 닫히지 않게 두고(`dismissOnClickOutside = false`), 화면이 **터치가 시작될 때마다**
+ * [onDown] 으로 알린다. 그 터치가 열린 메뉴의 칩([anchor]) 밖에서 시작됐을 때만 닫는다. 열린 칩 위의 탭은 칩이
+ * 자기 [toggle] · [face] 로 한 번만 처리한다 — 탭 하나가 한 가지 일만 한다.
  */
 @Stable
 internal class EditMenus {
@@ -421,6 +449,12 @@ internal class EditMenus {
     var editingSide by mutableStateOf<FaceSide?>(null)
         private set
 
+    /** 열린 메뉴를 띄운 칩의 창 기준 자리. 그 칩이 그려질 때 [anchorAt] 로 알려 준다. */
+    private var anchor: Rect? = null
+
+    /** 수정 화면 자신의 자리 — 터치 좌표를 창 기준으로 바꿀 때 쓴다. 상태가 아니다(다시 그릴 일이 없다). */
+    var screen: LayoutCoordinates? = null
+
     /** 외형 메뉴 — 같은 칩을 다시 누르면 닫는다. */
     fun toggle(panel: AttributePanel) {
         open = panel.takeIf { it != open }
@@ -428,12 +462,29 @@ internal class EditMenus {
         if (open != null) editingSide = null
     }
 
+    /** 구분선 · 마크 면 메뉴 — 외형 메뉴처럼 같은 칩을 다시 누르면 닫는다. null 은 닫기(항목을 골랐을 때). */
     fun face(key: FaceMenuKey?) {
-        faceMenu = key
+        faceMenu = key.takeIf { it != faceMenu }
         if (key != null) {
             open = null
             editingSide = null
         }
+    }
+
+    /** 열린 메뉴의 칩이 자기 자리를 알린다. */
+    fun anchorAt(bounds: Rect) {
+        anchor = bounds
+    }
+
+    /**
+     * 화면 어딘가에서 터치가 시작됐다(창 기준 좌표). 메뉴가 열려 있고 그 칩 밖이면 닫는다 — 바깥 탭 닫기.
+     * 팝업 안의 터치는 팝업 창으로 가서 여기 오지 않는다. 각인 입력 줄은 건드리지 않는다(키보드).
+     */
+    fun onDown(position: Offset) {
+        if (open == null && faceMenu == null) return
+        if (anchor?.contains(position) == true) return
+        open = null
+        faceMenu = null
     }
 
     fun startImprint(side: FaceSide) {
@@ -446,3 +497,22 @@ internal class EditMenus {
         editingSide = null
     }
 }
+
+/**
+ * 터치가 시작될 때마다 메뉴에 알린다 — 열린 칩 밖이면 닫는다([EditMenus.onDown]). Initial 단계에서 보기만 하고
+ * 먹지 않으므로 아래 칩 · 목록은 그 탭을 그대로 받는다. 화면 좌표는 [EditMenus.screen] 에 두고 창 기준으로 바꾼다.
+ */
+private fun Modifier.closesMenusOnOutsideDown(menus: EditMenus): Modifier = this
+    .onGloballyPositioned { menus.screen = it }
+    .pointerInput(menus) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            menus.screen?.let { menus.onDown(it.localToWindow(down.position)) }
+        }
+    }
+
+/**
+ * 열린 메뉴를 띄운 칩이 자기 창 기준 자리를 알리는 곳 — [EditMenus.onDown] 이 그 밖의 터치에만 메뉴를 닫으려고 쓴다.
+ * 수정 화면 밖(디자인 갤러리 등)에서는 아무 데도 안 알린다.
+ */
+internal val LocalMenuAnchor = staticCompositionLocalOf<(Rect) -> Unit> { {} }

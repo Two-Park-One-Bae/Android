@@ -18,8 +18,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,15 +39,18 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +68,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -163,6 +169,12 @@ fun PillCameraScreen(
     }
     var flashOn by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    // 야간으로 찍는 중 — 한 장에 수 초 걸려 진행 표시를 띄운다([NightCapturing]).
+    var nightShooting by remember { mutableStateOf(false) }
+    // 재촬영(이 화면으로 되돌아옴) · 야간 전환 · 백그라운드 복귀에도 **고른 야간 · 배율을 이어 간다**. 기본 카메라도 기억한다
+    // (2026-10-19 실기기 — 재촬영하면 야간이 꺼지고 복귀하면 1× 로 돌아갔다, NM-632 체크리스트 6번).
+    var wantNight by rememberSaveable { mutableStateOf(false) }
+    var wantZoom by rememberSaveable { mutableFloatStateOf(1f) }
     var zoomJob by remember { mutableStateOf<Job?>(null) }
     val blink = remember { Animatable(0f) }
     val keys = remember { FocusRequester() }
@@ -171,7 +183,9 @@ fun PillCameraScreen(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) onPickFromGallery(uri) }
 
-    LaunchedEffect(Unit) { camera.bindOrIgnore(owner, previewView) }
+    LaunchedEffect(Unit) { camera.bindOrIgnore(owner, previewView, night = wantNight, zoom = wantZoom) }
+    // 배율은 핀치 · 버튼 · 다시 묶기에서 바뀐다 — 원하는 값([PillCamera.zoomTarget])을 따라 둔다.
+    LaunchedEffect(state.zoom, state.bound) { wantZoom = camera.zoomToKeep(wantZoom) }
     DisposableEffect(Unit) { onDispose { camera.unbind() } }
     HideStatusBar()
     // 검은 바탕이라 내비 바 아이콘(과 끌어 내린 상태 표시줄)을 밝게.
@@ -185,6 +199,7 @@ fun PillCameraScreen(
     val shoot: () -> Unit = shoot@{
         if (!state.bound || busy) return@shoot
         busy = true
+        nightShooting = state.night
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         scope.launch {
             blink.snapTo(1f)
@@ -192,6 +207,7 @@ fun PillCameraScreen(
         }
         camera.shoot(flashOn) { uri ->
             busy = false
+            nightShooting = false
             if (uri != null) {
                 onPhotoCaptured(uri)
             } else {
@@ -235,7 +251,7 @@ fun PillCameraScreen(
         Box(previewModifier.clipToBounds().testTag(PREVIEW_TAG)) {
             Grid()
             LevelGuide()
-            CameraFocusOverlay(state, camera, previewView)
+            CameraFocusOverlay(state, camera, previewView, showRing = !nightShooting)
             // 깜빡임은 그리기 단계에서만 읽는다 — 구성 단계에서 읽으면 깜빡이는 프레임마다 화면 전체가 다시 구성된다.
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = blink.value }.background(Color.Black.copy(alpha = 0.7f)))
         }
@@ -248,10 +264,11 @@ fun PillCameraScreen(
             onNight = {
                 if (!busy) {
                     busy = true
-                    // 배율 애니메이션이 새 세션에 옛 목표를 이어 쓰지 않게 먼저 멈춘다 — 다시 묶으면 배율은 1 로 돌아간다.
+                    // 배율 애니메이션이 새 세션에 옛 목표를 이어 쓰지 않게 먼저 멈춘다 — 다시 묶을 때 원하던 배율을 이어 건다.
                     zoomJob?.cancel()
+                    wantNight = !state.night
                     scope.launch {
-                        camera.bindOrIgnore(owner, previewView, night = !state.night)
+                        camera.bindOrIgnore(owner, previewView, night = wantNight)
                         busy = false
                     }
                 }
@@ -294,6 +311,9 @@ fun PillCameraScreen(
                 )
         )
 
+        // 배율 선택기(좁은 화면에선 미리보기 안에 있다)보다 위에 그린다.
+        NightCapturing(visible = nightShooting, modifier = previewModifier)
+
         ShutterRow(
             captureEnabled = state.bound && !busy,
             onShutter = shoot,
@@ -312,9 +332,10 @@ fun PillCameraScreen(
 private suspend fun PillCamera.bindOrIgnore(
     owner: LifecycleOwner,
     view: PreviewView,
-    night: Boolean = state.value.night
+    night: Boolean = state.value.night,
+    zoom: Float = zoomTarget
 ) {
-    runCatching { bind(owner, view, night) }.onFailure {
+    runCatching { bind(owner, view, night, zoom) }.onFailure {
         if (it is CancellationException) throw it
         Log.w("PillCamera", "카메라를 묶지 못했다", it)
     }
@@ -412,6 +433,27 @@ private fun IconCell(onClick: () -> Unit, content: @Composable () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         content()
+    }
+}
+
+/**
+ * 야간으로 찍는 동안 — 한 장에 수 초(S24 약 7~10초) 걸리는데 셔터가 흐려지는 것 말고 표시가 없어 멈춘 것처럼 보였다
+ * (2026-10-19 실기기, NM-632 체크리스트 5번). 기본 카메라처럼 진행 원과 「움직이지 마세요」를 미리보기 위에 띄운다.
+ *
+ * ⚠️ 문구는 정본에 없다 — 촬영 화면 정본 개정(NM-630 PR 표) 대상이다.
+ */
+@Composable
+private fun NightCapturing(visible: Boolean, modifier: Modifier = Modifier) {
+    if (!visible) return
+    // 아래(좁은 배치의 배율 선택기 등)로 터치가 새지 않게 먹는다 — 찍는 몇 초 동안 배율이 바뀌면 사진이 흔들린다.
+    val swallow = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+    }
+    Box(modifier.then(swallow).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            CircularProgressIndicator(color = NmColor.Warning.C300, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
+            Text(text = "움직이지 마세요", style = GuideHintStyle, color = Color.White)
+        }
     }
 }
 

@@ -67,11 +67,14 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
      * `Application.onCreate` 가 그 자리다.
      */
     fun install() {
-        if (prefs.getString(KEY_BUILD, null) != build) {
-            // 앱이나 OS 가 바뀌었다 — 예전 판정은 버리고 GPU 를 다시 시도한다.
+        val rebuilt = prefs.getString(KEY_BUILD, null) != build
+        if (rebuilt) {
+            // 앱이나 OS 가 바뀌었다 — 예전 판정은 버리고 GPU 를 다시 시도한다. 직전 프로세스(옛 빌드)가 남긴 흔적도
+            // 옛 빌드의 일이라 새 빌드를 막지 않는다.
             prefs.edit().clear().putString(KEY_BUILD, build).apply()
+            runCatching { sentinel.delete() }
         }
-        blockedByCrash = prefs.getBoolean(KEY_BLOCKED, false) || trippedByLastExit()
+        blockedByCrash = prefs.getBoolean(KEY_BLOCKED, false) || (!rebuilt && trippedByLastExit())
         cpuModels = prefs.getStringSet(KEY_CPU_MODELS, emptySet()).orEmpty()
 
         VisionBackend.allowGpu = ::allow
@@ -103,10 +106,10 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
     private fun soc(): String = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else Build.HARDWARE
 
     /**
-     * 지금 열린(또는 여는 중인) GPU 모델 수. 하나라도 있으면 흔적을 남기고, 0 이 되면 지운다.
+     * 지금 GPU 를 쓰는 작업 수 — 열기 · 판독 · 닫기(`VisionBackend.whileOnGpu`). 하나라도 있으면 흔적을 남기고, 0 이 되면 지운다.
      *
-     * 흔적을 **GPU 를 쓰는 동안만** 두는 이유: 식별을 끝낸 뒤 GPU 와 무관한 네이티브 크래시(OpenCV · SDK 등)가 나도
-     * 흔적이 남아 있으면 GPU 크래시로 잘못 읽고, 그 빌드 내내 전 모델이 CPU 로 돈다. 모델은 식별 플로우가 끝나면 닫힌다.
+     * 흔적을 **GPU 를 쓰는 동안만** 두는 이유: 모델은 촬영 화면부터 플로우 내내 열려 있는데, 그 사이 GPU 와 무관한 네이티브
+     * 크래시(OpenCV · SDK 등)가 나도 흔적이 남아 있으면 GPU 크래시로 잘못 읽고, 그 빌드 내내 전 모델이 CPU 로 돈다.
      */
     @Synchronized
     private fun gpuUse(delta: Int) {

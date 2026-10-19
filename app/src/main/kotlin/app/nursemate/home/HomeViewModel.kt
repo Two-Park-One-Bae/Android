@@ -1,5 +1,6 @@
 package app.nursemate.home
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.PillHistoryRepository
@@ -56,16 +57,36 @@ class HomeViewModel @Inject constructor(
     val recent: StateFlow<HomeRecent> = _recent.asStateFlow()
 
     init {
-        viewModelScope.launch { historyRepository.version.drop(1).collect { refreshRecent() } }
+        viewModelScope.launch { historyRepository.version.drop(1).collect { fetchRecent() } }
     }
 
+    /** 마지막으로 받은 시각(`SystemClock.elapsedRealtime`). 테스트가 시계를 바꿔 끼운다. */
+    // 마지막으로 받기 시작한 시각. 없음(null)은 「아직 · 실패해서 다시 받아야 함」 — 최솟값을 쓰면 뺄셈이 넘친다.
+    private var fetchedAt: Long? = null
+    internal var clock: () -> Long = SystemClock::elapsedRealtime
+
+    /**
+     * 홈이 보일 때 부른다. **방금 받았으면 건너뛴다** — 식별을 저장하고 홈으로 돌아오면 저장(기록 변경)과
+     * 홈 표시가 1초 사이에 겹쳐 같은 조회가 두 번 나갔다(2026-10-19 실기기, NM-632 체크리스트 8번).
+     * 기록이 바뀐 것은 [fetchRecent] 가 따로 받으므로 놓치지 않는다.
+     */
     fun refreshRecent() {
+        val last = fetchedAt
+        if (last != null && clock() - last < FRESH_MS) return
+        fetchRecent()
+    }
+
+    private fun fetchRecent() {
         // 앞 요청은 버린다 — 홈 복귀와 기록 변경이 겹치면 늦게 온 옛 응답이 새 값을 덮는다.
         recentJob?.cancel()
+        fetchedAt = clock()
         recentJob = viewModelScope.launch {
             _recent.value = historyRepository.latest().fold(
                 onSuccess = { summary -> summary?.toHomeRecent() ?: HomeRecent.None },
-                onFailure = { HomeRecent.Failed }
+                onFailure = {
+                    fetchedAt = null // 실패는 다음 표시 때 다시 받는다
+                    HomeRecent.Failed
+                }
             )
         }
     }
@@ -110,6 +131,9 @@ class HomeViewModel @Inject constructor(
     private companion object {
         /** 화면 회전처럼 짧게 끊기는 구독은 다시 잇는다. */
         const val SUBSCRIBE_TIMEOUT_MILLIS = 5_000L
+
+        /** 홈 표시로 다시 받기 전에 기다리는 시간. 저장 직후 복귀가 이 안에 든다. */
+        const val FRESH_MS = 3_000L
     }
 }
 

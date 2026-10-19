@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -79,7 +81,8 @@ internal fun MarkMenu(input: FaceInput, onSelect: (Boolean?) -> Unit, onDismiss:
         onDismissRequest = onDismiss,
         // 포커스를 주지 않는다 — 포커스를 가진 팝업은 바깥 탭을 먹어 다른 칩을 두 번 눌러야 하고, 각인을 치던
         // 중이면 포커스를 빼앗아 키보드가 내려가며 친 글자가 조건으로 넘어간다. 외형 메뉴와 같다.
-        properties = PopupProperties(focusable = false)
+        // 바깥 탭으로 스스로 닫지도 않는다 — 수정 화면이 닫는다(사정은 [EditMenus]).
+        properties = PopupProperties(focusable = false, dismissOnClickOutside = false)
     ) {
         BackHandler(onBack = onDismiss)
         val shape = RoundedCornerShape(NmRadius.md)
@@ -155,8 +158,11 @@ internal fun EditChip(
             shape
         )
     }
+    val reportAnchor = LocalMenuAnchor.current
     Row(
         modifier
+            // 열려 있는 칩이면 자리를 알린다 — 이 칩 위의 탭은 메뉴를 닫지 않고 칩 자신이 토글한다([EditMenus.onDown]).
+            .then(if (active) Modifier.onGloballyPositioned { reportAnchor(it.boundsInWindow()) } else Modifier)
             .minimumInteractiveComponentSize()
             .height(ChipHeight)
             .clip(shape)

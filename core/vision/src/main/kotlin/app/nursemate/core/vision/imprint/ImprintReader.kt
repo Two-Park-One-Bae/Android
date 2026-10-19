@@ -5,6 +5,7 @@ import app.nursemate.core.vision.GpuPrecision
 import app.nursemate.core.vision.LiteRtModel
 import app.nursemate.core.vision.Placement
 import app.nursemate.core.vision.RunPlan
+import app.nursemate.core.vision.VisionBackend
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.CompletableFuture
@@ -143,7 +144,8 @@ class ImprintReader(parts: List<File>) : Closeable {
      * @return `[시간][후보][글자]` — ONNX 시절과 같은 시간축 먼저. p5 출력 `[T,24,37]` 을 후보 자리에 꽂는다.
      */
     private fun runPipeline(): Array<Array<FloatArray>> {
-        val outs = if (models.any { it.onGpu }) runOnLanes() else runInOrder()
+        val gpu = models.firstOrNull { it.onGpu }
+        val outs = if (gpu != null) VisionBackend.whileOnGpu(gpu.name, gpu = true) { runOnLanes() } else runInOrder()
         val steps = outs[0].size / (CHUNK * CLASSES)
         return Array(steps) { t ->
             Array(ImprintPreprocess.SAMPLES) { n ->
@@ -228,6 +230,12 @@ class ImprintReader(parts: List<File>) : Closeable {
             models.forEach { it.close() }
         }, "imprint-close").apply { isDaemon = true }.start()
     }
+
+    /**
+     * 돌고 있는 판독이 끝난 뒤 닫는다(조각을 순서대로 도는 CPU 경로까지) — 잠금을 잡고 닫으므로 네이티브 실행 한가운데서 모델이 닫히지 않는다.
+     * 화면을 떠나 코루틴이 취소돼도 블로킹 실행은 멈추지 않는데, 그 중에 닫으면 SIGSEGV 고 GPU 크래시로 잘못 판정된다.
+     */
+    suspend fun closeWhenIdle() = lock.withLock { close() }
 
     /**
      * 판독 결과.
