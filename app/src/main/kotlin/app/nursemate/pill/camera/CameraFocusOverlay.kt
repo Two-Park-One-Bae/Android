@@ -70,9 +70,16 @@ import kotlinx.coroutines.delay
  * ## 링 색 = 초점 상태(매 프레임 `CONTROL_AF_STATE`)
  * 흰색 깜빡임 = 맞추는 중 → 노랑 = 맞음 → 빨강 = 못 맞춤. 기본 카메라는 흰 링 하나로만 보여 주는데,
  * 알약은 맞았는지가 결과를 가르므로 상태를 색으로 더 드러냈다.
+ *
+ * [showRing] 이 거짓이면 링을 그리지 않는다 — 야간 촬영 진행 표시가 같은 가운데 자리에 뜬다.
  */
 @Composable
-internal fun CameraFocusOverlay(state: PillCameraState, camera: PillCamera, previewView: PreviewView) {
+internal fun CameraFocusOverlay(
+    state: PillCameraState,
+    camera: PillCamera,
+    previewView: PreviewView,
+    showRing: Boolean = true
+) {
     val current = rememberUpdatedState(state)
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
@@ -113,6 +120,7 @@ internal fun CameraFocusOverlay(state: PillCameraState, camera: PillCamera, prev
             .fillMaxSize()
             .pointerInput(g) { awaitEachGesture { with(g) { handle(current) } } }
     ) {
+        if (!showRing) return@Box
         val p = g.ring
         if (p != null) {
             RingWithLock(p, state, g.scale.value, g.alpha.value, g.lockGapPx)
@@ -271,9 +279,12 @@ private class FocusGestures(
 @Composable
 private fun Ring(at: Offset, s: PillCameraState, scale: Float, alpha: Float, showSun: Boolean) {
     val pulse = if (s.af == Af.Searching) pulse(0.45f, 420) else 1f
+    // 고정이 먼저다 — 고정했는데 초점을 못 맞추면 빨간 링에 노란 「AE/AF 고정」 글씨가 섞여 무엇이 됐는지 헷갈렸다
+    // (2026-10-19 실기기, NM-632 체크리스트 4번). 기본 카메라도 고정하면 노랗다.
     val color = when {
+        s.locked -> NmColor.Warning.C300
         s.af == Af.Failed -> NmColor.Error.C300
-        s.af == Af.Focused || s.locked -> NmColor.Warning.C300
+        s.af == Af.Focused -> NmColor.Warning.C300
         else -> Color.White
     }
     val a = alpha * pulse

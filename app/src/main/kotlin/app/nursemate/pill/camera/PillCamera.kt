@@ -10,6 +10,7 @@ import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -29,6 +30,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.math.abs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,6 +94,7 @@ class PillCamera(private val context: Context) {
     private var camera: Camera? = null
     private var capture: ImageCapture? = null
     private var observedZoom: LiveData<ZoomState>? = null
+    private var observedCamera: LiveData<CameraState>? = null
 
     /** 탭할 때마다 하나씩 는다. 늦게 끝난(취소된) 옛 탭의 결과가 새 탭 상태를 덮지 않게 가른다. */
     private var focusGeneration = 0
@@ -112,11 +115,19 @@ class PillCamera(private val context: Context) {
     var zoomTarget: Float = 1f
         private set
 
+    /** 화면이 기억해 둘 배율 — 묶인 동안엔 [zoomTarget], 묶이기 전 · 풀린 뒤엔 [kept] 를 그대로 둔다. */
+    fun zoomToKeep(kept: Float): Float = if (state.value.bound) zoomTarget else kept
+
     /**
      * 카메라를 묶는다. [night] 를 바꿀 때도 다시 부른다(확장 모드는 세션을 새로 열어야 한다).
      * 기기에 야간 확장이 없으면 [night] 는 무시하고 기본으로 묶는다.
      */
-    suspend fun bind(owner: LifecycleOwner, view: PreviewView, night: Boolean = _state.value.night) {
+    suspend fun bind(
+        owner: LifecycleOwner,
+        view: PreviewView,
+        night: Boolean = _state.value.night,
+        zoom: Float = zoomTarget
+    ) {
         val cameraProvider = provider ?: ProcessCameraProvider.awaitInstance(context).also { provider = it }
         val ext = extensions ?: runCatching {
             ExtensionsManager.getInstanceAsync(context, cameraProvider).await(context)
@@ -138,11 +149,19 @@ class PillCamera(private val context: Context) {
         capture = null
         observedZoom?.removeObservers(owner)
         observedZoom = null
+        observedCamera?.removeObservers(owner)
+        observedCamera = null
         _state.update { it.copy(bound = false) }
         val cam = cameraProvider.bindToLifecycle(owner, selector, preview, shot)
         camera = cam
         capture = shot
-        zoomTarget = cam.cameraInfo.zoomState.value?.zoomRatio ?: 1f
+        // 원하던 배율을 이어 간다(재촬영 · 야간 전환 · 백그라운드 복귀 — NM-632 체크리스트 6번). 범위는 새 카메라 것으로 자른다.
+        val bounds = cam.cameraInfo.zoomState.value
+        zoomTarget = bounds?.let { zoom.coerceIn(it.minZoomRatio, it.maxZoomRatio) } ?: 1f
+        // 카메라가 **열릴 때마다** 원하던 배율을 다시 건다 — 백그라운드에서 돌아오면 CameraX 가 세션을 새로 열며 1× 로 돌린다.
+        observedCamera = cam.cameraInfo.cameraState.also { state ->
+            state.observe(owner) { if (it.type == CameraState.Type.OPEN) reapplyZoom() }
+        }
         // 확장(야간) 카메라의 CameraInfo 는 기본 카메라와 다른 객체라, 지울 때는 **관찰했던 그 LiveData** 에서 지운다.
         observedZoom = cam.cameraInfo.zoomState.also { zoom ->
             zoom.observe(owner) { z ->
@@ -171,6 +190,7 @@ class PillCamera(private val context: Context) {
         camera = null
         capture = null
         observedZoom = null
+        observedCamera = null
     }
 
     /**
@@ -196,6 +216,12 @@ class PillCamera(private val context: Context) {
                 _state.update { s -> s.copy(af = af ?: s.af, lowLight = dark) }
             }
         })
+    }
+
+    /** 지금 배율이 원하던 배율과 다르면 다시 건다. */
+    private fun reapplyZoom() {
+        val now = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: return
+        if (abs(now - zoomTarget) > ZOOM_EPSILON) camera?.cameraControl?.setZoomRatio(zoomTarget)
     }
 
     fun setZoom(ratio: Float) {
@@ -278,6 +304,7 @@ class PillCamera(private val context: Context) {
 
     private companion object {
         const val AUTO_CANCEL_S = 5L
+        const val ZOOM_EPSILON = 0.01f
         const val LOW_LIGHT_ISO = 1600
         const val LOW_LIGHT_EXPOSURE_NS = 50_000_000L
     }
