@@ -48,8 +48,10 @@ class DetectorParityTest {
         VisionBackend.allowGpu = { true }
         val gpu = runBlocking {
             PillDetector(model).use {
-                // GPU 로 못 열려 CPU 로 대체됐으면 CPU 끼리 맞댄 셈이 된다 — 그건 통과가 아니다.
-                assertTrue("GPU 로 열리지 않았다(대체됨) — logcat 「LiteRt」", it.onGpu)
+                // GPU 로 못 열려 CPU 로 대체됐으면 CPU 끼리 맞댄 셈이 된다 — 맞댈 것이 없으니 건너뛴다. 대체 자체는 설계된
+                // 동작이다(Pixel 3 · Adreno 630 은 세그를 GPU 로 컴파일하지 못한다 — 2026-10-19 Test Lab). 실패로 두면
+                // 기기 목록에서 대조 결과와 「GPU 를 못 쓰는 기기」가 섞인다.
+                assumeTrue("GPU 로 열리지 않았다(대체됨) — logcat 「LiteRt」", it.onGpu)
                 it.detect(bitmap)
             }
         }

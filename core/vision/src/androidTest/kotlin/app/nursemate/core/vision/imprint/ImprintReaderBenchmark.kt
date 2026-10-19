@@ -3,6 +3,7 @@ package app.nursemate.core.vision.imprint
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.GpuOverride
 import java.io.File
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -62,6 +63,8 @@ class ImprintReaderBenchmark {
     @Test
     fun `한_면_판독_소요를_단계별로_잰다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
+        // nm_gpu=false 면 CPU 로 잰다 — 저가 기기에서 GPU 가 CPU 보다 느린지 가리려고(2026-10-19 Test Lab).
+        Log.i(TAG, "경로 ${GpuOverride.apply()}")
 
         val context = InstrumentationRegistry.getInstrumentation().context
         val parts = ImprintReader.PART_FILE_NAMES.map { File(context.getExternalFilesDir(null), it) }

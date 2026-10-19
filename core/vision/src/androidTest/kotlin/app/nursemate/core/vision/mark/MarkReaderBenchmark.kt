@@ -1,10 +1,12 @@
 package app.nursemate.core.vision.mark
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.GpuOverride
 import java.io.File
 import java.nio.ByteBuffer
 import org.json.JSONObject
@@ -58,10 +60,14 @@ class MarkReaderBenchmark {
     fun `한_면_판독_소요를_단계별로_잰다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
         val context = InstrumentationRegistry.getInstrumentation().context
+        Log.i(TAG, "경로 ${GpuOverride.apply()}")
 
-        // 발열 상태에서 잰 값은 대표성이 없다. 기기를 더 굽지 않고 접는다.
-        val status = context.getSystemService(PowerManager::class.java)?.currentThermalStatus
-        assumeTrue("발열 상태 $status — 재지 않는다", status == PowerManager.THERMAL_STATUS_NONE)
+        // 발열 상태에서 잰 값은 대표성이 없다. 기기를 더 굽지 않고 접는다. 발열 API 는 29 부터다 — 그 아래(F-01L 27 ·
+        // Pixel 3 28)는 `NoSuchMethodError` 로 죽었다(2026-10-19 Test Lab). 그 판에서는 묻지 않고 잰다.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val status = context.getSystemService(PowerManager::class.java)?.currentThermalStatus
+            assumeTrue("발열 상태 $status — 재지 않는다", status == PowerManager.THERMAL_STATUS_NONE)
+        }
 
         val model = File(context.getExternalFilesDir(null), MarkReader.MODEL_FILE_NAME)
         assumeTrue("모델이 없어 건너뛴다", model.isFile && model.length() > 0)
