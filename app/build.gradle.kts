@@ -163,6 +163,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.extensions)
 
     // 위젯(NM-443)은 RemoteViews 로 직접 그린다. Glance 를 쓰다 걷어냈다 — 사정은
     // [PresetWidgetRenderer]. 의존성도 함께 뺀다: glance-appwidget 이 WorkManager 2.7.1 을

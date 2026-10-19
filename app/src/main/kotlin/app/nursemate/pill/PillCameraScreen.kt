@@ -1,37 +1,42 @@
 package app.nursemate.pill
 
-import android.content.Context
+import android.app.Activity
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,35 +45,76 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.pill.camera.CameraFocusOverlay
+import app.nursemate.pill.camera.CameraLayout
+import app.nursemate.pill.camera.Grid
+import app.nursemate.pill.camera.LevelGuide
+import app.nursemate.pill.camera.OutsideMask
+import app.nursemate.pill.camera.PillCamera
+import app.nursemate.pill.camera.PillCameraState
 import app.nursemate.ui.SystemBarIcons
-import java.io.File
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Locale
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
- * 촬영 화면 — 디자인 `① 촬영 (카메라)`.
+ * 촬영 화면 — 갤럭시 기본 카메라(S24 · One UI, 1:1 비율)의 배치와 조작을 옮겼다(NM-630).
  *
- * 상단바(56) / 뷰파인더 / 하단 컨트롤(140). 뷰파인더 가운데에 폭을 꽉 채운 정사각형이 있고
- * 위아래는 **불투명한** `neutral-900` 이다(반투명 딤이 아니다).
+ * 본 앱 것으로 남긴 것은 **1:1 미리보기 · 안내 문구 · 아이콘 모양** 셋뿐이다(사용자 결정 2026-10-17).
+ * 나머지 — 상태 표시줄 숨김 · 오른쪽 위 아이콘 줄 · 배율 캡슐 · 셔터 줄 · 탭 초점 · 노출 · 수평계 ·
+ * 야간 · 볼륨 키 셔터 — 는 기본 카메라를 실측해 맞췄다. 수치는 [CameraLayout], 조작은 [PillCamera] ·
+ * [CameraFocusOverlay].
+ *
+ * ⚠️ 정본(`DESIGN.pen` 「① 촬영」)은 아직 옛 배치다. 이 화면이 **정본 개정보다 먼저** 갔다 — 차이는
+ * NM-630 PR 에 정리해 spec/design 개정 근거로 넘긴다.
+ *
+ * 기본 카메라와 일부러 다르게 둔 것:
+ * - 왼쪽 위 닫기 — 기본 카메라엔 없지만 앱 흐름에서 빠져나갈 길이 필요하다
+ * - 왼쪽 원 = 갤러리 — 기본 카메라는 방금 찍은 사진이다. 여기선 찍으면 곧바로 다음 화면이라 둘 사진이 없다
+ * - 셔터 오른쪽 빈자리 — 전면 카메라 전환은 알약 촬영에 쓸 일이 없다
+ * - 초점 링 색(흰 → 노랑 · 빨강) — 알약은 초점이 결과를 가르므로 맞았는지 바로 보이게 했다
  *
  * ## 프리뷰가 곧 정사각형이다 — 이게 정확도 요건이다
  * 화면 전체에 프리뷰를 깔고 정사각 테두리만 얹으면, 사용자가 사각형 안에 맞춘 것과
@@ -78,6 +124,15 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * 그래서 `PreviewView` 자체를 정사각형으로 두고 `FILL_CENTER` 로 채운다. 이러면 기하가 정확히
  * 맞는다 — 3:4 센서를 정사각 뷰에 `FILL_CENTER` 로 채우면 세로 12.5%~87.5% 구간이 보이는데,
  * 이는 중앙 정사각 크롭과 같은 영역이다. **보이는 것이 곧 모델이 받는 것**이 된다.
+ *
+ * ## 미리보기는 SurfaceView(PERFORMANCE)다 — 발열
+ * 예전엔 TextureView(COMPATIBLE)였다. PoC 에서 TextureView 는 CPU 74~85% 로 폰이 금방 뜨거워졌고,
+ * SurfaceView 로 바꾸니 32~37%(기본 카메라 26~54%)였다.
+ *
+ * SurfaceView 는 창 뒤에 따로 그려져 Compose 가 잘라내지 못하는 기기가 있다 — 2026-09 에 그래서
+ * 정사각 밖 위아래로 영상이 넘쳤고, COMPATIBLE 로 피했었다. 이번엔 **잘라내기에 기대지 않는다.**
+ * 미리보기 바로 위에 정사각 바깥을 검게 덮는 막([OutsideMask])을 그린다. SurfaceView 는 창에 구멍을 뚫어
+ * 보이는 방식이라, 그 뒤에 그린 것은 구멍을 덮는다 — 잘림이 되든 안 되든 정사각 밖은 늘 검다.
  */
 @Composable
 fun PillCameraScreen(
@@ -94,314 +149,420 @@ fun PillCameraScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
-    var camera by remember { mutableStateOf<Camera?>(null) }
+    val owner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val camera = remember { PillCamera(context.applicationContext) }
+    val state by camera.state.collectAsStateWithLifecycle()
+    val previewView = remember {
+        PreviewView(context).apply {
+            // 정사각 뷰를 잘라서 채운다. 중앙 정사각 크롭과 같은 영역이 보인다(KDoc 참조).
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+        }
+    }
     var flashOn by remember { mutableStateOf(false) }
-    var capturing by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var zoomJob by remember { mutableStateOf<Job?>(null) }
+    val blink = remember { Animatable(0f) }
+    val keys = remember { FocusRequester() }
 
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) onPickFromGallery(uri) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // 배경을 먼저 칠하고 인셋 패딩을 뒤에 건다. 순서를 바꾸면 상태바·제스처 영역에
-            // 밝은 띠가 남는다.
-            .background(NmColor.Neutral.C900)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        SystemBarIcons(darkIcons = false)
+    LaunchedEffect(Unit) { camera.bindOrIgnore(owner, previewView) }
+    DisposableEffect(Unit) { onDispose { camera.unbind() } }
+    HideStatusBar()
+    // 검은 바탕이라 내비 바 아이콘(과 끌어 내린 상태 표시줄)을 밝게.
+    SystemBarIcons(darkIcons = false)
+    // 볼륨 키를 받으려면 이 화면이 포커스를 쥐고 있어야 한다. 갤러리에서 돌아오면 포커스가 풀려 있다.
+    LifecycleResumeEffect(Unit) {
+        runCatching { keys.requestFocus() }
+        onPauseOrDispose { }
+    }
 
-        CameraTopBar(
+    val shoot: () -> Unit = shoot@{
+        if (!state.bound || busy) return@shoot
+        busy = true
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        scope.launch {
+            blink.snapTo(1f)
+            blink.animateTo(0f, tween(220))
+        }
+        camera.shoot(flashOn) { uri ->
+            busy = false
+            if (uri != null) {
+                onPhotoCaptured(uri)
+            } else {
+                // onError 만으로는 셔터를 눌렀는데 반응이 없는 것처럼 보인다.
+                Toast.makeText(context, "촬영에 실패했어요. 다시 시도해 주세요", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            // 위아래는 상태 표시줄을 숨기고 끝까지 그리되(배치는 [CameraLayout]), 가로로 돌았을 때 옆에 오는
+            // 내비 바 · 카메라 구멍은 비켜 선다.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            .semantics { paneTitle = "알약 촬영" }
+            .focusRequester(keys)
+            .focusable()
+            .onPreviewKeyEvent { e ->
+                // 볼륨 키 셔터 — 기본 카메라와 같다. 누를 때 한 번만 찍고, 뗄 때도 먹어서 음량이 바뀌지 않게 한다.
+                if (e.key != Key.VolumeDown && e.key != Key.VolumeUp) return@onPreviewKeyEvent false
+                if (e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0) shoot()
+                true
+            }
+    ) {
+        val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val layout = CameraLayout.of(
+            width = maxWidth,
+            height = maxHeight,
+            navBottom = navBottom,
+            cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+        )
+        val previewModifier = Modifier
+            .offset(layout.previewLeft, layout.previewTop)
+            .size(layout.previewSide)
+
+        AndroidView({ previewView }, previewModifier.clipToBounds())
+        OutsideMask(layout)
+
+        Box(previewModifier.clipToBounds().testTag(PREVIEW_TAG)) {
+            Grid()
+            LevelGuide()
+            CameraFocusOverlay(state, camera, previewView)
+            // 깜빡임은 그리기 단계에서만 읽는다 — 구성 단계에서 읽으면 깜빡이는 프레임마다 화면 전체가 다시 구성된다.
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = blink.value }.background(Color.Black.copy(alpha = 0.7f)))
+        }
+
+        TopIcons(
+            state = state,
             flashOn = flashOn,
-            // 스펙: 「기기에 플래시 유닛이 없으면 버튼을 노출하지 않는다」.
-            flashAvailable = camera?.cameraInfo?.hasFlashUnit() == true,
             onClose = onClose,
-            onToggleFlash = { flashOn = !flashOn }
+            onFlash = { flashOn = !flashOn },
+            onNight = {
+                if (!busy) {
+                    busy = true
+                    // 배율 애니메이션이 새 세션에 옛 목표를 이어 쓰지 않게 먼저 멈춘다 — 다시 묶으면 배율은 1 로 돌아간다.
+                    zoomJob?.cancel()
+                    scope.launch {
+                        camera.bindOrIgnore(owner, previewView, night = !state.night)
+                        busy = false
+                    }
+                }
+            },
+            modifier = Modifier.offset(y = layout.iconsTop)
         )
 
-        Column(modifier = Modifier.weight(1f)) {
-            // 위아래 여백은 루트 배경(neutral-900)이 그대로 보이는 영역이다.
-            Spacer(modifier = Modifier.weight(1f))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    // 프리뷰가 이 경계를 넘지 않게 못박는다.
-                    .clipToBounds()
-            ) {
-                CameraPreview(
-                    lifecycleOwner = lifecycleOwner,
-                    onBound = { boundCamera, capture ->
-                        camera = boundCamera
-                        imageCapture = capture
+        GuideHint(
+            onPreview = !layout.roomy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(
+                    y = if (layout.roomy) {
+                        layout.previewBottom + HINT_TOP
+                    } else {
+                        layout.previewTop +
+                            CameraLayout.INSET
                     }
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(2.dp, Color.White.copy(alpha = 0.7f))
-                )
-            }
+        )
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "알약을 겹치지 않게 펼쳐놓으세요",
-                    style = GuideHintStyle,
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                        .padding(horizontal = 16.dp, vertical = 9.dp)
+        ZoomPills(
+            state = state,
+            onZoom = { to ->
+                zoomJob?.cancel()
+                zoomJob = scope.launch {
+                    Animatable(camera.zoomTarget).animateTo(to, tween(280, easing = FastOutSlowInEasing)) {
+                        camera.setZoom(value)
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(
+                    y = if (layout.roomy) {
+                        maxHeight - navBottom - CameraLayout.ZOOM_CENTER - CameraLayout.ZOOM_HEIGHT / 2
+                    } else {
+                        layout.previewBottom - CameraLayout.INSET - CameraLayout.ZOOM_HEIGHT
+                    }
+                )
+        )
+
+        ShutterRow(
+            captureEnabled = state.bound && !busy,
+            onShutter = shoot,
+            onGallery = {
+                onGalleryTap()
+                pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            modifier = Modifier.offset(
+                y = maxHeight - navBottom - CameraLayout.SHUTTER_CENTER - CameraLayout.SHUTTER_HEIGHT / 2
+            )
+        )
+    }
+}
+
+/** 묶다 실패하면(카메라를 다른 앱이 쥐고 있는 등) 미리보기가 검게 남고 셔터가 잠긴다 — 예전과 같다. */
+private suspend fun PillCamera.bindOrIgnore(
+    owner: LifecycleOwner,
+    view: PreviewView,
+    night: Boolean = state.value.night
+) {
+    runCatching { bind(owner, view, night) }.onFailure {
+        if (it is CancellationException) throw it
+        Log.w("PillCamera", "카메라를 묶지 못했다", it)
+    }
+}
+
+/**
+ * 상태 표시줄을 숨긴다 — 기본 카메라와 같다. 위에서 끌면 잠깐 나온다.
+ *
+ * 떠날 때 **되돌린다.** 아이콘 색([app.nursemate.ui.SystemBarIcons])과 달리 다음 화면들은 표시 여부를
+ * 따로 선언하지 않아, 안 되돌리면 앱 전체에서 상태 표시줄이 사라진다.
+ */
+@Composable
+private fun HideStatusBar() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.apply {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose { controller?.show(WindowInsetsCompat.Type.statusBars()) }
+    }
+}
+
+/**
+ * 아이콘 줄 — 기본 카메라처럼 오른쪽 위에 아이콘만(플래시 · 야간). 칸 36, 좌우 여백 15.
+ * 닫기는 기본 카메라에 없지만 앱 흐름에서 빠져나갈 길이라 왼쪽 끝에 둔다.
+ *
+ * 플래시: 스펙 「기기에 플래시 유닛이 없으면 버튼을 노출하지 않는다」. 토치가 아니라 촬영 순간에만 터지는
+ * 플래시다(NM-440 — 표준 카메라 동작 · iOS 와 같은 온 · 오프 2단).
+ *
+ * 야간: 기기에 야간 확장이 있을 때만 둔다. 꺼져 있는데 어두우면 기본 카메라처럼 노란 점으로 권한다.
+ */
+@Composable
+private fun TopIcons(
+    state: PillCameraState,
+    flashOn: Boolean,
+    onClose: () -> Unit,
+    onFlash: () -> Unit,
+    onNight: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(CameraLayout.ICONS_HEIGHT)
+            .padding(horizontal = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconCell(onClick = onClose) {
+            Icon(painterResource(NmSymbols.Close), "촬영 닫기", tint = Color.White, modifier = Modifier.size(24.dp))
+        }
+        Spacer(Modifier.weight(1f))
+        if (state.hasFlash) {
+            IconCell(onClick = onFlash) {
+                Icon(
+                    painterResource(NmSymbols.FlashOn),
+                    if (flashOn) "플래시 끄기" else "플래시 켜기",
+                    tint = if (flashOn) NmColor.Warning.C300 else Color.White,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
-
-        CameraControls(
-            captureEnabled = imageCapture != null && !capturing,
-            onGallery = {
-                onGalleryTap()
-                pickPhoto.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-            },
-            onShutter = {
-                val capture = imageCapture ?: return@CameraControls
-                // **누를 때 건다.** 토글 시점에 걸어 두면 CameraX 가 복귀하며 세션을 다시 열 때
-                // 값이 초기화돼 화면 표시와 실제 동작이 어긋난다. 여기서 걸면 그럴 일이 없다.
-                capture.flashMode =
-                    if (flashOn) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
-                capturing = true
-                capture.takeAndSave(context) { uri ->
-                    capturing = false
-                    if (uri != null) {
-                        onPhotoCaptured(uri)
-                    } else {
-                        // onError 만으로는 셔터를 눌렀는데 반응이 없는 것처럼 보인다.
-                        Toast.makeText(context, "촬영에 실패했어요. 다시 시도해 주세요", Toast.LENGTH_SHORT).show()
+        if (state.nightAvailable) {
+            IconCell(onClick = onNight) {
+                Box {
+                    Icon(
+                        painterResource(if (state.night) NmSymbols.BedtimeFill else NmSymbols.Bedtime),
+                        if (state.night) "야간 촬영 끄기" else "야간 촬영 켜기",
+                        tint = if (state.night) NmColor.Warning.C300 else Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    if (!state.night && state.lowLight) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .size(7.dp)
+                                .background(NmColor.Warning.C300, CircleShape)
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun IconCell(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .size(CameraLayout.ICONS_HEIGHT)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+    }
+}
+
+/**
+ * 안내 문구 — 본 앱 정본 문구 그대로. 자리가 있으면 미리보기 아래 검은 바탕에(옅은 흰 알약),
+ * 없으면 미리보기 위 영상에 얹는다(진한 검정 알약 — 영상 위에서도 읽히게).
+ */
+@Composable
+private fun GuideHint(onPreview: Boolean, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Text(
+            text = "알약을 겹치지 않게 펼쳐놓으세요",
+            style = GuideHintStyle,
+            color = Color.White,
+            modifier = Modifier
+                .background(
+                    if (onPreview) Color.Black.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.12f),
+                    CircleShape
+                )
+                .padding(horizontal = 16.dp, vertical = 9.dp)
         )
     }
 }
 
 /**
- * 상단바 — 닫기 · "알약 촬영" · 플래시. 디자인: 56dp, 좌우 16, space-between.
+ * 배율 캡슐 — 기본 카메라와 같다. 어두운 회색 캡슐에 .6 · 1 · 2 · 3, 고른 칸은 한 단계 밝은 원에
+ * 지금 배율(`1.4×`)을 그대로 보인다. 버튼은 0.28초에 걸쳐 바뀐다(한 번에 건너뛰면 덜컹거린다).
  *
- * ## 토치가 아니라 플래시다 (NM-440)
- * 예전에는 토치(계속 켜짐)였다. 어두운 병동에서 가이드 안에 알약을 맞추는 동안 빛이 필요하고
- * 켜진 것도 프리뷰로 바로 보인다는 이유였는데, **스프린트에서 플래시로 뒤집혔다** —
- * 표준 카메라 동작을 따르고 iOS 와 같은 온·오프 2단으로 맞춘다.
- *
- * > 촬영 순간에만 발광하고 대기·미리보기 중에는 켜 두지 않는다 — 상시 점등(토치)이 아니라
- * > 표준 카메라 동작을 따른다. (`spec/feature/pill-recognition/README.md` §흐름 규칙)
- *
- * ⚠️ 근접 촬영에서 플래시는 광택 있는 정제·PTP 포장에 반사를 만들어 각인을 가릴 수 있다.
- * 티켓이 「식별 고도화 논의 때 두 방식을 비교 촬영해볼 만하다」고 남겨 두었다.
+ * ⚠️ .6(초광각)은 고정 초점이라 알약 거리(15~20cm)에선 흐리다. 기본 카메라와 같게 두되, 알약엔 1 이 기본이다.
  */
 @Composable
-private fun CameraTopBar(flashOn: Boolean, flashAvailable: Boolean, onClose: () -> Unit, onToggleFlash: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Icon(
-            painter = painterResource(NmSymbols.Close),
-            contentDescription = "촬영 닫기",
-            tint = Color.White,
-            modifier = Modifier
-                .size(26.dp)
-                .clickable(onClick = onClose)
-        )
-        Text(
-            text = "알약 촬영",
-            style = NmTypography.title.copy(fontSize = 17.sp),
-            color = Color.White
-        )
-        if (flashAvailable) {
-            Icon(
-                painter = painterResource(NmSymbols.FlashOn),
-                contentDescription = if (flashOn) "플래시 끄기" else "플래시 켜기",
-                tint = if (flashOn) NmColor.Warning.C300 else Color.White,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clickable(onClick = onToggleFlash)
-            )
-        } else {
-            // 플래시가 없는 기기에서도 제목이 가운데 오도록 자리는 남긴다.
-            Spacer(modifier = Modifier.size(24.dp))
+private fun ZoomPills(state: PillCameraState, onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val presets = buildList {
+        if (state.minZoom < 0.99f) add(state.minZoom)
+        addAll(listOf(1f, 2f, 3f).filter { it <= state.maxZoom })
+    }
+    if (presets.size < 2) return
+    val current = presets.lastOrNull { state.zoom >= it - 0.01f } ?: presets.first()
+    Box(modifier, contentAlignment = Alignment.TopCenter) {
+        Row(
+            Modifier
+                .height(CameraLayout.ZOOM_HEIGHT)
+                .background(CapsuleGray, CircleShape)
+                .padding(horizontal = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            presets.forEach { z ->
+                val on = z == current
+                Box(
+                    Modifier
+                        .size(ZOOM_CELL)
+                        .clip(CircleShape)
+                        .background(if (on) SelectedGray else Color.Transparent)
+                        .clickable { onZoom(z) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (on) "${zoomLabel(state.zoom)}×" else zoomLabel(z),
+                        color = Color.White,
+                        fontSize = if (on) 13.sp else 12.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.SemiBold
+                    )
+                }
+            }
         }
     }
 }
 
-/** 하단 컨트롤 — 갤러리(48) · 셔터(74) · 균형용 빈 자리(48). 디자인: 140dp, 좌우 36. */
-@Composable
-private fun CameraControls(captureEnabled: Boolean, onGallery: () -> Unit, onShutter: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp)
-            .padding(horizontal = 36.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(NmColor.Neutral.C700, RoundedCornerShape(NmRadius.md))
-                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(NmRadius.md))
-                .clickable(onClick = onGallery),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(NmSymbols.Image),
-                contentDescription = "갤러리에서 선택",
-                tint = Color.White,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+/** 0.6 → `.6`, 1.0 → `1`, 1.4 → `1.4` — 기본 카메라 표기. */
+internal fun zoomLabel(z: Float): String = "%.1f".format(Locale.ROOT, z).let {
+    if (z < 1f) it.removePrefix("0") else it.removeSuffix(".0")
+}
 
+/**
+ * 셔터 줄 — 왼쪽 갤러리(보이는 원 55) · 가운데 셔터(보이는 원 73, 누르는 자리 100) · 오른쪽 빈자리.
+ * 셔터는 누르는 동안 살짝 작아진다. 찍는 동안(야간은 한 장에 수 초)은 흐려지고 눌리지 않는다.
+ */
+@Composable
+private fun ShutterRow(
+    captureEnabled: Boolean,
+    onShutter: () -> Unit,
+    onGallery: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.9f else 1f, tween(90), label = "shutter")
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(CameraLayout.SHUTTER_HEIGHT)
+            .padding(horizontal = 28.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(SIDE_SLOT), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(SIDE)
+                    .clip(CircleShape)
+                    .background(SideGray)
+                    .clickable(onClick = onGallery),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(painterResource(NmSymbols.Image), "갤러리에서 선택", tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(Modifier.weight(1f))
         Box(
-            modifier = Modifier
-                .size(74.dp)
-                .border(4.dp, Color.White, CircleShape)
-                .clickable(enabled = captureEnabled, onClick = onShutter),
+            Modifier
+                .size(CameraLayout.SHUTTER_HEIGHT)
+                .semantics { contentDescription = "촬영" }
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    enabled = captureEnabled,
+                    onClick = onShutter
+                ),
             contentAlignment = Alignment.Center
         ) {
             Box(
-                modifier = Modifier
-                    .size(58.dp)
-                    .background(
-                        if (captureEnabled) Color.White else Color.White.copy(alpha = 0.4f),
-                        CircleShape
-                    )
+                Modifier
+                    .size(SHUTTER_VISUAL)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .background(if (captureEnabled) ShutterWhite else ShutterWhite.copy(alpha = 0.5f), CircleShape)
             )
         }
-
-        // 셔터를 화면 정중앙에 두기 위한 균형추. 디자인의 'Spacer' 그대로다.
-        Spacer(modifier = Modifier.size(48.dp))
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.size(SIDE_SLOT))
     }
 }
 
-/**
- * CameraX 프리뷰. 부모가 정사각형이므로 이 뷰도 정사각형이다.
- *
- * `PreviewView`는 View라서 [AndroidView]로 감싼다.
- */
-@Composable
-private fun CameraPreview(lifecycleOwner: LifecycleOwner, onBound: (Camera, ImageCapture) -> Unit) {
-    val context = LocalContext.current
-    val previewView = remember {
-        PreviewView(context).apply {
-            // 정사각 뷰를 잘라서 채운다. 중앙 정사각 크롭과 같은 영역이 보인다(KDoc 참조).
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-
-            // ⚠️ 기본값(PERFORMANCE)은 SurfaceView를 쓰는데, **별도 윈도우 레이어라
-            //    Compose가 잘라내지 못한다.** 그래서 정사각 경계를 무시하고 위아래 딤 영역까지
-            //    영상이 넘쳐 그려졌다. COMPATIBLE은 TextureView라 일반 뷰처럼 잘린다.
-            //    지연·전력이 조금 불리하지만 정지 사진 촬영 화면이라 감수한다.
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-        }
-    }
-    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
-
-    LaunchedEffect(previewView) {
-        val cameraProvider = context.awaitCameraProvider()
-
-        val preview = Preview.Builder().build()
-        preview.setSurfaceProvider(previewView.surfaceProvider)
-
-        val capture = ImageCapture.Builder()
-            // 알약 각인을 봐야 하므로 속도보다 화질을 택한다.
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-            .build()
-
-        runCatching {
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                CameraSelector.DEFAULT_BACK_CAMERA,
-                preview,
-                capture
-            )
-        }.onSuccess { boundCamera ->
-            provider = cameraProvider
-            onBound(boundCamera, capture)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // ⚠️ `provider` 를 여기서 읽으면 안 된다. DisposableEffect(provider) 로 두고 안에서
-            //    읽으면, provider 가 null → 실제값으로 바뀔 때 이전 효과가 정리되면서
-            //    **방금 바인딩한 카메라를 곧바로 해제**한다(프리뷰가 검게 죽고 플래시도 먹통이 된다).
-            //    키를 Unit 으로 고정하고, 화면을 떠날 때 한 번만 푼다.
-            provider?.unbindAll()
-        }
-    }
-
-    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-}
-
-/**
- * `ProcessCameraProvider` 준비를 기다린다.
- *
- * CameraX는 `ListenableFuture`를 주는데 이 버전에는 코루틴 어댑터가 없다. `get()`으로 기다리면
- * 메인 스레드가 멈추므로 콜백을 코루틴으로 감싼다.
- */
-private suspend fun Context.awaitCameraProvider(): ProcessCameraProvider = suspendCancellableCoroutine { continuation ->
-    val future = ProcessCameraProvider.getInstance(this)
-    future.addListener(
-        {
-            runCatching { future.get() }
-                .onSuccess(continuation::resume)
-                .onFailure(continuation::resumeWithException)
-        },
-        ContextCompat.getMainExecutor(this)
-    )
-}
-
-/**
- * 촬영해 앱 캐시에 저장하고 그 위치를 돌려준다.
- *
- * 캐시에 두는 이유: 약포 사진은 환자 정보(**PII**)라 갤러리에 남기지 않는다.
- * 검출이 끝나면 지워도 되는 임시 파일이다.
- */
-private fun ImageCapture.takeAndSave(context: Context, onResult: (Uri?) -> Unit) {
-    // 이전 캡처가 남아 있으면 지운다 — ViewModel 이 캐시 파일 URI 를 따로 추적하지 않아
-    // 검출 완료 시점 정리는 더 큰 변경이 필요하다. 재촬영마다 쌓이는 걸 막는 최소 대응으로
-    // 한 번에 최대 1개로 묶는다 — 약포 사진은 환자 정보(PII)라 오래 남을수록 위험이 크다.
-    context.cacheDir.listFiles { file -> file.name.startsWith("capture_") }?.forEach { it.delete() }
-
-    val file = File(context.cacheDir, "capture_${System.currentTimeMillis()}.jpg")
-    takePicture(
-        ImageCapture.OutputFileOptions.Builder(file).build(),
-        ContextCompat.getMainExecutor(context),
-        object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                onResult(output.savedUri ?: Uri.fromFile(file))
-            }
-
-            override fun onError(exception: ImageCaptureException) {
-                onResult(null)
-            }
-        }
-    )
-}
+/** 미리보기 정사각 — 계측 테스트가 자리를 찾는다(`PillCameraMaskTest`). */
+internal const val PREVIEW_TAG = "camera_preview"
 
 /** 정본 14·500. 스케일에 없는 굵기라 명시한다. */
 private val GuideHintStyle = NmTypography.body.copy(fontWeight = FontWeight.Medium)
+
+/** 안내 문구 — 미리보기 아래 여백. */
+private val HINT_TOP: Dp = 18.dp
+private val ZOOM_CELL = 34.dp
+private val SHUTTER_VISUAL = 73.dp
+
+/** 갤러리 · 오른쪽 빈자리 — 보이는 원 55, 자리 78. */
+private val SIDE = 55.dp
+private val SIDE_SLOT = 78.dp
+
+// 기본 카메라 색(화면에서 뽑았다). 앱 팔레트에 없는 회색이라 여기 둔다.
+private val CapsuleGray = Color(0xFF262626)
+private val SelectedGray = Color(0xFF474747)
+private val SideGray = Color(0xFF2E2E2E)
+private val ShutterWhite = Color(0xFFF8F7F2)
