@@ -74,6 +74,9 @@ class ImprintReader(parts: List<File>) : Closeable {
 
     private val models: List<LiteRtModel> = openAll(parts)
 
+    /** 지금 GPU 로 도는 조각 이름 — 대체됐으면 빠진다. 벤치가 실제 경로를 남기려고 본다. */
+    internal val gpuParts: List<String> get() = models.filter { it.onGpu }.map { it.name }
+
     /** 조각마다 전용 스레드 — 한 조각을 두 스레드가 부르지 않게 한다. */
     private val lanes: List<ExecutorService> = models.map { model ->
         Executors.newSingleThreadExecutor { runnable ->

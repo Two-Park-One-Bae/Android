@@ -3,7 +3,10 @@ package app.nursemate.core.vision.imprint
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.GpuOverride
+import app.nursemate.core.vision.VisionBackend
 import java.io.File
+import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,9 +62,17 @@ import org.opencv.core.Mat
 @RunWith(AndroidJUnit4::class)
 class ImprintReaderBenchmark {
 
+    /** 바꾼 전역 GPU 허용을 되돌린다 — 같은 계측 프로세스의 다음 테스트가 순서에 따라 CPU 로 돌지 않게. */
+    @After
+    fun restore() {
+        VisionBackend.allowGpu = { true }
+    }
+
     @Test
     fun `한_면_판독_소요를_단계별로_잰다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
+        // nm_gpu=false 면 CPU 로 잰다 — 저가 기기에서 GPU 가 CPU 보다 느린지 가리려고(2026-10-19 Test Lab).
+        Log.i(TAG, "경로 ${GpuOverride.apply()}")
 
         val context = InstrumentationRegistry.getInstrumentation().context
         val parts = ImprintReader.PART_FILE_NAMES.map { File(context.getExternalFilesDir(null), it) }
@@ -85,6 +96,8 @@ class ImprintReaderBenchmark {
             val dec = runs.map { it.decodeMs }
             val tot = runs.map { it.totalMs }
 
+            // 요청이 아니라 **잰 뒤의 실제 경로**를 남긴다 — 열기 · 실행 중 CPU 로 대체된 조각은 빠진다.
+            Log.i(TAG, "실제 GPU 조각 ${reader.gpuParts.ifEmpty { listOf("없음") }.joinToString()}")
             Log.i(TAG, "모델 열기 ${openMs}ms (한 번만)")
             Log.i(TAG, "전처리  중앙값 ${pre.median()}ms  최소 ${pre.min()}  최대 ${pre.max()}")
             Log.i(TAG, "추론    중앙값 ${inf.median()}ms  최소 ${inf.min()}  최대 ${inf.max()}")
