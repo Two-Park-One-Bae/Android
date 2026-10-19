@@ -1,46 +1,73 @@
 package app.nursemate.core.vision
 
 /**
- * **어느 모델을 WebGPU 로 열지**를 바깥에서 정하게 하는 구멍 — NM-574.
+ * **어느 모델을 GPU 로 열지**를 바깥에서 정하게 하는 구멍 — NM-574 에서 시작해 NM-628(LiteRT)로 넘어왔다.
  *
  * ## 왜 `core:vision` 이 직접 정하지 않나
- * 판단에 필요한 것이 이 모듈 밖에 있다. 기기가 전에 죽은 적이 있는지(DataStore), 어떤 SoC
- * 인지, 원격으로 내려온 차단 목록이 있는지 — 전부 `app` 쪽 사정이다. 비전 모듈은 **묻기만**
- * 하고 답은 [allowWebGpu] 를 꽂은 쪽이 한다.
+ * 판단에 필요한 것이 이 모듈 밖에 있다. 기기가 전에 죽은 적이 있는지, 자가 점검에서 틀린 적이
+ * 있는지, 어떤 SoC · 드라이버인지 — 전부 `app` 쪽 사정이다. 비전 모듈은 **묻기만** 하고 답은
+ * [allowGpu] 를 꽂은 쪽이 한다.
  *
  * 꽂지 않으면 늘 허용이다. 계측 테스트와 `core:vision` 단독 사용이 그대로 돈다.
  *
- * ## 왜 이것이 필요한가 — 2026-10-13
- * Adreno 드라이버가 각인 모델을 받다 죽는다. Firebase Test Lab 실기기에서 재현했다.
- *
- * | 기기 | 결과 |
- * |---|---|
- * | SM-S916N · Adreno 740 | `vulkan.adreno.so` `vkCmdPipelineBarrier` 에서 **SIGSEGV** |
- * | SM-S928N · Adreno 750 | Conv 노드에서 `OrtException`, 이어서 **WebGPU 디바이스 사망** |
- *
- * 둘 다 [OrtSession.run][ai.onnxruntime.OrtSession.run] 안에서 일어난다. 세션 생성이 아니다 —
- * [OrtBackend] 의 `runCatching` 폴백이 **원리적으로 못 잡는 자리**이고, 세그폴트는 예외가
- * 아니라 OS 가 프로세스를 끝내는 것이라 어떤 `catch` 로도 못 막는다.
- *
- * 그래서 **들어가기 전에 막는 수밖에 없다.**
+ * ## 왜 들어가기 전에 막나
+ * GPU 드라이버가 모델을 받다 **프로세스째 죽는** 기기가 있다(ORT WebGPU 시절 Adreno 740 SIGSEGV —
+ * 2026-10-13 Test Lab). 세그폴트는 예외가 아니라 OS 가 프로세스를 끝내는 것이라 어떤 `catch` 로도
+ * 못 막는다. 그래서 전에 죽은 기기는 다음부터 열기 전에 막는다.
  */
 object VisionBackend {
 
     /**
-     * 이 모델을 WebGPU 로 열어도 되는가. 인자는 모델 **파일 이름**이다
-     * (`reader_ep60_s1.onnx` 등 — 각 모델의 `MODEL_FILE_NAME`).
+     * 이 모델을 GPU 로 열어도 되는가. 인자는 모델 **파일 이름**이다(각인은 조각 파일 이름 — `p3_trunk.tflite` 등).
      *
-     * 세션을 **열 때** 묻는다. 세션 하나가 플로우 내내 재사용되므로 추론마다 묻지 않는다.
+     * 모델을 **열 때** 묻는다. 한 번 연 모델이 플로우 내내 재사용되므로 추론마다 묻지 않는다.
      */
     @Volatile
-    var allowWebGpu: (modelFileName: String) -> Boolean = { true }
+    var allowGpu: (modelFileName: String) -> Boolean = { true }
 
     /**
-     * WebGPU 세션이 **실제로 열렸을 때** 불린다. 꽂은 쪽이 디스크에 흔적을 남겨, 이 프로세스가
-     * 네이티브로 죽으면 다음 실행에서 알아채게 한다.
+     * 모델을 GPU 로 **열기 직전**에 불린다. 꽂은 쪽이 디스크에 흔적을 남겨, 이 프로세스가 네이티브로 죽으면 다음
+     * 실행에서 알아채게 한다. 열기 전에 부르는 이유는 드라이버가 셰이더 준비(`create`) 중에도 죽기 때문이다.
      *
-     * ⚠️ **여기서 오래 걸리면 안 된다.** 세션 생성 경로 한가운데다.
+     * ⚠️ **여기서 오래 걸리면 안 된다.** 모델 여는 경로 한가운데다.
      */
     @Volatile
-    var onWebGpuSessionOpened: (modelFileName: String) -> Unit = {}
+    var onGpuUse: (modelFileName: String) -> Unit = {}
+
+    /** [onGpuUse] 로 알린 GPU 모델을 닫았다(또는 열기 실패 · CPU 대체). 열린 GPU 모델이 없으면 흔적을 지울 수 있다. */
+    @Volatile
+    var onGpuReleased: (modelFileName: String) -> Unit = {}
+
+    /**
+     * GPU 로 열린 모델이 **실행에서** 실패해 CPU 로 대체했다. 꽂은 쪽이 이 기기 · 이 빌드에서 그 모델을 CPU 에 고정해
+     * 다음에 열 때부터 GPU 를 시도하지 않게 한다.
+     */
+    @Volatile
+    var onGpuRunFailed: (modelFileName: String) -> Unit = {}
+
+    /**
+     * 모델이 **어느 가속기로** 열렸는지 — 열 때마다 불린다. 운영에서 기기별로 GPU 가 실제로 붙는지 보려는
+     * 분석 이벤트가 쓴다(NM-628). [onGpuUse] 와 달리 크래시 판정과 무관하다. GPU 실행 실패로 CPU 로 바뀌었을 때도 한 번 더
+     * 불린다([OpenOutcome.GPU_RUN_FAILED]).
+     */
+    @Volatile
+    var onModelOpened: (modelFileName: String, outcome: OpenOutcome) -> Unit = { _, _ -> }
+}
+
+/** 모델이 실제로 어디서 열렸고, CPU 라면 왜인가. 이름(`label`)은 분석 이벤트 값이다 — 바꾸지 않는다. */
+enum class OpenOutcome(val label: String, val onGpu: Boolean) {
+    /** 계획대로 GPU. */
+    GPU("ok", onGpu = true),
+
+    /** 실행 정밀도 계약이 CPU 다(각인 p2 · p5). */
+    PLANNED_CPU("planned_cpu", onGpu = false),
+
+    /** GPU 로 열다 실패해 CPU 로 대체했다 — 드라이버가 모델을 거절했다. */
+    GPU_OPEN_FAILED("gpu_open_failed", onGpu = false),
+
+    /** [VisionBackend.allowGpu] 가 막았다 — 전에 네이티브로 죽은 기기 · GPU 실행이 실패해 CPU 에 고정된 모델. */
+    GPU_BLOCKED("gpu_blocked", onGpu = false),
+
+    /** GPU 로 열렸는데 실행에서 실패해 CPU 로 다시 열었다. */
+    GPU_RUN_FAILED("gpu_run_failed", onGpu = false)
 }

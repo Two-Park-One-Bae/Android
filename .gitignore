@@ -30,3 +30,5 @@ google-services.json
 # 양자화본은 그 아래라 그대로 올라간다. git 은 큰 바이너리를 지우지 못해 한 번 들어가면
 # 이후 모든 clone 이 비용을 낸다. 릴리스 AAB 는 이 파일이 있는 로컬에서 만든다(docs/RELEASE.md).
 *.onnx
+# LiteRT 모델(NM-628). 정본은 ML DVC — 받는 법은 docs/RELEASE.md, 목록은 app/models.md5.
+*.tflite

@@ -46,10 +46,6 @@ airbridge = "4.11.3"
 coil = "3.3.0"
 
 # 온디바이스 검출 (core:vision)
-onnxruntime = "1.30.0"
-# ⚠️ ORT 판 번호와 무관하다 — 퀄컴이 따로 매기는 플러그인 EP 판이다(NM-577).
-onnxruntimeQnnPlugin = "2.6.0"
-qnnRuntime = "2.51.0"
 opencv = "4.12.0"
 androidxExifInterface = "1.4.1"
 androidxBrowser = "1.10.0"
@@ -127,8 +123,8 @@ androidx-test-runner = { group = "androidx.test", name = "runner", version.ref =
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 # 테스트 메서드마다 프로세스를 새로 띄운다 — 네이티브 세그폴트가 나머지 테스트를 날리지 않게 (NM-577).
 androidx-test-orchestrator = { group = "androidx.test", name = "orchestrator", version = "1.6.1" }
-# LiteRT(구 TFLite) — **계측 테스트 전용**이다. WebGPU 가 Mali 에서 전멸하고 Adreno 에서
-# 모델마다 갈리므로, OpenCL 기반 GPU 델리게이트가 대안이 되는지 재 본다 (NM-577).
+# LiteRT(구 TFLite) — 온디바이스 추론 런타임(NM-628). 검출 · 각인 · 마크 모두 `CompiledModel` 로 돈다.
+# ML 이 이 판으로 공식 세트 정확도를 쟀다 — 올릴 때는 그 표(`_handoff/litert-ondevice-migration.md`)를 다시 잰다.
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 litert-gpu = { group = "com.google.ai.edge.litert", name = "litert-gpu", version.ref = "litert" }
 
@@ -145,7 +141,7 @@ firebase-appcheck-playintegrity = { group = "com.google.firebase", name = "fireb
 firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appcheck-debug" }
 
 # 크래시·지표 (NM-466). 식별자 계약은 spec `feature/auth/README.md` §지표·크래시 식별자 (NM-461).
-# ndk 변형이라야 네이티브 크래시를 심볼과 함께 올린다 — ONNX Runtime 이 죽으면 그쪽에서 죽는다.
+# ndk 변형이라야 네이티브 크래시를 심볼과 함께 올린다 — 추론 런타임(LiteRT) · GPU 드라이버가 죽으면 그쪽에서 죽는다.
 firebase-crashlytics-ndk = { group = "com.google.firebase", name = "firebase-crashlytics-ndk" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 
@@ -169,27 +165,6 @@ airbridge-sdk = { group = "io.airbridge", name = "sdk-android", version.ref = "a
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
-# 온디바이스 추론 런타임. 프리빌트에 **CPU · WebGPU · NNAPI · XNNPACK** 넷이 들어 있다
-# (1.30.0 에서 기기로 확인했다 — 「WebGPU 는 소스 빌드에만」은 옛 NM-396 시절 얘기다).
-onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
-
-# 퀄컴 Hexagon NPU(HTP) — **플러그인 EP** 다. NM-577 측정 전용으로 붙였다.
-#
-# `com.microsoft.onnxruntime:onnxruntime-android-qnn` 과 혼동하지 말 것. 그쪽은 ORT 를 통째로
-# 갈아 끼우는 배포본이라 **WebGPU·NNAPI·XNNPACK 이 빠지고**(기기 실측: EP 가 CPU·QNN 둘뿐),
-# 표준 artifact 와 같이 쓰면 `ai.onnxruntime` 네임스페이스가 겹쳐 빌드가 깨진다.
-#
-# 이 artifact 는 `libonnxruntime_providers_qnn.so` 하나와 클래스 둘(`QnnPluginEpLibraryKt`)만
-# 들어 있고 `libonnxruntime.so` 를 NEEDED 로 걸지도 않는다 — ORT API 를 팩토리 ABI 로
-# 넘겨받는다. 그래서 **표준 배포본과 공존하고, WebGPU 와 QNN 을 한 프로세스에서 쓸 수 있다.**
-onnxruntime-qnn-plugin = { group = "com.qualcomm.qti", name = "onnxruntime-android-qnn", version.ref = "onnxruntimeQnnPlugin" }
-
-# 위 플러그인이 dlopen 하는 QNN 백엔드 자체(`libQnnHtp` · `libQnnSystem` · `libQnnHtpPrepare`)와
-# HTP 세대별 skel/stub. POM 에 의존성이 없어 **직접 물려야** 한다.
-#
-# ⚠️ arm64 기준 비압축 **214MB** 다. 운영에는 이 artifact 를 통째로 넣지 않는다 — 세대별 feature
-# module 이 필요한 `.so` 만 꺼내 싣는다(`QnnFeatureConventionPlugin`, 허용목록 방식).
-qnn-runtime = { group = "com.qualcomm.qti", name = "qnn-runtime", version.ref = "qnnRuntime" }
 # 각인 OCR 전처리(NM-485). 기준 구현(ML `infer.py`)이 OpenCV 라 같은 라이브러리를 쓴다 —
 # CLAHE·형태학·연결요소를 손으로 옮기면 수치가 갈려도 조용히 틀린다.
 opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
@@ -198,10 +173,6 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
-# 조건부 전달 모듈(`qnn_core` + 세대별 `qnn_v##`). QNN 런타임을 퀄컴 기기에, 자기 세대 것만 내려보낸다.
-# ⚠️ **버전을 적지 않는다** — AGP 는 build-logic 이 이미 classpath 에 올려 둬서,
-#    버전을 주면 "already on the classpath with an unknown version" 으로 거절당한다.
-android-dynamic-feature = { id = "com.android.dynamic-feature" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
@@ -219,5 +190,3 @@ nursemate-android-library = { id = "nursemate.android.library" }
 nursemate-android-library-compose = { id = "nursemate.android.library.compose" }
 nursemate-jvm-library = { id = "nursemate.jvm.library" }
 nursemate-hilt = { id = "nursemate.hilt" }
-# Hexagon 세대 하나짜리 조건부 전달 모듈(`qnn_v73` 등)을 찍어낸다.
-nursemate-qnn-feature = { id = "nursemate.qnn.feature" }

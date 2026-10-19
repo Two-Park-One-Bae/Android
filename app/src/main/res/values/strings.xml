@@ -10,8 +10,4 @@
     <!-- 위젯 고르는 화면(런처)에서 보이는 설명. -->
     <string name="nm_preset_widget_label">처치 타이머 시작</string>
     <string name="nm_preset_widget_description">프리셋 하나를 지정해 두고 눌러서 바로 시작합니다.</string>
-    <!-- `:qnn` 조건부 전달 모듈의 이름. **base 에 있어야 한다** — bundletool 이 base 리소스
-         테이블에서 찾는다(모듈 안에 두면 "Title for module 'qnn' is missing" 으로 실패).
-         설치 시점 전달이라 사용자에게 다운로드 확인 화면이 뜨지 않아 실제로 보이지는 않는다. -->
-    <string name="qnn_module_title">NPU 가속</string>
 </resources>

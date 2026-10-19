@@ -57,44 +57,16 @@ android {
     namespace = "app.nursemate"
 
     /*
-     * 조건부 전달 모듈 — **퀄컴 기기에만** 내려간다.
-     *
-     * `qnn-runtime` 이 arm64 비압축 180MB 인데 Hexagon NPU 가 없는 기기에는 한 바이트도
-     * 쓸모가 없다. base 에 넣으면 엑시노스·Dimensity·Tensor 사용자가 쓰지도 않을 180MB 를
-     * 받는다. 어느 기기에 내려줄지는 `src/main/device_targeting_configuration.xml` 이 정하고,
-     * 조건 자체는 `qnn/src/main/AndroidManifest.xml` 의 `<dist:device-groups>` 가 건다.
-     *
-     * ⚠️ 이 메커니즘은 **번들(AAB)에만** 산다. `assembleRelease` 로 뽑은 APK 에는 feature
-     *    모듈이 통째로 들어간다 — 크기를 볼 때는 `bundleRelease` + bundletool 로 본다.
+     * LiteRT AAR 에 딸려 오는 **퀄컴 NPU 용** `.so` 를 뺀다 — NPU 는 2.1.0 범위 밖이다(NM-628).
+     * `libLiteRtDispatch_Qualcomm` · `libLiteRtCompilerPlugin_Qualcomm` 합 1.2MB(arm64). 없으면 NPU 를
+     * 등록하지 못한다는 경고만 찍고(`npu_registry.cc`) GPU · CPU 는 그대로 돈다.
      */
-    /*
-     * **`.so` 를 실파일로 푼다** — QNN 이 이것 없이는 조용히 CPU 로 돈다.
-     *
-     * AGP 기본값(`extractNativeLibs=false`)은 `.so` 를 APK 안에 비압축으로 두고 링커가 거기서
-     * 바로 읽는다. 디스크에 파일이 생기지 않으므로 `applicationInfo.nativeLibraryDir` 이 **빈
-     * 디렉터리**다. 2026-10-14 Test Lab(dm1q·SM8550)에서 확인했다 — `libDir 안 0개`.
-     *
-     * 그런데 HTP 는 DSP 쪽 skel 을 **FastRPC 로 파일에서** 올린다. ORT 는 그 경로를
-     * `backend_path` 의 디렉터리에서 만들어 `ADSP_LIBRARY_PATH` 에 넣는데
-     * ([OrtBackend.qnnNativeLibDir]), 그 디렉터리가 비어 있으면 `cannot open
-     * libQnnHtpV73Skel.so, errno 2` 로 떨어지고 **EP 가 노드를 하나도 안 가져간다.**
-     * 세션은 열리고 답도 맞아서 겉보기엔 성공이다 — 느린 것만이 증거다.
-     *
-     * ⚠️ 대가는 **설치 용량**이다. 압축본(APK 안)과 푼 사본이 둘 다 디스크를 쓴다. 대신
-     *    다운로드는 줄어든다 — 비압축 저장이 아니라 압축돼 전송되기 때문이다.
-     */
-    packaging { jniLibs { useLegacyPackaging = true } }
-
-    dynamicFeatures += setOf(":qnn_core", ":qnn_v69", ":qnn_v73", ":qnn_v75", ":qnn_v79", ":qnn_v81")
-
-    /*
-     * 어느 기기에 `:qnn` 을 내려줄지 — **경로를 명시해야 한다.**
-     *
-     * `src/main/device_targeting_configuration.xml` 에 두기만 하면 AGP 가 **조용히 무시한다.**
-     * 처음에 그렇게 뒀더니 번들은 멀쩡히 빌드되는데 `BUNDLE-METADATA` 에 설정이 안 들어갔고,
-     * 그러면 조건이 없는 셈이라 **180MB 가 전 기기에 깔린다.** 빌드가 알려 주지 않는다.
-     */
-    bundle.deviceTargetingConfig = file("src/main/device_targeting_configuration.xml")
+    packaging {
+        jniLibs {
+            excludes +=
+                setOf("**/libLiteRtDispatch_Qualcomm.so", "**/libLiteRtCompilerPlugin_Qualcomm.so")
+        }
+    }
 
     defaultConfig {
         applicationId = "app.nursemate"
@@ -140,7 +112,7 @@ android {
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
             airbridge(secret("AIRBRIDGE_APP_NAME"), secret("AIRBRIDGE_APP_TOKEN"))
 
-            // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
+            // ⚠️ **네이티브 심볼을 올려야 `libLiteRt.so` · GPU 드라이버 스택이 함수명으로 보인다.**
             // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
             //
             // release 에만 건다 — debug 는 R8 을 안 써서 올릴 매핑이 없고, 네이티브 심볼도
@@ -223,8 +195,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
 
-    // 조건부 feature module 이 실제로 설치됐는지는 **설치된 앱에서만** 볼 수 있다 —
-    // `QnnModuleProbeTest` 가 `nativeLibraryDir` 과 splitNames 를 찍는다.
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
@@ -233,20 +203,21 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
-// R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+// R8 이 LiteRT · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
 //
-// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
-// ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
-// (`FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`), Java 코드가 그 클래스들을 직접
-// 부르지 않아 R8 이 지워도 되는 것으로 본다. 지금은 `proguard-rules.pro` 의
-// `-keep class ai.onnxruntime.** { *; }` 가 막고 있다.
+// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3, 그때는 ONNX Runtime).
+// 네이티브 쪽이 결과를 JVM 으로 돌려줄 때 클래스를 **이름으로** 찾는데, Java 코드가 그 클래스들을 직접
+// 만들지 않아 R8 이 지우거나 바꿔도 되는 것으로 본다.
 //
-// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 컴파일도 단위 테스트도
-// 아무 말을 하지 않는다. 그런데 증거는 매핑 파일에 그대로 남는다 — ⑩ 문서가 적어 둔 형태가
-// 바로 이것이다:
+// LiteRT 도 같은 부류다(NM-628). `liblitert_jni.so` 가 `LiteRtException` · `TensorBufferRequirements` ·
+// `TensorType`(+`ElementType` · `Layout`)을 이름으로 찾는다(문자열로 확인 — 2026-10-19). AAR 에 딸린 R8 규칙은
+// `org.tensorflow.lite` 애노테이션만 지켜서 **이 클래스들은 막아 주지 않는다.** `proguard-rules.pro` 의
+// `-keep class com.google.ai.edge.litert.** { *; }` 가 막는다.
 //
-//     살아 있을 때:  ai.onnxruntime.TensorInfo -> ai.onnxruntime.TensorInfo:
-//     깨졌을 때:     ai.onnxruntime.TensorInfo -> at4:
+// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 그런데 증거는 매핑 파일에 남는다:
+//
+//     살아 있을 때:  com.google.ai.edge.litert.TensorType -> com.google.ai.edge.litert.TensorType:
+//     깨졌을 때:     com.google.ai.edge.litert.TensorType -> at4:
 //
 // 그래서 매핑을 읽어 대조한다. 에뮬레이터로 실제 추론을 돌려 보는 길도 있었지만, 그러자면
 // 계측 테스트를 minify 된 앱에 붙여야 하고 그러면 테스트 하네스가 요구하는 것들을
@@ -261,11 +232,11 @@ dependencies {
 androidComponents {
     // JNI 가 이름으로 찾는 것들. 하나라도 리네임되면 그 타입이 나오는 순간 프로세스가 죽는다.
     val jniLookedUp = listOf(
-        "ai.onnxruntime.TensorInfo",
-        "ai.onnxruntime.OnnxTensor",
-        "ai.onnxruntime.MapInfo",
-        "ai.onnxruntime.SequenceInfo",
-        "ai.onnxruntime.OnnxJavaType",
+        "com.google.ai.edge.litert.LiteRtException",
+        "com.google.ai.edge.litert.TensorBufferRequirements",
+        "com.google.ai.edge.litert.TensorType",
+        "com.google.ai.edge.litert.TensorType${'$'}ElementType",
+        "com.google.ai.edge.litert.TensorType${'$'}Layout",
         // OpenCV 도 같은 부류다(NM-485). 네이티브가 이름으로 찾는 값 타입들이다.
         "org.opencv.core.Mat",
         "org.opencv.core.Size",
@@ -275,7 +246,7 @@ androidComponents {
 
     onVariants(selector().withBuildType("release")) { variant ->
         val mapping = variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE)
-        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}OnnxKeep") {
+        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}JniKeep") {
             inputs.file(mapping).withPropertyName("mapping")
             doLast {
                 val file = mapping.get().asFile
@@ -286,7 +257,7 @@ androidComponents {
                 file.useLines { lines ->
                     for (line in lines) {
                         // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
-                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가
+                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가(ORT 시절)
                         // OpenCV 를 목록에 더했을 때 그 줄을 통째로 건너뛰어, 멀쩡히 있는
                         // 클래스를 「매핑에서 찾지 못했다」로 잘못 읽었다(NM-485).
                         if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') continue
@@ -305,7 +276,7 @@ androidComponents {
                     R8 이 네이티브가 이름으로 찾는 클래스를 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
                     ${renamed.joinToString("\n")}
 
-                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.**` · `org.opencv.**` 를 확인하십시오.
+                    `proguard-rules.pro` 의 `-keep class com.google.ai.edge.litert.**` · `org.opencv.**` 를 확인하십시오.
                     사정은 docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
@@ -329,7 +300,7 @@ androidComponents {
 
 // 릴리스 산출물에 모델이 빠지거나 **정본이 아닌 것이 들어가지 않게** 막는다.
 //
-// 모델은 저장소에 넣지 않으므로(.gitignore 의 *.onnx) 파일이 없어도 빌드는 그냥 성공한다 —
+// 모델은 저장소에 넣지 않으므로(.gitignore 의 *.tflite) 파일이 없어도 빌드는 그냥 성공한다 —
 // 그 AAB 를 올리면 사용자는 식별을 시도할 때마다 '분석 실패'만 본다.
 // 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
 //

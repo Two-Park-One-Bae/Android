@@ -18,24 +18,25 @@
 -keep @interface com.kakao.sdk.common.model.Description
 -keepattributes RuntimeVisibleAnnotations, AnnotationDefault
 
-# ONNX Runtime — onnxruntime-android AAR에 consumer rules가 없다(직접 확인, 2026-09-17).
-# 네이티브 쪽이 추론 결과를 JVM으로 돌려줄 때 클래스를 **이름으로** 찾는다
-# (`OrtJniUtil.c` → `FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`).
-# R8이 그 이름을 바꾸면 FindClass가 null을 주고, 그 null이 GetMethodID로 들어가는 순간
-# ART가 "JNI DETECTED ERROR IN APPLICATION: java_class == null" 로 프로세스를 죽인다.
-# Java 코드는 이 클래스들을 직접 부르지 않아 R8 입장에선 지우거나 바꿔도 되는 것으로 보인다.
+# LiteRT — 온디바이스 추론 런타임(NM-628). ONNX Runtime 시절 ⑩ 과 **같은 부류의 위험**이다.
+# `liblitert_jni.so` 가 결과를 JVM 으로 돌려줄 때 `LiteRtException` · `TensorBufferRequirements` ·
+# `TensorType`(+`ElementType` · `Layout`)을 **이름으로** 찾는다(`.so` 문자열로 확인, 2026-10-19).
+# R8 이 그 이름을 바꾸면 FindClass 가 null 을 주고, 그 null 이 GetMethodID 로 들어가는 순간 ART 가
+# "JNI DETECTED ERROR IN APPLICATION" 으로 프로세스를 죽인다 — 릴리스에서만.
 #
-# 알약 식별을 누르면 릴리스에서만 100% SIGABRT 였다(0.2.1~0.2.3 전부, 실기기·에뮬레이터 확인).
-# 검출 자체는 성공하고 **결과를 읽는 단계**에서 죽어, 원인이 추론 엔진처럼 보였다 —
-# ONNX 버전을 1.29.0 → 1.22.0 으로 내렸지만 R8 문제라 아무 효과가 없었다.
+# AAR 에 딸린 규칙(`proguard.txt`)은 `org.tensorflow.lite.annotations.UsedByReflection` 만 지켜서
+# 위 클래스들을 막아 주지 않는다. 패키지 통째로 남긴다 — Kotlin API 표면이 작아 크기 영향이 없다.
+# 같은 일을 `app/build.gradle.kts` 의 매핑 가드가 빌드 때 확인한다.
 #
-# 패키지 통째로 남긴다. JNI가 이름으로 찾는 대상이 TensorInfo 하나가 아니라
-# OnnxTensor·OnnxMap·OnnxSequence·MapInfo·SequenceInfo·OnnxJavaType·OrtException 등
-# 여럿이고, 어느 것이 언제 불리는지는 모델 출력 타입에 따라 달라진다. Java API 표면은
-# 작아서(수십 KB) 남겨도 크기 영향이 없다.
--keep class ai.onnxruntime.** { *; }
+# ONNX Runtime 시절 사정(0.2.1~0.2.3 릴리스 100% SIGABRT)은 docs/KNOWN-ISSUES.md ⑩.
+-keep class com.google.ai.edge.litert.** { *; }
 
-# OpenCV — 각인 OCR 전처리(NM-485). ONNX Runtime 과 **같은 부류의 위험**이다(⑩).
+# `core:vision` 이 LiteRT 에서 `play:ai-delivery`(AI Pack 받기, 알파)를 뺐다 — 그게 WorkManager 를 끌고 와
+# 릴리스에서 앱이 시작하자마자 죽었다(사정은 core/vision/build.gradle.kts). 그 패키지를 부르는 것은
+# `com.google.ai.edge.litert.deployment.AiPackModelProvider` 하나이고 우리는 쓰지 않는다 — 빈 참조만 넘긴다.
+-dontwarn com.google.android.play.core.aipacks.**
+
+# OpenCV — 각인 OCR 전처리(NM-485). LiteRT 와 **같은 부류의 위험**이다(⑩).
 # 네이티브 쪽이 JVM 으로 값을 돌려줄 때 클래스를 이름으로 찾으므로, R8 이 이름을 바꾸면
 # 빌드는 멀쩡히 성공하고 릴리스에서만 죽는다. Java API 표면이 작아 남겨도 크기 영향이 없다.
 -keep class org.opencv.** { *; }

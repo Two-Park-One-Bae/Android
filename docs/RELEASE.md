@@ -28,35 +28,38 @@
 
 ## 온디바이스 모델 (필수 · 저장소에 없음)
 
-ONNX 모델은 **저장소에 넣지 않는다.** 한 번 커밋하면 이후 모든 clone 이 영구히 그 비용을
-낸다(git 은 큰 파일을 되돌려 지우지 못한다).
+모델(LiteRT `.tflite`)은 **저장소에 넣지 않는다.** 한 번 커밋하면 이후 모든 clone 이 영구히 그 비용을
+낸다(git 은 큰 파일을 되돌려 지우지 못한다). `.gitignore` 가 `*.tflite` · `*.onnx` 를 막는다.
 
-**목록과 해시는 `app/models.md5` 한 곳이다.**
+**목록과 해시는 `app/models.md5` 한 곳이다.** 2.1.0 부터 런타임이 LiteRT 하나다(NM-628) — 전 기기 같은 파일.
 
 | 모델 | 크기 | 쓰는 곳 |
 |---|---|---|
-| `rfdetr_seg_small.onnx` | 119MB | 낱알 검출·마스크 (`PillDetector`) |
-| `reader_ep60_s1.onnx` | 21MB | 각인 판독 (`ImprintReader`, NM-485) |
-| `mark_species_fp16.onnx` | 53MB | 마크 유무·종·임베딩 (`MarkReader`, NM-515) |
+| `rfdetr_seg_small_f16w.tflite` | 63MB | 낱알 검출·마스크 (`PillDetector`) |
+| `p1_loc` · `p2_tps` · `p3_trunk` · `p4_frm` · `p5_lstm_head` `.tflite` | 합 23MB | 각인 판독 다섯 조각 (`ImprintReader`) |
+| `mark_m4_f16w.tflite` | 57MB | 마크 유무·종·임베딩 (`MarkReader`) |
 
-**정본은 ML 저장소의 DVC** 다(`s3://nursemate-ml-models` · `ap-northeast-2`).
-릴리스 빌드 전에 받아 둔다:
+**정본은 ML 저장소의 DVC** 다(`s3://nursemate-ml-models` · `ap-northeast-2`). 실행 정밀도 계약 · 기기 실측은
+각 모델 폴더 `INFO.md` 「Android 배포본 (LiteRT)」. 릴리스 빌드 전에 받아 둔다:
 
 ```bash
 # 사전: dvc(brew install dvc) · ML 저장소 SSH 접근 · 버킷 읽기 권한이 있는 AWS 프로필
-AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
-  models/seg/20260610-rfdetr-seg-small/rfdetr_seg_small.onnx -o app/src/main/assets/
-AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
-  models/imprint/20260907-crnn-ep60-s1/reader_ep60_s1.onnx -o app/src/main/assets/
-AWS_PROFILE=nursemate-dvc dvc get git@github.com:Two-Park-One-Bae/ML.git \
-  models/mark/20260925-convnext-species/mark_species_fp16.onnx -o app/src/main/assets/
+ML=git@github.com:Two-Park-One-Bae/ML.git
+for p in seg/20260610-rfdetr-seg-small/litert/rfdetr_seg_small_f16w.tflite \
+         mark/20260925-convnext-species/litert/mark_m4_f16w.tflite \
+         imprint/20260907-crnn-ep60-s1/litert/p1_loc.tflite \
+         imprint/20260907-crnn-ep60-s1/litert/p2_tps.tflite \
+         imprint/20260907-crnn-ep60-s1/litert/p3_trunk.tflite \
+         imprint/20260907-crnn-ep60-s1/litert/p4_frm.tflite \
+         imprint/20260907-crnn-ep60-s1/litert/p5_lstm_head.tflite; do
+  AWS_PROFILE=nursemate-dvc dvc get $ML models/$p -o app/src/main/assets/
+done
 ```
 
-⚠️ 마크는 **fp16 판**(`mark_species_fp16.onnx`, 53MB)이다. 같은 폴더의 `mark_species.onnx`
-(fp32, 106MB)는 **대조용**이라 앱에 싣지 않는다. 답은 같고(NM-526 — 종 top-1 6/6 · 임베딩
-코사인 0.999997) 크기가 절반이며, 그래프에 임베딩 차원이 768 로 박혀 있어 붙이기도 쉽다.
+⚠️ 예전 ONNX 3개(`rfdetr_seg_small.onnx` · `reader_ep60_s1.onnx` · `mark_species_fp16.onnx`)가 assets 에 남아 있으면
+**지운다** — 앱은 읽지 않지만 그대로 APK 에 실린다(193MB).
 
-`dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(약 193MB).
+`dvc get` 은 **ML 을 클론해 두지 않아도 된다** — 임시 클론을 만들어 S3 에서 받는다(약 136MB).
 ML 클론이 이미 있으면 `dvc pull` 후 복사하는 쪽이 더 빠르다.
 
 - **맞는 파일인지는 빌드가 본다.** `bundleRelease`·`assembleRelease` 가 `app/models.md5` 의
@@ -81,7 +84,7 @@ ML 클론이 이미 있으면 `dvc pull` 후 복사하는 쪽이 더 빠르다.
 ```bash
 # 사전: certificates 레포가 Android 레포와 같은 부모 폴더에 클론돼 있고,
 #       secrets.properties에 RELEASE_* 4개 키가 채워져 있어야 한다.
-#       app/src/main/assets/rfdetr_seg_small.onnx 가 있어야 한다(위 참고).
+#       app/models.md5 의 모델 7개가 app/src/main/assets/ 에 있어야 한다(위 참고).
 ./gradlew :app:bundleRelease
 # 산출물: app/build/outputs/bundle/release/app-release.aab
 # 서명 확인: jarsigner -verify app/build/outputs/bundle/release/app-release.aab
@@ -115,7 +118,7 @@ CI 는 실패했을 때의 테스트 리포트만 남긴다.
 | 카카오 `*ErrorCause` enum 을 R8 이 리네임 (PR #14) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ ¹ |
 | `glance-appwidget` 이 끌고 온 `WorkManagerInitializer` (PR #21) | 프로세스 시작 즉시 · 전 사용자 | ✗ | ○ |
 | 워치 릴리스가 미서명 (PR #21, 같은 날) | 설치 불가 · Data Layer 단절 | **○** | ○ |
-| R8 이 `ai.onnxruntime.**` 리네임 (⑩ · NM-466) | 「알약 식별」 100% | **○** ² | ○ |
+| R8 이 JNI 조회 클래스 리네임 (⑩ · NM-466 · LiteRT 는 NM-628) | 「알약 식별」 100% | **○** ² | ○ |
 | ONNX Runtime 1.29.0 의 SME 명령 (⑧) | 「이 사진 사용」 직후 | ✗ | ✗ ³ |
 | App Check 에 SHA-256 미등록 (⑦) | Play 설치본만 | ✗ | ✗ ⁴ |
 
@@ -127,9 +130,9 @@ CI 는 실패했을 때의 테스트 리포트만 남긴다.
    키 해시는 필요 없다. 그건 **로그인 요청 때** 카카오 서버가 검증하는 값이고 이 잡은
    로그인을 하지 않는다 — 릴리스는 App Check 가 Play Integrity 라 에뮬레이터에서 어차피 막힌다.
 2. **에뮬레이터가 필요 없다 — 매핑 파일이 답을 갖고 있다.** ⑩ 은 `-keep class
-   ai.onnxruntime.** { *; }` 가 사라지면 재발하는데, 그러면 매핑에 그대로 찍힌다:
-   `ai.onnxruntime.TensorInfo -> at4:`. `app/build.gradle.kts` 의 가드가
-   `minifyReleaseWithR8` 뒤에 매핑을 읽어 JNI 가 이름으로 찾는 클래스 다섯이 리네임되지
+   com.google.ai.edge.litert.** { *; }`(ORT 시절엔 `ai.onnxruntime.**`)가 사라지면 재발하는데, 그러면 매핑에
+   그대로 찍힌다: `com.google.ai.edge.litert.TensorType -> at4:`. `app/build.gradle.kts` 의 가드가
+   `minifyReleaseWithR8` 뒤에 매핑을 읽어 JNI 가 이름으로 찾는 클래스(LiteRT 다섯 · OpenCV 넷)가 리네임되지
    않았는지 대조하고, 하나라도 바뀌었으면 빌드를 세운다. **로컬 릴리스 빌드도 같이 막는다.**
 
    에뮬레이터로 실제 추론을 돌리는 길도 시도했으나 접었다. 계측 테스트를 minify 된 앱에
@@ -258,7 +261,7 @@ adb logcat | grep NM467
 4. **태그 커밋을 체크아웃해** 최종 AAB 를 만든다(모델 파일 존재 확인 후).
    ```bash
    git checkout v<versionName>
-   (cd app/src/main && md5 -r assets/*.onnx | sed 's|assets/||')   # app/models.md5 와 같아야 한다
+   (cd app/src/main && md5 -r assets/*.tflite | sed 's|assets/||')   # app/models.md5 와 같아야 한다
    #                                                               다르면 위 "온디바이스 모델" 절 참고
    ./gradlew :app:bundleRelease :wear:bundleRelease
    jarsigner -verify app/build/outputs/bundle/release/app-release.aab    # "jar verified."
