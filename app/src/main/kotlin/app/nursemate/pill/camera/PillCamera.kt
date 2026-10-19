@@ -31,11 +31,13 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * 초점 상태 — 매 프레임 `CONTROL_AF_STATE` 를 넷으로 줄였다. 링 색이 이 값을 따른다.
@@ -127,7 +129,10 @@ class PillCamera(private val context: Context) {
         view: PreviewView,
         night: Boolean = _state.value.night,
         zoom: Float = zoomTarget
-    ) {
+    ) = withContext(Dispatchers.Main.immediate) {
+        // CameraX 묶기 · `PreviewView.surfaceProvider` 는 메인 스레드에서만 된다. 부르는 쪽이 메인이어도 앞의 `await` 가
+        // 끝난 뒤 다른 스레드에서 이어지는 환경이 있다(Compose UI 테스트의 인터셉터 — Test Lab A12 · S9 에서 카메라가 안
+        // 붙었다, 2026-10-19). 여기서 메인에 못 박는다. 이미 메인이면 `immediate` 라 디스패치하지 않는다.
         val cameraProvider = provider ?: ProcessCameraProvider.awaitInstance(context).also { provider = it }
         val ext = extensions ?: runCatching {
             ExtensionsManager.getInstanceAsync(context, cameraProvider).await(context)
