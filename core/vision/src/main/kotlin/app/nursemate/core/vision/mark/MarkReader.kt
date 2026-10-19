@@ -5,6 +5,7 @@ import app.nursemate.core.vision.GpuPrecision
 import app.nursemate.core.vision.LiteRtModel
 import app.nursemate.core.vision.Placement
 import app.nursemate.core.vision.RunPlan
+import app.nursemate.core.vision.VisionBackend
 import app.nursemate.core.vision.nchwToNhwc
 import java.io.Closeable
 import java.io.File
@@ -122,7 +123,9 @@ class MarkReader(modelFile: File) : Closeable {
     private fun runSession(): Pair<Array<FloatArray>, FloatArray> {
         val n = MarkPreprocess.ROTATIONS
         val side = MarkPreprocess.SIDE
-        val outputs = model.run(nchwToNhwc(input, nhwc, n = n, c = 3, plane = side * side))
+        val outputs = VisionBackend.whileOnGpu(model.name, model.onGpu) {
+            model.run(nchwToNhwc(input, nhwc, n = n, c = 3, plane = side * side))
+        }
         // 출력은 크기로 가른다 — 8×104 와 8×768 이라 겹치지 않는다.
         val flat = outputs.first { it.size != n * EMBEDDING_DIM }
         val embedding = outputs.first { it.size == n * EMBEDDING_DIM }
@@ -152,6 +155,12 @@ class MarkReader(modelFile: File) : Closeable {
     override fun close() {
         model.close()
     }
+
+    /**
+     * 돌고 있는 판독이 끝난 뒤 닫는다 — 잠금을 잡고 닫으므로 네이티브 실행 한가운데서 모델이 닫히지 않는다.
+     * 화면을 떠나 코루틴이 취소돼도 블로킹 실행은 멈추지 않는데, 그 중에 닫으면 SIGSEGV 고 GPU 크래시로 잘못 판정된다.
+     */
+    suspend fun closeWhenIdle() = lock.withLock { close() }
 
     /**
      * 판독 결과.

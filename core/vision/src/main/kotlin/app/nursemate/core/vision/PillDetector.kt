@@ -90,7 +90,7 @@ class PillDetector(modelFile: File) : Closeable {
         nchwToNhwc(nchw, nhwc, n = 1, c = 3, plane = side * side)
         val t1 = System.nanoTime()
 
-        val outputs = model.run(nhwc)
+        val outputs = VisionBackend.whileOnGpu(model.name, model.onGpu) { model.run(nhwc) }
         val inferenceEnd = System.nanoTime()
 
         // 출력은 크기로 가른다 — 셋이 서로 다르고, 이름보다 변환 도구에 덜 흔들린다.
@@ -178,6 +178,12 @@ class PillDetector(modelFile: File) : Closeable {
     override fun close() {
         model.close()
     }
+
+    /**
+     * 돌고 있는 판독이 끝난 뒤 닫는다 — 잠금을 잡고 닫으므로 네이티브 실행 한가운데서 모델이 닫히지 않는다.
+     * 화면을 떠나 코루틴이 취소돼도 블로킹 실행은 멈추지 않는데, 그 중에 닫으면 SIGSEGV 고 GPU 크래시로 잘못 판정된다.
+     */
+    suspend fun closeWhenIdle() = lock.withLock { close() }
 
     companion object {
         /** 가중치 fp16 저장 · 63MB. 목록과 해시는 `app/models.md5`. */

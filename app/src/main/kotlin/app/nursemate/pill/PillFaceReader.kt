@@ -6,7 +6,6 @@ import app.nursemate.core.vision.imprint.ImprintReader
 import app.nursemate.core.vision.mark.MarkEmbedding
 import app.nursemate.core.vision.mark.MarkPresence
 import app.nursemate.core.vision.mark.MarkReader
-import java.io.Closeable
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -32,10 +31,13 @@ import kotlinx.coroutines.withContext
  * 기기별 시간은 ML 실측표(`_handoff/litert-ondevice-migration.md`)에 있다 — 플래그십 8종 각인 0.4~1.2초.
  * GPU 를 못 쓰는 기기는 CPU 로 1.4~5.0초다. 중급 · 구형은 ML 이 재는 중이다.
  */
-class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) : Closeable {
+class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) {
 
     private var imprint: ImprintReader? = null
     private var mark: MarkReader? = null
+
+    /** [close] 뒤에는 열지 않는다 — 미리 열기가 각인과 마크 사이에서 닫기에 밀리면 닫은 뒤에 마크가 새로 열려 샌다. */
+    private var closed = false
 
     /** 미리 열기([prewarm])와 판독이 겹쳐도 모델을 두 번 열지 않게 연다 · 닫는 것을 줄 세운다. */
     private val opening = Mutex()
@@ -70,26 +72,30 @@ class PillFaceReader @Inject constructor(private val modelFile: PillModelFile) :
     }
 
     private suspend fun loadImprint(): ImprintReader = opening.withLock {
+        check(!closed) { "닫힌 판독기다" }
         imprint ?: withContext(Dispatchers.IO) {
             ImprintReader(modelFile.prepare(PillModel.Imprint)).also { imprint = it }
         }
     }
 
     private suspend fun loadMark(): MarkReader = opening.withLock {
+        check(!closed) { "닫힌 판독기다" }
         mark ?: withContext(Dispatchers.IO) {
             MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
         }
     }
 
-    override fun close() {
-        imprint?.close()
-        mark?.close()
+    /**
+     * 여는 중이면 다 연 뒤, 읽는 중이면 다 읽은 뒤 닫는다 — 열기 · 판독과 닫기가 엇갈려 모델이 새거나 닫힌 모델을
+     * 건드리지 않게. 이 뒤로는 다시 열지 않는다.
+     */
+    suspend fun close() = opening.withLock {
+        closed = true
+        imprint?.closeWhenIdle()
+        mark?.closeWhenIdle()
         imprint = null
         mark = null
     }
-
-    /** 여는 중이면 다 연 뒤 닫는다 — 열기와 닫기가 엇갈려 열린 모델이 새지 않게. */
-    suspend fun closeAfterOpening() = opening.withLock { close() }
 
     private companion object {
         const val TAG = "NM515"

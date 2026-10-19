@@ -36,10 +36,10 @@ internal data class RunPlan(val placement: Placement, val precision: GpuPrecisio
  * 알려 이 기기에서 그 모델을 CPU 에 고정한다 — 컴파일은 받고 실행에서 거절하는 드라이버가 있어도 식별이 이어진다.
  * 느려도 도는 쪽이 판독을 통째로 포기하는 것보다 낫다. CPU 로 돌아도 판정은 fp32 와 같다(ML 실측).
  *
- * ## GPU 흔적은 열기 **전에** 남긴다
+ * ## GPU 흔적은 GPU 를 쓰는 동안만 — 열기 **전부터**
  * 드라이버는 셰이더를 준비하는 `create` 안에서도 프로세스째 죽을 수 있다. 연 뒤에 남기면 그 죽음이 흔적 없이 지나가
- * 다음 실행이 못 막는다. 그래서 GPU 를 쓰기 직전 [VisionBackend.onGpuUse], 그 GPU 모델을 닫을 때
- * [VisionBackend.onGpuReleased] 를 부른다(꽂은 쪽이 열린 수를 세어 0 이면 흔적을 지운다).
+ * 다음 실행이 못 막는다. 그래서 GPU 로 열기 · 닫기를 [VisionBackend.whileOnGpu] 로 감싸고, 실행은 리더가 판독 한 번을
+ * 감싼다(꽂은 쪽이 도는 작업 수를 세어 0 이면 흔적을 지운다). 열어 두고 쉬는 동안에는 흔적이 없다.
  *
  * ⚠️ **한 인스턴스를 두 스레드가 동시에 [run] 하면 안 된다.** 버퍼를 공유한다. 리더가 잠그거나
  * (세그 · 마크), 조각마다 전용 스레드를 둔다(각인).
@@ -61,17 +61,18 @@ internal class LiteRtModel private constructor(
     } catch (e: LiteRtException) {
         if (!engine.onGpu) throw e
         Log.w(TAG, "$name GPU 실행 실패 — CPU 로 다시 연다: ${e.message}")
-        engine.close()
-        VisionBackend.onGpuReleased(name)
         runCatching { VisionBackend.onGpuRunFailed(name) }
-        engine = Engine.cpu(file, threads)
+        // CPU 를 **먼저** 연다. 그게 실패하면(메모리 등) GPU 엔진을 그대로 둔 채 던진다 — 닫은 GPU 엔진이 남아
+        // [close] 가 두 번 닫는 일이 없게.
+        val cpu = Engine.cpu(file, threads)
+        engine.close() // 리더가 판독을 감싸 흔적이 있는 구간이다
+        engine = cpu
         report(name, OpenOutcome.GPU_RUN_FAILED)
         engine.run(xs)
     }
 
     override fun close() {
-        engine.close()
-        if (engine.onGpu) VisionBackend.onGpuReleased(name)
+        VisionBackend.whileOnGpu(name, engine.onGpu) { engine.close() }
     }
 
     /** 컴파일된 모델과 그 입출력 버퍼. 만들다 실패하면 이미 연 것을 닫고 던진다 — 반쯤 열린 채 새지 않게. */
@@ -141,14 +142,12 @@ internal class LiteRtModel private constructor(
         private fun openOnGpu(file: File, plan: RunPlan, threads: Int): Engine? {
             val name = file.name
             // ⚠️ 열기 **전에** 알린다 — 셰이더 준비 중에 드라이버가 죽어도 다음 실행이 알게(클래스 KDoc).
-            VisionBackend.onGpuUse(name)
-            return runCatching { Engine.gpu(file, plan, threads) }
-                .onSuccess { Log.i(TAG, "$name GPU(${plan.placement} · ${plan.precision})") }
-                .onFailure {
-                    Log.w(TAG, "$name GPU 로 못 열었다 — CPU 로 연다: ${it.message}")
-                    VisionBackend.onGpuReleased(name)
-                }
-                .getOrNull()
+            return VisionBackend.whileOnGpu(name, gpu = true) {
+                runCatching { Engine.gpu(file, plan, threads) }
+                    .onSuccess { Log.i(TAG, "$name GPU(${plan.placement} · ${plan.precision})") }
+                    .onFailure { Log.w(TAG, "$name GPU 로 못 열었다 — CPU 로 연다: ${it.message}") }
+                    .getOrNull()
+            }
         }
 
         private fun report(name: String, outcome: OpenOutcome) {

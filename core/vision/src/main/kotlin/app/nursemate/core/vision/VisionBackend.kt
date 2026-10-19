@@ -26,17 +26,32 @@ object VisionBackend {
     var allowGpu: (modelFileName: String) -> Boolean = { true }
 
     /**
-     * 모델을 GPU 로 **열기 직전**에 불린다. 꽂은 쪽이 디스크에 흔적을 남겨, 이 프로세스가 네이티브로 죽으면 다음
-     * 실행에서 알아채게 한다. 열기 전에 부르는 이유는 드라이버가 셰이더 준비(`create`) 중에도 죽기 때문이다.
+     * GPU 를 **쓰기 시작한다** — 열기(`create` · 셰이더 준비) · 실행 · 닫기 직전에 불린다([whileOnGpu]). 꽂은 쪽이 디스크에
+     * 흔적을 남겨, 이 프로세스가 그 사이에 네이티브로 죽으면 다음 실행에서 알아채게 한다.
      *
-     * ⚠️ **여기서 오래 걸리면 안 된다.** 모델 여는 경로 한가운데다.
+     * 흔적을 **모델이 열려 있는 동안이 아니라 GPU 를 쓰는 동안만** 둔다. 모델은 플로우 내내(촬영 화면부터 · 탭을 옮겨도) 열려
+     * 있어, 그 동안 GPU 와 무관한 네이티브 크래시가 나면 GPU 탓으로 잘못 읽고 그 빌드 내내 전 모델이 CPU 로 돌기 때문이다
+     * (2026-10-19 리뷰 — 미리 열기로 그 구간이 넓어졌다).
+     *
+     * ⚠️ **여기서 오래 걸리면 안 된다.** 판독 한 번에 두 번 불린다.
      */
     @Volatile
     var onGpuUse: (modelFileName: String) -> Unit = {}
 
-    /** [onGpuUse] 로 알린 GPU 모델을 닫았다(또는 열기 실패 · CPU 대체). 열린 GPU 모델이 없으면 흔적을 지울 수 있다. */
+    /** [onGpuUse] 로 알린 GPU 작업이 끝났다. 도는 GPU 작업이 없으면 흔적을 지울 수 있다. */
     @Volatile
     var onGpuReleased: (modelFileName: String) -> Unit = {}
+
+    /** [gpu] 일 때 [block] 동안만 GPU 흔적을 둔다. 던져도 끝을 알린다. */
+    internal inline fun <T> whileOnGpu(name: String, gpu: Boolean, block: () -> T): T {
+        if (!gpu) return block()
+        onGpuUse(name)
+        try {
+            return block()
+        } finally {
+            onGpuReleased(name)
+        }
+    }
 
     /**
      * GPU 로 열린 모델이 **실행에서** 실패해 CPU 로 대체했다. 꽂은 쪽이 이 기기 · 이 빌드에서 그 모델을 CPU 에 고정해
