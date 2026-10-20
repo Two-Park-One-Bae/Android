@@ -1,6 +1,7 @@
 package app.nursemate.core.network.upload
 
 import app.nursemate.core.network.api.PillApi
+import app.nursemate.core.network.api.UploadUrlRequest
 import app.nursemate.core.network.di.PlainClient
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,11 +31,13 @@ class RawImageUploader @Inject constructor(
 
     /**
      * @param jpeg 원본 사진 바이트. **JPEG 여야 한다.**
+     * @param imageId 앱이 만든 사진 id(UUID v7) — 원본 키가 되고, 속성 추출에도 같은 값이 가 학습 라벨이 이 사진을
+     *                가리킨다(NM-571). 업로드와 속성 추출은 순서가 없다
      * @return 성공 여부. 호출부가 분기할 일은 없고 로그·지표용이다.
      */
-    suspend fun upload(jpeg: ByteArray): Boolean = withContext(Dispatchers.IO) {
+    suspend fun upload(jpeg: ByteArray, imageId: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val url = pillApi.uploadUrl().uploadUrl
+            val url = pillApi.uploadUrl(UploadUrlRequest(imageId)).uploadUrl
             val request = Request.Builder()
                 .url(url)
                 // ⚠️ 정확히 `image/jpeg` 여야 한다. presigned 서명에 포함된 값이라

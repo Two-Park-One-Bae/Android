@@ -17,7 +17,9 @@ import kotlinx.coroutines.launch
 class PillHistorySaving internal constructor(
     private val state: MutableStateFlow<PillUiState>,
     private val repository: PillHistoryRepository,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    /** 저장을 **시작할 때마다** 부른다 — 학습 라벨의 지운 번호(NM-571). 다시 시도에도 보낸다(서버가 덮어쓴다). */
+    private val onSave: () -> Unit = {}
 ) {
 
     /**
@@ -33,6 +35,7 @@ class PillHistorySaving internal constructor(
         val historyId = current.historyId ?: UUID.randomUUID().toString()
 
         state.update { it.copy(historyId = historyId, save = HistorySave.Saving) }
+        onSave()
         scope.launch {
             val result = repository.save(historyId, pillCodes)
             state.update {

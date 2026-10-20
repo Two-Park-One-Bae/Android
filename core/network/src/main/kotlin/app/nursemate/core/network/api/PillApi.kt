@@ -15,7 +15,9 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -122,15 +124,83 @@ interface PillApi {
      * 실패해도 식별 플로우에 영향이 없다. 횟수도 차감되지 않는다(NM-348).
      */
     @POST("api/v0/pill-images/upload-url")
-    suspend fun uploadUrl(): UploadUrlResponse
+    suspend fun uploadUrl(@Body request: UploadUrlRequest): UploadUrlResponse
+
+    /**
+     * 학습 라벨 — 사용자가 후보를 「선택」한 알약 하나(NM-571, spec `api/domains/label.md`).
+     *
+     * 베스트 에포트다. 실패해도 식별 흐름을 막지 않고, 화면에 알리지 않고, 다시 보내지 않는다. 같은 알약을 다시 고르면
+     * 다시 보내고 서버가 덮어쓴다. 회원과 잇지 않는 익명 데이터이고 식별 횟수를 쓰지 않는다(429 없음).
+     *
+     * @param pillIndex 모델이 찾은 알약은 속성 추출의 `pillId`(0~99), 수동 추가 알약은 100~199
+     */
+    @PUT("api/v0/pill-images/{imageId}/labels/{pillIndex}")
+    suspend fun label(
+        @Path("imageId") imageId: String,
+        @Path("pillIndex") pillIndex: Int,
+        @Body request: PillLabelRequest
+    )
+
+    /**
+     * 학습 라벨 — 「완료」(또는 종료 확인의 「종료」) 때 사용자가 카드를 지운 알약 번호(NM-571). 저장하지 않고 나가면
+     * 보내지 않는다. 위치 행이 없으면(속성 추출 저장 실패) 404 인데 무시한다. 베스트 에포트.
+     */
+    @PATCH("api/v0/pill-images/{imageId}/segmentation")
+    suspend fun segmentation(@Path("imageId") imageId: String, @Body request: PillSegmentationSaveRequest)
 }
 
+/**
+ * 라벨 필드([imageId] · [imageWidth] · [imageHeight] · [segModel])는 선택이다 — [imageId] 가 있어야 서버가 크롭 · 라벨 행 ·
+ * 위치 행을 저장한다(NM-571). 잘못돼도 서버는 400 없이 저장만 건너뛴다.
+ *
+ * @param imageWidth · imageHeight 업로드한 원본(가공본) 픽셀 크기
+ * @param segModel 알약 찾기 모델 버전(`PillDetector.MODEL_VERSION`)
+ */
 @Serializable
-data class PillAttributesRequest(val items: List<PillAttributeItem>)
+data class PillAttributesRequest(
+    val items: List<PillAttributeItem>,
+    val imageId: String? = null,
+    val imageWidth: Int? = null,
+    val imageHeight: Int? = null,
+    val segModel: String? = null
+)
 
-/** @param pillId 세션 안에서만 쓰는 로컬 키. 응답을 검출 결과와 짝지을 때 쓴다. */
+/**
+ * @param pillId 응답을 검출 결과와 짝짓는 키. [PillAttributesRequest.imageId] 를 보낼 때는 **0~99 정수 문자열**이고
+ *               그대로 라벨 번호(`pillIndex`)가 된다 — 알약 찾기 결과 번호다. 카드를 지워도 바꾸지 않는다
+ * @param box 크롭이 원본 어디서 잘렸는지 `[x, y, 너비, 높이]` — 업로드한 원본 픽셀 기준. 너비 · 높이가 크롭 크기와 같아야 한다
+ * @param score 알약 찾기 점수(0~1)
+ */
 @Serializable
-data class PillAttributeItem(val pillId: String, val croppedImage: Image)
+data class PillAttributeItem(
+    val pillId: String,
+    val croppedImage: Image,
+    val box: List<Int>? = null,
+    val score: Float? = null
+)
+
+/** @param imageId 앱이 만든 사진 id(UUID v7) — 원본 키의 uuid 가 되고, 속성 추출에도 같은 값이 간다 */
+@Serializable
+data class UploadUrlRequest(val imageId: String)
+
+/**
+ * 「선택」 라벨. [model] · [userInput] 은 둘 다 후보 조회 요청 본문 그대로다 — 사용자가 하나도 고치지 않았으면 둘이 같다.
+ *
+ * @param manual 수동 추가 알약이면 true(이때 [model] 은 보내지 않는다 — 보내면 400). 아니면 빼서 보낸다(기본 false)
+ * @param model 이 알약의 **첫** 후보 조회 요청
+ * @param userInput 이 알약의 **마지막** 후보 조회 요청
+ */
+@Serializable
+data class PillLabelRequest(
+    val pillCode: String,
+    val userInput: PillCandidatesRequest,
+    val model: PillCandidatesRequest? = null,
+    val manual: Boolean? = null
+)
+
+/** @param deletedIndexes 사용자가 카드를 지운 모델 알약 번호(0~99). 수동 추가 번호는 넣지 않는다. 없으면 빈 목록 */
+@Serializable
+data class PillSegmentationSaveRequest(val deletedIndexes: List<Int>)
 
 @Serializable
 data class PillAttributesResponse(

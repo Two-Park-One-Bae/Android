@@ -13,7 +13,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -66,6 +68,13 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     private var searchJob: Job? = null
     private var moreJob: Job? = null
 
+    /**
+     * **실제로 보낸** 조회 요청 — 입력 대기 중에 취소된 것은 빠진다. 학습 라벨이 알약마다 첫 · 마지막 요청을 들고 있다가
+     * 「선택」 때 `model` · `userInput` 으로 보낸다(NM-571). 이 화면은 어느 알약인지 모르므로 배선이 키를 붙여 받는다.
+     */
+    private val _sent = MutableSharedFlow<PillCandidatesRequest>(extraBufferCapacity = SENT_BUFFER)
+    val sent = _sent.asSharedFlow()
+
     fun search(conditions: PillConditions?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
         moreJob?.cancel()
@@ -86,6 +95,7 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
 
+            _sent.tryEmit(request)
             pillRepository.candidates(request)
                 .onSuccess { result ->
                     Log.i(TAG, "후보 ${result.ids.size}개 (상세 ${result.candidates.size}) 잘림=${result.truncated}")
@@ -168,6 +178,7 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
          */
         const val PAGE_SIZE = 50
         const val DEBOUNCE_MS = 250L
+        const val SENT_BUFFER = 8
     }
 }
 
