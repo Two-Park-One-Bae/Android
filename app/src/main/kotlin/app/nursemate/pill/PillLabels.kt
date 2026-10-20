@@ -24,10 +24,12 @@ import kotlinx.coroutines.withContext
  * 크롭 · 위치는 속성 추출 요청에 실려 이미 갔다(`PillRecognitionViewModel.extractAttributes`). 여기는 사용자가 한 일만 보낸다.
  * 모두 베스트 에포트라 결과를 화면에 반영하지 않는다([PillLabelSender]).
  *
- * ## `model` 은 그 알약의 **첫** 조회 요청이다
- * 사용자가 무엇을 고쳤는지는 `model`(첫 조회)과 `userInput`(마지막 조회)을 대보면 나온다. 그래서 첫 조회를 식별이 끝날
- * 때까지 들고 있는다 — 수정 화면을 닫았다 다시 열어도 바뀌지 않는다. 고친 것이 없으면 둘이 같고, 어드민이 그걸로
- * 한 번에 확정할 행을 가른다.
+ * ## `model` 은 「손대지 않았으면 보냈을 조회」다
+ * 사용자가 무엇을 고쳤는지는 `model` 과 `userInput`(화면 목록을 낸 마지막 조회)을 대보면 나온다. 계약은 `model` 을 「첫
+ * 조회 요청 그대로(사용자가 고치기 전)」로 적는데, **실제로 처음 나간 요청**을 붙잡으면 어긋난다 — 온디바이스 각인 ·
+ * 마크는 결과가 뜬 뒤 0.9초쯤 늦게 와서 첫 요청에 빠질 수 있고, 입력 대기(250ms) 중에 고치면 첫 요청이 이미 고친 값이다
+ * (2026-10-20 리뷰). 그래서 「선택」 때 **사용자 수정을 뺀 상태**([editOf])로 같은 조립을 다시 해 만든다 — 모델이 뽑은
+ * 값 · 읽은 각인 · 마크 그대로다. 고친 것이 없으면 `userInput` 과 같고, 어드민이 그걸로 한 번에 확정할 행을 가른다.
  */
 class PillLabels internal constructor(
     private val state: MutableStateFlow<PillUiState>,
@@ -35,12 +37,9 @@ class PillLabels internal constructor(
     private val scope: CoroutineScope
 ) {
 
-    /** 수정 화면이 후보 조회를 **실제로 보냈다**(입력 대기 뒤 · 취소되지 않은 것). */
+    /** 수정 화면의 후보 목록이 이 요청의 응답으로 바뀌었다 — 마지막 것이 `userInput` 이다. */
     fun recordQuery(pillId: String, request: PillCandidatesRequest) {
-        state.update { s ->
-            val first = s.labelQueries[pillId]?.first ?: request
-            s.copy(labelQueries = s.labelQueries + (pillId to LabelQueries(first = first, last = request)))
-        }
+        state.update { it.copy(labelQueries = it.labelQueries + (pillId to request)) }
     }
 
     /** 후보를 「선택」하고 결과로 돌아왔다. 같은 알약을 다시 고르면 다시 보낸다 — 서버가 덮어쓴다. */
@@ -60,7 +59,8 @@ class PillLabels internal constructor(
     fun completed() {
         val s = state.value
         val imageId = s.imageId ?: return
-        val deleted = s.removedPillIds.filterNot { it.isManualPill }.mapNotNull(::labelIndexOf).sorted()
+        // 지운 수동 추가 알약은 removedPillIds 에 들어가지 않는다(목록에서 빠질 뿐) — 모델 알약 번호만 남는다.
+        val deleted = s.removedPillIds.mapNotNull(::labelIndexOf).sorted()
         scope.launch { sender.deleted(imageId, deleted) }
     }
 }
@@ -69,16 +69,22 @@ class PillLabels internal constructor(
 private fun PillUiState.labelRequestOf(pillId: String): PillLabelRequest? {
     val pillCode = selections[pillId]?.pillCode
     // 조회 없이 고른 후보는 없다 — 후보가 조회에서 나온다.
-    val queries = labelQueries[pillId]
-    if (pillCode == null || queries == null) return null
+    val userInput = labelQueries[pillId]
+    if (pillCode == null || userInput == null) return null
     val manual = pillId.isManualPill
     return PillLabelRequest(
         pillCode = pillCode,
-        userInput = queries.last,
+        userInput = userInput,
         // 수동 추가 알약은 모델 값이 없다 — 보내면 400 이다.
-        model = queries.first.takeUnless { manual },
+        model = if (manual) null else untouchedQueryOf(pillId),
         manual = true.takeIf { manual }
     )
+}
+
+/** 사용자 수정을 뺀 이 알약의 조회 — 모델이 뽑은 값과 읽은 각인 · 마크로 화면과 같은 조립을 한다(위 KDoc). */
+private fun PillUiState.untouchedQueryOf(pillId: String): PillCandidatesRequest {
+    val untouched = copy(edits = edits - pillId).editOf(pillId)
+    return untouched.conditions.toRequest(untouched.faces)
 }
 
 /**
@@ -102,17 +108,17 @@ internal fun DetectionResult.attributeImage(imageId: String?): AttributeImage? =
  * 학습용 원본(가공본)을 올린다 — [PillUiState.imageId] 가 원본 키가 된다(NM-571). 기다리지 않고 결과도 보지 않는다(베스트 에포트).
  * 사진이나 키가 없으면 아무것도 하지 않는다.
  */
-internal fun CoroutineScope.uploadTrainingImage(state: PillUiState, repository: PillRepository) {
-    val imageId = state.imageId ?: return
-    val processed = state.photo ?: return
+internal fun CoroutineScope.uploadTrainingImage(state: MutableStateFlow<PillUiState>, repository: PillRepository) {
+    val current = state.value
+    // 사진(imageId)마다 한 번 — 속성 추출을 다시 시도해도 같은 키의 같은 그림을 수 MB 씩 다시 올리지 않는다.
+    val imageId = current.imageId?.takeUnless { current.trainingUploaded } ?: return
+    val processed = current.photo ?: return
+    state.update { it.copy(trainingUploaded = true) }
     launch {
         runCatching { withContext(Dispatchers.IO) { processed.toJpegBytes() } }
             .getOrNull()?.let { bytes -> repository.uploadOriginal(bytes, imageId) }
     }
 }
-
-/** 한 알약의 첫 · 마지막 후보 조회 요청 — 라벨의 `model` · `userInput`. */
-data class LabelQueries(val first: PillCandidatesRequest, val last: PillCandidatesRequest)
 
 /**
  * 라벨 번호(`pillIndex`). 모델 알약은 속성 추출의 `pillId` 그대로(0~99), 수동 추가 알약은 100~199(`m1` → 100).

@@ -14,6 +14,7 @@ import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
+import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
 import app.nursemate.telemetry.AppAnalytics
@@ -217,7 +218,7 @@ class PillRecognitionViewModel @Inject constructor(
         //
         // 가공본을 보내므로 「JPEG 일 때만」 가드도 사라졌다 — 갤러리에서 고른 HEIC·PNG 도
         // 여기서 JPEG 로 다시 압축되어 나가므로 presigned 서명의 image/jpeg 와 어긋나지 않는다.
-        viewModelScope.uploadTrainingImage(_state.value, pillRepository)
+        viewModelScope.uploadTrainingImage(_state, pillRepository)
         val imageId = _state.value.imageId
 
         val pillIds = result.pills.indices.map(::pillId)
@@ -409,8 +410,17 @@ data class PillUiState(
      * 식별 기록([historyId])과 섞지 않는다 — 라벨은 회원과 잇지 않는다.
      */
     val imageId: String? = null,
-    /** 알약별 첫 · 마지막 후보 조회 요청 — 라벨의 `model` · `userInput`([PillLabels]). */
-    val labelQueries: Map<String, LabelQueries> = emptyMap(),
+    /** 알약별로 화면 목록을 낸 마지막 후보 조회 요청 — 라벨의 `userInput`([PillLabels]). */
+    val labelQueries: Map<String, PillCandidatesRequest> = emptyMap(),
+    /**
+     * 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다 — 그래서 뒤로만 간다.
+     *
+     * **상태에 둔다** — 사진을 바꾸면 상태와 함께 0 으로 돌아간다. 키 번호가 학습 라벨 번호(`m1` → 100 … 199)라 사진마다
+     * 다시 세야 하는데, 이 뷰모델은 알약 탭 그래프에 남아 여러 사진을 지나 누적되면 100번째부터 라벨이 빠졌다(NM-571 리뷰).
+     */
+    val manualSequence: Int = 0,
+    /** 학습용 원본을 이 사진(imageId)으로 이미 올렸다 — 다시 시도에도 한 번만 올린다. */
+    val trainingUploaded: Boolean = false,
     /** 식별 기록 저장 단계 — 식별 결과의 `완료` 가 연다. */
     val save: HistorySave = HistorySave.Idle
 )
@@ -639,9 +649,10 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
         pendings.remove(pillId)
     }
 
-    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다. */
-    fun nextManualPillId(): String = manualPillId(manualSequence++)
-
-    /** 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다. */
-    private var manualSequence = 0
+    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다([PillUiState.manualSequence]). */
+    fun nextManualPillId(): String {
+        val next = state.value.manualSequence
+        state.update { it.copy(manualSequence = it.manualSequence + 1) }
+        return manualPillId(next)
+    }
 }

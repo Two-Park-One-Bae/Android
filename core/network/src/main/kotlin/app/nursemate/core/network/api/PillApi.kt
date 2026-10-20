@@ -120,8 +120,9 @@ interface PillApi {
     /**
      * 원본 이미지 업로드용 presigned PUT URL.
      *
-     * 학습데이터 축적용이고 **식별과 완전히 분리**돼 있다 — 키를 식별 요청에 넘기지 않고,
-     * 실패해도 식별 플로우에 영향이 없다. 횟수도 차감되지 않는다(NM-348).
+     * 학습데이터 축적용이다. 앱이 만든 `imageId`(UUID v7)를 본문에 보내면 서버가 그것을 원본 키로 쓴다 — 같은 값을
+     * 속성 추출에도 보내 학습 라벨이 이 사진을 가리킨다(NM-571). 둘의 순서는 상관없고, 실패해도 식별 플로우에 영향이
+     * 없다. 횟수도 차감되지 않는다(NM-348).
      */
     @POST("api/v0/pill-images/upload-url")
     suspend fun uploadUrl(@Body request: UploadUrlRequest): UploadUrlResponse

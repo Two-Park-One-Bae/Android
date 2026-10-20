@@ -69,11 +69,12 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
     private var moreJob: Job? = null
 
     /**
-     * **실제로 보낸** 조회 요청 — 입력 대기 중에 취소된 것은 빠진다. 학습 라벨이 알약마다 첫 · 마지막 요청을 들고 있다가
-     * 「선택」 때 `model` · `userInput` 으로 보낸다(NM-571). 이 화면은 어느 알약인지 모르므로 배선이 키를 붙여 받는다.
+     * **응답이 와서 화면 목록이 된** 조회 요청 — 취소 · 실패한 것은 빠지고, 토큰 없이 다시 보냈으면 다시 보낸 쪽이다. 학습
+     * 라벨이 알약마다 마지막 것을 들고 있다가 「선택」 때 `userInput` 으로 보낸다(NM-571). 이 화면은 어느 알약인지 모르므로
+     * 배선이 키를 붙여 받는다.
      */
-    private val _sent = MutableSharedFlow<PillCandidatesRequest>(extraBufferCapacity = SENT_BUFFER)
-    val sent = _sent.asSharedFlow()
+    private val _answered = MutableSharedFlow<PillCandidatesRequest>(extraBufferCapacity = ANSWERED_BUFFER)
+    val answered = _answered.asSharedFlow()
 
     fun search(conditions: PillConditions?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
@@ -95,9 +96,11 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
             // 타이핑이 멈춘 뒤에 보낸다. 글자마다 왕복하면 서버도 화면도 요동친다.
             delay(DEBOUNCE_MS)
 
-            _sent.tryEmit(request)
             pillRepository.candidates(request)
-                .onSuccess { result ->
+                .onSuccess { answer ->
+                    val result = answer.result
+                    // 화면에 이 목록이 뜬다 — 이 요청이 사용자가 고를 후보를 낸 요청이다(라벨의 userInput).
+                    _answered.tryEmit(answer.request)
                     Log.i(TAG, "후보 ${result.ids.size}개 (상세 ${result.candidates.size}) 잘림=${result.truncated}")
                     _state.value = CandidateUiState(
                         candidates = result.candidates,
@@ -178,7 +181,7 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
          */
         const val PAGE_SIZE = 50
         const val DEBOUNCE_MS = 250L
-        const val SENT_BUFFER = 8
+        const val ANSWERED_BUFFER = 8
     }
 }
 

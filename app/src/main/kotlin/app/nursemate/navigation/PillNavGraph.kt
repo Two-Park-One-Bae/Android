@@ -151,9 +151,9 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
     //
     // 요청에 실리는 값으로만 다시 부른다 — `모름` 처럼 화면에만 남는 값을 바꿔도 요청은 같다.
     LaunchedEffect(edit.conditions, edit.faces.front.toRequest(), edit.faces.back.toRequest()) { search() }
-    // 실제로 보낸 조회를 이 알약 키로 남긴다 — 학습 라벨의 첫 · 마지막 조회(NM-571).
+    // 화면 목록을 낸 조회를 이 알약 키로 남긴다 — 학습 라벨의 userInput(NM-571).
     LaunchedEffect(candidateViewModel, pillId) {
-        candidateViewModel.sent.collect { viewModel.labels.recordQuery(pillId, it) }
+        candidateViewModel.answered.collect { viewModel.labels.recordQuery(pillId, it) }
     }
 
     val index = state.detectedIndexOf(pillId)

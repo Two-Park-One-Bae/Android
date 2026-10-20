@@ -29,6 +29,12 @@ data class AttributeResult(val items: List<PillAttribute>, val usage: Usage)
  */
 data class AttributeCrop(val pillId: String, val png: ByteArray, val box: List<Int>? = null, val score: Float? = null)
 
+/**
+ * 후보 조회 응답과 **실제로 그 응답을 받은 요청** — 토큰이 상해 토큰 없이 다시 보냈으면 다시 보낸 쪽이다. 학습 라벨의
+ * `userInput` 이 「사용자가 본 목록을 낸 요청 그대로」여야 해서 함께 돌려준다(NM-571).
+ */
+data class CandidateAnswer(val result: PillCandidateResult, val request: PillCandidatesRequest)
+
 /** 학습 라벨용 사진 정보(NM-571) — 있으면 서버가 응답 뒤 크롭 · 라벨 행 · 위치 행을 저장한다. */
 data class AttributeImage(val imageId: String, val width: Int, val height: Int, val segModel: String)
 
@@ -109,11 +115,12 @@ class PillRepository @Inject constructor(
      * 400 `INVALID_ATTRIBUTE_TOKEN` 이면 **토큰을 빼고 한 번 더 부른다.** 후보는 그대로
      * 나오고 정렬만 덜 맞을 뿐이라 사용자에게 알리지 않는다(NM-490 결정).
      */
-    suspend fun candidates(request: PillCandidatesRequest): Result<PillCandidateResult> =
-        runCatching { pillApi.candidates(request) }
+    suspend fun candidates(request: PillCandidatesRequest): Result<CandidateAnswer> =
+        runCatching { CandidateAnswer(pillApi.candidates(request), request) }
             .recoverCatching { throwable ->
                 if ((throwable as? ApiFailure)?.code != ApiErrorCode.INVALID_ATTRIBUTE_TOKEN) throw throwable
-                pillApi.candidates(request.copy(attributeToken = null))
+                val withoutToken = request.copy(attributeToken = null)
+                CandidateAnswer(pillApi.candidates(withoutToken), withoutToken)
             }
             // ⚠️ 실시간 조회라 이전 요청이 나가 있는 채로 취소되는 게 정상 흐름이다.
             // runCatching 이 CancellationException 까지 Result.failure 로 삼키면 코루틴
