@@ -29,8 +29,18 @@ data class DetectedPill(
      * 마스크를 알파로 넣어 **배경이 투명한** 낱알 이미지.
      * 서버 `POST /pill-attributes` 가 받는 크롭이자 화면 썸네일이다. PNG로 인코딩해야 알파가 산다.
      */
-    val crop: Bitmap
+    val crop: Bitmap,
+    /**
+     * [crop] 을 원본 어디서 잘랐는지 — **검출 입력 비트맵(= 업로드하는 가공본) 픽셀** 기준. 너비 · 높이가 [crop] 크기와
+     * 같다. 학습 라벨이 이 값과 크롭 알파로 원본 위 마스크를 되살린다(NM-571, spec `api/domains/label.md`).
+     */
+    val box: CropBox
 )
+
+/** 원본 픽셀 기준 `[x, y, 너비, 높이]` — 계약의 `PillBox` 순서 그대로다. */
+data class CropBox(val x: Int, val y: Int, val width: Int, val height: Int) {
+    fun toList(): List<Int> = listOf(x, y, width, height)
+}
 
 data class DetectionResult(
     val pills: List<DetectedPill>,
@@ -123,8 +133,8 @@ class PillDetector(modelFile: File) : Closeable {
         return detections.mapNotNull { detection ->
             querySlice(masks, detection.query, slice)
             val bounds = RfDetrPostprocess.maskBounds(slice) ?: return@mapNotNull null
-            val crop = cropWithMask(source, slice, bounds) ?: return@mapNotNull null
-            DetectedPill(detection, crop)
+            val box = cropBox(bounds, source.width, source.height) ?: return@mapNotNull null
+            DetectedPill(detection, cropWithMask(source, slice, box), box)
         }
     }
 
@@ -140,20 +150,13 @@ class PillDetector(modelFile: File) : Closeable {
      * 알파는 **곱하지 않은(straight) 값**으로 둔다. Android 는 `Bitmap.createBitmap(IntArray, …)`
      * 입력을 비프리멀티플라이로 보고 내부에서 곱하므로, 미리 곱해 넣으면 두 번 곱해져 어두워진다.
      */
-    private fun cropWithMask(source: Bitmap, mask: FloatArray, bounds: IntArray): Bitmap? {
-        val ms = RfDetrSpec.MASK_SIZE
+    private fun cropWithMask(source: Bitmap, mask: FloatArray, box: CropBox): Bitmap {
         val width = source.width
         val height = source.height
-
-        // 격자 셀 mx가 덮는 정규화 구간은 [mx/ms, (mx+1)/ms] 이므로, 포함 범위의 오른쪽·아래는 +1 한다.
-        val left = floor(bounds[0].toFloat() / ms * width).toInt().coerceIn(0, width - 1)
-        val top = floor(bounds[1].toFloat() / ms * height).toInt().coerceIn(0, height - 1)
-        val right = ceil((bounds[2] + 1).toFloat() / ms * width).toInt().coerceIn(left + 1, width)
-        val bottom = ceil((bounds[3] + 1).toFloat() / ms * height).toInt().coerceIn(top + 1, height)
-
-        val cropWidth = right - left
-        val cropHeight = bottom - top
-        if (cropWidth <= 0 || cropHeight <= 0) return null
+        val left = box.x
+        val top = box.y
+        val cropWidth = box.width
+        val cropHeight = box.height
 
         val pixels = IntArray(cropWidth * cropHeight)
         source.getPixels(pixels, 0, cropWidth, left, top, cropWidth, cropHeight)
@@ -175,6 +178,17 @@ class PillDetector(modelFile: File) : Closeable {
         return Bitmap.createBitmap(pixels, cropWidth, cropHeight, Bitmap.Config.ARGB_8888)
     }
 
+    /** 마스크 외접 범위(마스크 격자)를 원본 픽셀 사각형으로. 비면 null. */
+    private fun cropBox(bounds: IntArray, width: Int, height: Int): CropBox? {
+        val ms = RfDetrSpec.MASK_SIZE
+        // 격자 셀 mx가 덮는 정규화 구간은 [mx/ms, (mx+1)/ms] 이므로, 포함 범위의 오른쪽·아래는 +1 한다.
+        val left = floor(bounds[0].toFloat() / ms * width).toInt().coerceIn(0, width - 1)
+        val top = floor(bounds[1].toFloat() / ms * height).toInt().coerceIn(0, height - 1)
+        val right = ceil((bounds[2] + 1).toFloat() / ms * width).toInt().coerceIn(left + 1, width)
+        val bottom = ceil((bounds[3] + 1).toFloat() / ms * height).toInt().coerceIn(top + 1, height)
+        return CropBox(left, top, right - left, bottom - top).takeIf { it.width > 0 && it.height > 0 }
+    }
+
     override fun close() {
         model.close()
     }
@@ -188,6 +202,12 @@ class PillDetector(modelFile: File) : Closeable {
     companion object {
         /** 가중치 fp16 저장 · 63MB. 목록과 해시는 `app/models.md5`. */
         const val MODEL_FILE_NAME = "rfdetr_seg_small_f16w.tflite"
+
+        /**
+         * 알약 찾기 모델 버전 — 학습 라벨의 `segModel`(NM-571). ML 레포 모델 폴더 이름이다(마크의 `MarkReader.MODEL_VERSION`
+         * 과 같은 방식). 파일을 fp16 가중치 LiteRT 로 바꿔도 같은 체크포인트라 그대로 둔다. iOS 와 같은 값이어야 한다.
+         */
+        const val MODEL_VERSION = "20260610-rfdetr-seg-small"
 
         /**
          * ML 실행 정밀도 계약 — GPU FP32. FP16 은 Exynos 2500 에서 탈락했다.

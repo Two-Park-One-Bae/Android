@@ -19,6 +19,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.nursemate.core.designsystem.NurseMateTheme
 import app.nursemate.core.model.LicenseStatus
 import app.nursemate.core.model.PillCandidate
+import app.nursemate.core.vision.CropBox
 import app.nursemate.core.vision.DetectedPill
 import app.nursemate.core.vision.Detection
 import app.nursemate.gallery.DesignGalleryActivity
@@ -49,7 +50,11 @@ class V210ResultCaptureTest {
     }
 
     private val detected = boxes.mapIndexed { index, b ->
-        DetectedPill(Detection(index, 0.9f, b.x, b.y, b.width, b.height), solid(80, 48, PILL_COLORS[index]))
+        DetectedPill(
+            Detection(index, 0.9f, b.x, b.y, b.width, b.height),
+            solid(80, 48, PILL_COLORS[index]),
+            CropBox(0, 0, 80, 48)
+        )
     }
 
     private fun candidate(name: String, company: String, revoked: Boolean = false) = PillCandidate(
