@@ -8,14 +8,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.DailyLimitReached
 import app.nursemate.core.data.pill.PillHistoryRepository
+import app.nursemate.core.data.pill.PillLabelSender
 import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
+import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
-import app.nursemate.core.vision.PillDetector
 import app.nursemate.telemetry.AppAnalytics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -58,6 +59,7 @@ class PillRecognitionViewModel @Inject constructor(
     private val pillRepository: PillRepository,
     private val usageHolder: UsageHolder,
     private val historyRepository: PillHistoryRepository,
+    private val labelSender: PillLabelSender,
     appAnalytics: AppAnalytics
 ) : ViewModel() {
 
@@ -90,7 +92,8 @@ class PillRecognitionViewModel @Inject constructor(
             runCatching {
                 withContext(Dispatchers.IO) { ImageLoader.load(context, uri) }
             }.onSuccess { bitmap ->
-                _state.update { it.copy(photo = bitmap, isLoadingPhoto = false) }
+                // 사진마다 학습 라벨 키를 만든다(NM-571) — 업로드와 속성 추출에 같은 값이 간다.
+                _state.update { it.copy(photo = bitmap, isLoadingPhoto = false, imageId = UuidV7.next()) }
             }.onFailure { throwable ->
                 _state.update {
                     it.copy(
@@ -215,12 +218,8 @@ class PillRecognitionViewModel @Inject constructor(
         //
         // 가공본을 보내므로 「JPEG 일 때만」 가드도 사라졌다 — 갤러리에서 고른 HEIC·PNG 도
         // 여기서 JPEG 로 다시 압축되어 나가므로 presigned 서명의 image/jpeg 와 어긋나지 않는다.
-        _state.value.photo?.let { processed ->
-            viewModelScope.launch {
-                runCatching { withContext(Dispatchers.IO) { processed.toJpegBytes() } }
-                    .getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
-            }
-        }
+        viewModelScope.uploadTrainingImage(_state, pillRepository)
+        val imageId = _state.value.imageId
 
         val pillIds = result.pills.indices.map(::pillId)
 
@@ -232,11 +231,8 @@ class PillRecognitionViewModel @Inject constructor(
             return
         }
 
-        val crops = result.pills.mapIndexed { index, pill ->
-            pillId(index) to pill.crop.toPngBytes()
-        }.toMap()
-
-        pillRepository.attributes(crops)
+        // 학습 라벨(NM-571) — 찾은 알약 **전부**의 원본 자리 · 점수와 사진 정보를 함께 싣는다([attributeCrops]).
+        pillRepository.attributes(result.attributeCrops(), result.attributeImage(imageId))
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
                 analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = extracted.items.size)
@@ -342,8 +338,11 @@ class PillRecognitionViewModel @Inject constructor(
     /** 미리보기의 한도 안내(spec §세션 중 소진 방어 · 정본 ②-a). */
     val limit = PillLimitGate(_state, usageHolder)
 
-    /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). */
-    val history = PillHistorySaving(_state, historyRepository, viewModelScope)
+    /** 학습 라벨 — 「선택」한 품목 · 「완료」 때 지운 번호(NM-571). */
+    val labels = PillLabels(_state, labelSender, viewModelScope)
+
+    /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). 누를 때마다 지운 번호도 보낸다(라벨). */
+    val history = PillHistorySaving(_state, historyRepository, viewModelScope, onSave = labels::completed)
 
     /**
      * 모델을 **미리 연다** — 촬영 화면에 들어오면 부른다. 사용자가 구도를 잡는 몇 초 동안 GPU 준비를 끝내,
@@ -408,6 +407,22 @@ data class PillUiState(
     val pickedUntouched: Map<String, Boolean> = emptyMap(),
     /** 식별 기록 키(UUID). 식별을 시작할 때 정한다 — 그 전에는 없다. */
     val historyId: String? = null,
+    /**
+     * 학습 라벨의 사진 id(UUID v7, NM-571) — 사진을 고르면 만든다. 업로드 · 속성 추출 · 라벨에 같은 값이 간다.
+     * 식별 기록([historyId])과 섞지 않는다 — 라벨은 회원과 잇지 않는다.
+     */
+    val imageId: String? = null,
+    /** 알약별로 화면 목록을 낸 마지막 후보 조회 요청 — 라벨의 `userInput`([PillLabels]). */
+    val labelQueries: Map<String, PillCandidatesRequest> = emptyMap(),
+    /**
+     * 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다 — 그래서 뒤로만 간다.
+     *
+     * **상태에 둔다** — 사진을 바꾸면 상태와 함께 0 으로 돌아간다. 키 번호가 학습 라벨 번호(`m1` → 100 … 199)라 사진마다
+     * 다시 세야 하는데, 이 뷰모델은 알약 탭 그래프에 남아 여러 사진을 지나 누적되면 100번째부터 라벨이 빠졌다(NM-571 리뷰).
+     */
+    val manualSequence: Int = 0,
+    /** 학습용 원본을 이 사진(imageId)으로 이미 올렸다 — 다시 시도에도 한 번만 올린다. */
+    val trainingUploaded: Boolean = false,
     /** 식별 기록 저장 단계 — 식별 결과의 `완료` 가 연다. */
     val save: HistorySave = HistorySave.Idle
 )
@@ -465,7 +480,7 @@ sealed interface DetectionPhase {
  * ⚠️ **JPEG 로 바꾸지 말 것.** 크롭은 마스크를 알파에 담고 있어서, 알파를 버리면
  * 배경이 검게 살아나고 서버가 그 배경까지 알약으로 읽는다.
  */
-private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+internal fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out ->
     compress(Bitmap.CompressFormat.PNG, 100, out)
     out.toByteArray()
 }
@@ -477,7 +492,7 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
  * 쌓아야 학습 데이터가 한 벌이 된다. 크롭은 PNG 로 보낸다([toPngBytes]): 그쪽은 서버가
  * 속성을 뽑는 입력이라 손실 압축을 끼워 넣지 않는다.
  */
-private fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+internal fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
     compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, out)
     out.toByteArray()
 }
@@ -490,13 +505,16 @@ private const val UPLOAD_JPEG_QUALITY = 90
  *
  * 서버 요청에 실어 보낸 값이라 **삭제로 번호가 바뀌어도 이 키는 그대로다** —
  * 화면의 표시 번호와 헷갈리지 않게 둘을 나눠 둔다.
+ *
+ * ⚠️ **0부터다.** 학습 라벨 계약(NM-571)이 속성 추출의 `pillId` 를 0~99 정수로 읽어 라벨 번호(`pillIndex`)로 쓴다. 예전에는
+ * 1부터라 검출 100개째가 `"100"` 이 되어 범위를 벗어났다.
  */
-internal fun pillId(index: Int): String = (index + 1).toString()
+internal fun pillId(index: Int): String = index.toString()
 
 /**
- * 수동 추가 알약의 키.
+ * 수동 추가 알약의 키. 라벨 번호는 `m1` → 100 이다([labelIndexOf]).
  *
- * 검출 키가 "1"·"2"… 라 숫자만으로는 겹친다. 접두사로 갈라 두면 키만 보고도 사진에
+ * 검출 키가 "0"·"1"… 라 숫자만으로는 겹친다. 접두사로 갈라 두면 키만 보고도 사진에
  * 대응 영역이 있는 알약인지 알 수 있다.
  */
 internal fun manualPillId(index: Int): String = "m${index + 1}"
@@ -664,9 +682,10 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
         pendings.remove(pillId)
     }
 
-    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다. */
-    fun nextManualPillId(): String = manualPillId(manualSequence++)
-
-    /** 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다. */
-    private var manualSequence = 0
+    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다([PillUiState.manualSequence]). */
+    fun nextManualPillId(): String {
+        val next = state.value.manualSequence
+        state.update { it.copy(manualSequence = it.manualSequence + 1) }
+        return manualPillId(next)
+    }
 }

@@ -1,6 +1,7 @@
 package app.nursemate.core.network.upload
 
 import app.nursemate.core.network.api.PillApi
+import app.nursemate.core.network.api.UploadUrlRequest
 import app.nursemate.core.network.di.PlainClient
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,11 +13,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
- * 학습데이터용 **원본** 사진을 S3 에 올린다 (NM-348).
+ * 학습데이터용 **원본(가공본)** 사진을 S3 에 올린다 (NM-348 · NM-571).
  *
- * ## 식별과 완전히 분리돼 있다
- * 서버에 키를 알려주지 않고, 식별 횟수도 차감되지 않는다. **실패해도 식별 플로우에 영향이
- * 없어야 한다** — 그래서 호출부는 결과를 기다리지 않고, 여기서도 예외를 밖으로 내지 않는다.
+ * ## 식별 흐름과 분리돼 있다 — 키로만 이어진다
+ * 앱이 만든 `imageId`(UUID v7)를 upload-url 본문에 보내 원본 키로 쓰게 하고, 같은 값을 속성 추출에도 보낸다 — 학습
+ * 라벨이 이 사진을 가리키는 끈이다(NM-571). 둘의 순서는 상관없다. 식별 횟수는 차감되지 않는다. **실패해도 식별 플로우에
+ * 영향이 없어야 한다** — 그래서 호출부는 결과를 기다리지 않고, 여기서도 예외를 밖으로 내지 않는다.
  *
  * ## 우리 헤더를 붙이지 않는다
  * presigned URL 은 그 자체가 인가라 추가 헤더가 필요 없고, 무엇보다 **Firebase ID 토큰을
@@ -30,11 +32,13 @@ class RawImageUploader @Inject constructor(
 
     /**
      * @param jpeg 원본 사진 바이트. **JPEG 여야 한다.**
+     * @param imageId 앱이 만든 사진 id(UUID v7) — 원본 키가 되고, 속성 추출에도 같은 값이 가 학습 라벨이 이 사진을
+     *                가리킨다(NM-571). 업로드와 속성 추출은 순서가 없다
      * @return 성공 여부. 호출부가 분기할 일은 없고 로그·지표용이다.
      */
-    suspend fun upload(jpeg: ByteArray): Boolean = withContext(Dispatchers.IO) {
+    suspend fun upload(jpeg: ByteArray, imageId: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val url = pillApi.uploadUrl().uploadUrl
+            val url = pillApi.uploadUrl(UploadUrlRequest(imageId)).uploadUrl
             val request = Request.Builder()
                 .url(url)
                 // ⚠️ 정확히 `image/jpeg` 여야 한다. presigned 서명에 포함된 값이라

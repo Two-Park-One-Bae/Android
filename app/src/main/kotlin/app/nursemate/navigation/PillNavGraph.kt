@@ -153,6 +153,10 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
     //
     // 요청에 실리는 값으로만 다시 부른다 — `모름` 처럼 화면에만 남는 값을 바꿔도 요청은 같다.
     LaunchedEffect(edit.conditions, edit.faces.front.toRequest(), edit.faces.back.toRequest()) { search() }
+    // 화면 목록을 낸 조회를 이 알약 키로 남긴다 — 학습 라벨의 userInput(NM-571).
+    LaunchedEffect(candidateViewModel, pillId) {
+        candidateViewModel.answered.collect { viewModel.labels.recordQuery(pillId, it) }
+    }
 
     val index = state.detectedIndexOf(pillId)
 
@@ -183,6 +187,8 @@ private fun NavGraphBuilder.edit(navController: NavController, tabbed: PillTabbe
             },
             onConfirm = {
                 confirmEdit(viewModel, tracking, pillId, pending, candidates.candidates)
+                // 「선택」하고 돌아갈 때 그 알약 하나의 라벨을 보낸다(NM-571). 고른 후보가 상태에 들어간 뒤라야 한다.
+                viewModel.labels.selected(pillId)
                 viewModel.corrections.endEdit(pillId)
                 navController.popBackStack()
             },

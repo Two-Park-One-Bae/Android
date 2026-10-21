@@ -83,6 +83,11 @@ class DetectorParityTest {
             assertEquals("점수", c.detection.score, g.detection.score, SCORE_TOLERANCE)
             assertEquals("크롭 폭", c.crop.width.toFloat(), g.crop.width.toFloat(), c.crop.width * CROP_TOLERANCE)
             assertEquals("크롭 높이", c.crop.height.toFloat(), g.crop.height.toFloat(), c.crop.height * CROP_TOLERANCE)
+            // 학습 라벨 계약(NM-571) — 크롭 크기가 곧 box 너비 · 높이여야 서버가 저장한다.
+            listOf(c, g).forEach {
+                assertEquals("box 너비 = 크롭 폭", it.crop.width, it.box.width)
+                assertEquals("box 높이 = 크롭 높이", it.crop.height, it.box.height)
+            }
         }
     }
 
