@@ -36,6 +36,10 @@ internal data class RunPlan(val placement: Placement, val precision: GpuPrecisio
  * 알려 이 기기에서 그 모델을 CPU 에 고정한다 — 컴파일은 받고 실행에서 거절하는 드라이버가 있어도 식별이 이어진다.
  * 느려도 도는 쪽이 판독을 통째로 포기하는 것보다 낫다. CPU 로 돌아도 판정은 fp32 와 같다(ML 실측).
  *
+ * ## 번역 결과는 디스크에 남긴다(NM-636)
+ * GPU 로 열 때 셰이더 번역이 열기 시간의 대부분이다. [VisionBackend.gpuCache] 가 있으면 번역 결과를 남겨 다음 실행부터
+ * 건너뛴다. 키가 다르거나 남긴 것이 맞지 않으면 LiteRT 가 다시 번역한다.
+ *
  * ## GPU 흔적은 GPU 를 쓰는 동안만 — 열기 **전부터**
  * 드라이버는 셰이더를 준비하는 `create` 안에서도 프로세스째 죽을 수 있다. 연 뒤에 남기면 그 죽음이 흔적 없이 지나가
  * 다음 실행이 못 막는다. 그래서 GPU 로 열기 · 닫기를 [VisionBackend.whileOnGpu] 로 감싸고, 실행은 리더가 판독 한 번을
@@ -109,7 +113,7 @@ internal class LiteRtModel private constructor(
                 Engine(CompiledModel.create(file.absolutePath, cpuOptions(threads)), onGpu = false)
 
             fun gpu(file: File, plan: RunPlan, threads: Int) =
-                Engine(CompiledModel.create(file.absolutePath, gpuOptions(plan, threads)), onGpu = true)
+                Engine(CompiledModel.create(file.absolutePath, gpuOptions(file, plan, threads)), onGpu = true)
         }
     }
 
@@ -160,11 +164,12 @@ internal class LiteRtModel private constructor(
             cpuOptions = CompiledModel.CpuOptions(numThreads = threads)
         }
 
-        private fun gpuOptions(plan: RunPlan, threads: Int): CompiledModel.Options {
+        private fun gpuOptions(file: File, plan: RunPlan, threads: Int): CompiledModel.Options {
             val accelerators = when (plan.placement) {
                 Placement.GPU_CPU -> setOf(Accelerator.GPU, Accelerator.CPU)
                 else -> setOf(Accelerator.GPU)
             }
+            val cache = VisionBackend.gpuCache
             return CompiledModel.Options(accelerators).apply {
                 cpuOptions = CompiledModel.CpuOptions(numThreads = threads)
                 gpuOptions = CompiledModel.GpuOptions(
@@ -173,10 +178,23 @@ internal class LiteRtModel private constructor(
                     precision = when (plan.precision) {
                         GpuPrecision.FP16 -> CompiledModel.GpuOptions.Precision.FP16
                         GpuPrecision.FP32 -> CompiledModel.GpuOptions.Precision.FP32
-                    }
+                    },
+                    // 번역 결과를 디스크에 남겨 다음 실행부터 건너뛴다(NM-636, [VisionBackend.gpuCache]).
+                    serializationDir = cache?.dir?.path,
+                    modelCacheKey = cache?.let { cacheKey(file, plan, it.salt) },
+                    serializeProgramCache = cache?.let { true }
                 )
             }
         }
+
+        /**
+         * 번역 결과의 키 — 모델 파일 · 크기 · 배치 · 정밀도 · 앱 버전 · 기기 빌드. 하나라도 바뀌면 다른 키라 엉뚱한 번역을 읽지
+         * 않는다(LiteRT 문서: 키는 그 기기 · 그 모델에 고유해야 한다). 파일 이름에 쓰일 수 있어 글자를 추린다.
+         */
+        internal fun cacheKey(file: File, plan: RunPlan, salt: String): String =
+            "${file.name}-${file.length()}-${plan.placement}-${plan.precision}-$salt".replace(UNSAFE_KEY, "_")
+
+        private val UNSAFE_KEY = Regex("[^A-Za-z0-9._-]")
 
         /**
          * 실측에서 4스레드가 최적이었다(ORT 시절 1 · 2 · 4 · 6 · 8 을 쟀다 — 6 · 8 은 리틀코어로 넘쳐 느려졌다).

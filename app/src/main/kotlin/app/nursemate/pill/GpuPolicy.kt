@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import app.nursemate.BuildConfig
+import app.nursemate.core.vision.GpuCache
 import app.nursemate.core.vision.VisionBackend
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -74,7 +75,9 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
             prefs.edit().clear().putString(KEY_BUILD, build).apply()
             runCatching { sentinel.delete() }
         }
-        blockedByCrash = prefs.getBoolean(KEY_BLOCKED, false) || (!rebuilt && trippedByLastExit())
+        val crashedNow = !rebuilt && trippedByLastExit()
+        blockedByCrash = prefs.getBoolean(KEY_BLOCKED, false) || crashedNow
+        installGpuCache(clear = rebuilt || crashedNow)
         cpuModels = prefs.getStringSet(KEY_CPU_MODELS, emptySet()).orEmpty()
 
         VisionBackend.allowGpu = ::allow
@@ -87,6 +90,20 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
             "GPU 정책 — SoC ${soc()} · 크래시차단=$blockedByCrash · " +
                 "CPU 고정 모델=${cpuModels.joinToString().ifEmpty { "없음" }}"
         )
+    }
+
+    /**
+     * GPU 번역 결과를 남길 자리를 꽂는다(NM-636). 빌드가 바뀌었거나 직전 실행이 GPU 를 쓰다 죽었으면 **비운다** — 옛 드라이버용
+     * 번역이나, 죽게 만든 번역을 다시 읽지 않게. 비울 수 없으면 캐시를 쓰지 않는다(느릴 뿐 답은 같다).
+     */
+    private fun installGpuCache(clear: Boolean) {
+        val dir = File(context.codeCacheDir, GPU_CACHE_DIR)
+        val ready = runCatching {
+            if (clear) dir.deleteRecursively()
+            dir.isDirectory || dir.mkdirs()
+        }.getOrDefault(false)
+        VisionBackend.gpuCache = if (ready) GpuCache(dir, build.hashCode().toString(HEX)) else null
+        Log.i(TAG, "GPU 번역 캐시 ${if (ready) "사용" else "끔"}${if (clear) " · 비움" else ""}")
     }
 
     /** 모델을 열 때 `LiteRtModel.open` 이 묻는다. */
@@ -174,6 +191,8 @@ class GpuPolicy @Inject constructor(@param:ApplicationContext private val contex
         const val KEY_BLOCKED = "blocked_by_native_crash"
         const val KEY_CPU_MODELS = "cpu_models"
         const val SENTINEL = "gpu_attempt"
+        const val GPU_CACHE_DIR = "litert_gpu"
+        const val HEX = 16
         const val MARK = "1"
 
         /** SIGILL · SIGABRT · SIGBUS · SIGSEGV. 드라이버가 죽을 때 나오는 것들이다. */

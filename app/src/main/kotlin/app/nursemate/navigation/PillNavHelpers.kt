@@ -70,6 +70,8 @@ internal fun NavBackStackEntry.cameFromHome(): Boolean = arguments?.getString("f
  */
 internal fun NavController.exitPillFlow(viewModel: PillRecognitionViewModel, fromHome: Boolean) {
     viewModel.discardPhoto()
+    // 식별이 끝났다 — 모델을 내려놓는다(NM-636). 다음 촬영 화면 진입 때 다시 연다.
+    viewModel.models.release()
     popBackStack(NmRoute.PILL_TAB, inclusive = false)
     if (fromHome) switchTab(NmTab.Home)
 }
