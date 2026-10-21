@@ -533,6 +533,19 @@ fun PillUiState.pillIds(): List<String> {
     return detected.indices.map(::pillId).filterNot { it in removedPillIds } + manualPillIds
 }
 
+/**
+ * 확정한 알약을 모두 **사용자 수정 없이** 골랐는가 — 스토어 리뷰 묶음 1(NM-561, spec §스토어 리뷰 요청).
+ *
+ * 후보를 고를 때 속성 칸이 모두 모델값이었으면(손대지 않았거나 되돌렸으면) 수정 없음이다. 고쳤다가 같은 값으로 다시
+ * 맞춘 것도 모델값이므로 값으로 비교한다. 수동 추가 알약은 사용자가 모든 칸을 입력하므로 수정한 것으로 본다.
+ */
+fun PillUiState.confirmedUntouched(): Boolean = pillIds().filter { it in selections }.all { pillId ->
+    if (pillId.isManualPill) return@all false
+    val touched = edits[pillId] ?: return@all true
+    val model = copy(edits = edits - pillId).editOf(pillId)
+    touched.conditions == model.conditions && touched.faces == model.faces
+}
+
 /** 확정한 후보만, 보이는 순서대로. 기록 저장 · 공유가 읽는다. */
 fun PillUiState.finalPills(): List<PillCandidate> = pillIds().mapNotNull { selections[it] }
 

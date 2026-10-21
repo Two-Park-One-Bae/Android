@@ -80,6 +80,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/nm_app_name"
         android:theme="@style/Theme.NurseMate"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true">
 
         <!--

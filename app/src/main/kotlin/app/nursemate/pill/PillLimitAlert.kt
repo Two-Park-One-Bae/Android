@@ -1,8 +1,10 @@
 package app.nursemate.pill
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import app.nursemate.core.designsystem.v2.NmV2Modal
 import app.nursemate.core.model.Usage
+import app.nursemate.review.rememberReviewRequester
 
 /**
  * 한도 안내 알럿 — 정본 ②-a 「오늘 식별 횟수를 모두 사용했어요」.
@@ -14,6 +16,9 @@ import app.nursemate.core.model.Usage
  */
 @Composable
 fun PillLimitAlert(usage: Usage?, onConfirm: () -> Unit) {
+    // 오늘 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+    val review = rememberReviewRequester()
+    LaunchedEffect(Unit) { review.limitShown() }
     NmV2Modal(
         title = "오늘 식별 횟수를 모두 사용했어요",
         message = usage.resetGuide(),
