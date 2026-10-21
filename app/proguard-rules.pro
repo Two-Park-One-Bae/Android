@@ -48,3 +48,8 @@
 # 쓰지 않는 길이라 클래스를 끌어올 이유가 없다 — 없어도 된다고 알려 주는 쪽을 고른다.
 # 삭제 추적을 켜게 되면 그때 firebase-messaging 을 넣고 이 줄을 지운다.
 -dontwarn com.google.firebase.messaging.**
+
+# 인앱 리뷰(NM-561) — `play:review-ktx` 의 SAM 변환이 Play 서비스의 `NoNullnessRewrite` 어노테이션을 참조하는데, 우리가 끌어오는
+# play-services 판에는 그 클래스가 없다. 어노테이션이라 실행에는 쓰이지 않는다 — 경고만 끈다. 빼면 R8 이 release 빌드를 멈춘다
+# (2026-10-21 릴리스 빌드에서 발견, CI 는 debug 만 빌드해 못 잡는다).
+-dontwarn com.google.android.gms.common.annotation.NoNullnessRewrite
