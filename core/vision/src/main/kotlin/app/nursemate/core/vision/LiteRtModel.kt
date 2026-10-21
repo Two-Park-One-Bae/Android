@@ -190,6 +190,8 @@ internal class LiteRtModel private constructor(
         /**
          * 번역 결과의 키 — 모델 파일 · 크기 · 배치 · 정밀도 · 앱 버전 · 기기 빌드. 하나라도 바뀌면 다른 키라 엉뚱한 번역을 읽지
          * 않는다(LiteRT 문서: 키는 그 기기 · 그 모델에 고유해야 한다). 파일 이름에 쓰일 수 있어 글자를 추린다.
+         * 내용 해시는 넣지 않는다 — 모델은 APK 에만 실려 바뀌면 곧 앱 업데이트이고, 시스템이 업데이트 · OS 업그레이드마다
+         * 캐시 자리(`codeCacheDir`)를 비운다. 앱이 다른 곳에서 모델을 받게 되면 해시를 넣는다.
          */
         internal fun cacheKey(file: File, plan: RunPlan, salt: String): String =
             "${file.name}-${file.length()}-${plan.placement}-${plan.precision}-$salt".replace(UNSAFE_KEY, "_")

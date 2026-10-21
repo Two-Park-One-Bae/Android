@@ -2,6 +2,7 @@ package app.nursemate.navigation
 
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -20,7 +21,13 @@ import app.nursemate.pill.PillRecognitionViewModel
 @Composable
 internal fun NavBackStackEntry.pillViewModel(navController: NavController): PillRecognitionViewModel {
     val graphEntry = remember(this) { navController.getBackStackEntry(NmRoute.PILL_GRAPH) }
-    return hiltViewModel(graphEntry)
+    val viewModel: PillRecognitionViewModel = hiltViewModel(graphEntry)
+    // 플로우 화면이 떠 있는 동안만 모델을 쥔다 — 마지막 화면이 사라지면 내려놓는다(NM-636).
+    DisposableEffect(viewModel) {
+        viewModel.models.hold()
+        onDispose { viewModel.models.unhold() }
+    }
+    return viewModel
 }
 
 /** 사진을 버리고 촬영 화면으로 되돌아간다. */
@@ -70,8 +77,6 @@ internal fun NavBackStackEntry.cameFromHome(): Boolean = arguments?.getString("f
  */
 internal fun NavController.exitPillFlow(viewModel: PillRecognitionViewModel, fromHome: Boolean) {
     viewModel.discardPhoto()
-    // 식별이 끝났다 — 모델을 내려놓는다(NM-636). 다음 촬영 화면 진입 때 다시 연다.
-    viewModel.models.release()
     popBackStack(NmRoute.PILL_TAB, inclusive = false)
     if (fromHome) switchTab(NmTab.Home)
 }

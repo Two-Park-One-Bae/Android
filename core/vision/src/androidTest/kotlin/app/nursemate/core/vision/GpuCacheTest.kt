@@ -125,13 +125,14 @@ class GpuCacheTest {
         assertEquals("best_pair 점수", cold.score, warm.score, IMPRINT_TOLERANCE)
     }
 
-    /** 빈 캐시로 한 번, 그 캐시로 한 번 연다. 처음 열기가 캐시에 무엇이든 썼는지도 본다 — 안 썼으면 둘째도 번역이다. */
+    /** 빈 캐시로 한 번, 그 캐시로 한 번 연다. 처음 열기가 캐시에 무엇이든 썼는지도 본다 — 안 썼으면 둘째도 번역이라 맞댈 것이 없다. */
     private fun <T> twice(label: String, open: () -> T): Pair<T, T> {
         val coldStart = SystemClock.elapsedRealtime()
         val cold = open()
         val coldMs = SystemClock.elapsedRealtime() - coldStart
         val written = cache.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-        assertTrue("$label 캐시에 쓴 것이 없다 — 이 기기 드라이버가 저장을 지원하지 않는다", written > 0)
+        // 저장을 못 하는 드라이버는 캐시 없이 돌 뿐이다(느릴 뿐 답은 같다) — 실패가 아니라 건너뜀으로 남긴다.
+        assumeTrue("$label 캐시에 쓴 것이 없다 — 이 기기 드라이버가 저장을 지원하지 않는다", written > 0)
 
         val warmStart = SystemClock.elapsedRealtime()
         val warm = open()

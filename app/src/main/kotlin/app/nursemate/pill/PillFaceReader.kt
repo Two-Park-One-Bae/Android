@@ -36,7 +36,7 @@ import kotlinx.coroutines.withContext
  */
 class PillFaceReader(
     private val modelFile: PillModelFile,
-    /** 지금 열어도 되는가 — 내려놓은 뒤([PillOnDeviceModels.release])에는 남은 판독이 모델을 다시 열지 않게 막는다. */
+    /** 지금 열어도 되는가 — 내려놓은 뒤([PillOnDeviceModels.unhold])에는 남은 판독이 모델을 다시 열지 않게 막는다. */
     private val canOpen: () -> Boolean = { true },
     /** 각인 · 마크 모델을 새로 열기 직전 — 검출기를 내려놓아 둘을 한꺼번에 쥐지 않는다(NM-636 번갈아 열기). */
     private val beforeOpen: suspend () -> Unit = {}
@@ -45,20 +45,29 @@ class PillFaceReader(
     private var imprint: ImprintReader? = null
     private var mark: MarkReader? = null
 
-    /** [close] 뒤에는 열지 않는다 — 미리 열기가 각인과 마크 사이에서 닫기에 밀리면 닫은 뒤에 마크가 새로 열려 샌다. */
+    /** [close] 뒤에는 열지 않는다 — 판독이 닫기 뒤에 잠금을 얻으면 닫은 뒤에 모델이 새로 열려 샌다. */
     private var closed = false
 
-    /** 판독과 내려놓기가 겹쳐도 모델을 두 번 열지 않게 연다 · 닫는 것을 줄 세운다. */
+    /** 열기 · 판독 · 닫기를 줄 세운다 — 판독 중에는 닫지 못하고, 모델을 두 번 열지 않는다. */
     private val opening = Mutex()
 
     /**
+     * 잠금을 쥔 채 열고 읽는다 — 읽는 동안 검출기 쪽이나 내려놓기가 각인 · 마크를 닫지 못하게.
+     *
      * @param crop 마스크로 오려낸 낱알 한 면(`DetectedPill.crop`)
      * @return 읽은 값. 모델이 확신하지 못한 항목은 null 이다 — **빈 값이 아니다**
      */
-    suspend fun read(crop: Bitmap): FaceReading {
-        // 여는 것은 마크가 먼저다 — 아래 「마크를 먼저 연다」.
-        val markReader = loadMark()
-        val imprintResult = loadImprint().read(crop)
+    suspend fun read(crop: Bitmap): FaceReading = opening.withLock {
+        check(!closed && canOpen()) { "닫혔거나 내려놓은 판독기다" }
+        if (imprint == null || mark == null) beforeOpen()
+        // 여는 것은 마크가 먼저다 — 위 「마크를 먼저 연다」.
+        val markReader = mark ?: withContext(Dispatchers.IO) {
+            MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
+        }
+        val imprintReader = imprint ?: withContext(Dispatchers.IO) {
+            ImprintReader(modelFile.prepare(PillModel.Imprint)).also { imprint = it }
+        }
+        val imprintResult = imprintReader.read(crop)
         val markResult = markReader.read(crop)
 
         Log.i(
@@ -68,28 +77,12 @@ class PillFaceReader(
                 "${markResult.timings.totalMs}ms"
         )
 
-        return FaceReading(
+        FaceReading(
             imprint = imprintResult.imprint,
             species = markResult.species,
             hasMark = MarkPresence.hasMark(markResult.presence, imprintResult.imprint),
             markEmbedding = MarkEmbedding.encode(markResult.embedding)
         )
-    }
-
-    private suspend fun loadImprint(): ImprintReader = opening.withLock {
-        check(!closed && canOpen()) { "닫혔거나 내려놓은 판독기다" }
-        if (imprint == null) beforeOpen()
-        imprint ?: withContext(Dispatchers.IO) {
-            ImprintReader(modelFile.prepare(PillModel.Imprint)).also { imprint = it }
-        }
-    }
-
-    private suspend fun loadMark(): MarkReader = opening.withLock {
-        check(!closed && canOpen()) { "닫혔거나 내려놓은 판독기다" }
-        if (mark == null) beforeOpen()
-        mark ?: withContext(Dispatchers.IO) {
-            MarkReader(modelFile.prepare(PillModel.Mark).single()).also { mark = it }
-        }
     }
 
     /** 모델을 닫되 다시 열 수 있게 둔다 — 식별이 끝나 메모리를 돌려줄 때(NM-636). 읽는 중이면 다 읽은 뒤 닫는다. */

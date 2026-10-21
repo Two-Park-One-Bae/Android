@@ -25,6 +25,7 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -92,8 +93,6 @@ class PillRecognitionViewModel @Inject constructor(
      */
     fun selectPhoto(uri: Uri) {
         _state.update { PillUiState(isLoadingPhoto = true) }
-        // 촬영 화면을 거치지 않고 사진이 들어와도 모델을 다시 쓸 수 있게 한다(내려놓았으면 검출 때 다시 연다).
-        ondevice.resume()
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) { ImageLoader.load(context, uri) }
@@ -151,7 +150,7 @@ class PillRecognitionViewModel @Inject constructor(
         // 기록 키는 식별을 시작할 때 정한다 — 저장을 다시 시도해도 같은 키라 기록이 늘지 않는다(spec §식별 기록 — 저장).
         _state.update { it.copy(detection = DetectionPhase.Running, historyId = UUID.randomUUID().toString()) }
         viewModelScope.launch {
-            runCatching { ondevice.detector().detect(bitmap) }
+            runCatching { ondevice.detect(bitmap) }
                 .onSuccess { result ->
                     Log.i(
                         TAG,
@@ -320,6 +319,8 @@ class PillRecognitionViewModel @Inject constructor(
         facesJob?.cancel()
         facesJob = viewModelScope.launch {
             result.pills.forEachIndexed { index, pill ->
+                // runCatching 이 취소까지 삼키므로 알약마다 확인한다 — 재촬영 뒤에도 돌면 새 사진의 검출기를 닫는다.
+                ensureActive()
                 val id = pillId(index)
                 runCatching { ondevice.faceReader.read(pill.crop) }
                     .onSuccess { reading -> applyReading(id, reading) }
@@ -355,8 +356,7 @@ class PillRecognitionViewModel @Inject constructor(
 
     /**
      * 검출 · 각인 · 마크 모델 묶음 — 배선이 촬영 화면에 들어오면 [PillOnDeviceModels.prewarm] 으로 **미리 열고**(구도를 잡는 몇 초
-     * 동안 GPU 준비를 끝낸다), 식별이 끝나거나 촬영 화면을 닫으면 [PillOnDeviceModels.release] 로 **내려놓는다**(메모리 약
-     * 1.5GB — NM-636). 실패는 삼킨다 — 실제 검출 때 다시 드러난다.
+     * 동안 GPU 준비를 끝낸다), 플로우 화면마다 [PillOnDeviceModels.hold] 해 마지막 화면이 사라지면 **내려놓는다**(NM-636).
      */
     internal val models: PillOnDeviceModels get() = ondevice
 
