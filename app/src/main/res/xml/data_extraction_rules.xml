@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    클라우드 백업 · 기기 이전(API 31+). 다른 것은 그대로 두고 스토어 리뷰 기록만 뺀다 — spec 이 「재설치하면 처음부터
+    센다」(NM-561). 새 기기로 옮겨도 그 기기에서 처음부터 센다. 파일 이름은 ReviewTracker 와 같아야 한다.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/review_stats.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/review_stats.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

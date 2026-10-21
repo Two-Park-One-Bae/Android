@@ -52,6 +52,7 @@ import app.nursemate.home.HomeScreen
 import app.nursemate.home.HomeViewModel
 import app.nursemate.home.NmTab
 import app.nursemate.pill.PillLimitAlert
+import app.nursemate.review.rememberReviewRequester
 import app.nursemate.settings.SettingsConfirm
 import app.nursemate.settings.SettingsConfirmDialog
 import app.nursemate.settings.SettingsScreen
@@ -535,12 +536,14 @@ private fun TabRoot(
     onSelect: (NmTab) -> Unit = { target -> navController.switchTab(target) },
     content: @Composable () -> Unit
 ) {
+    // 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+    val review = rememberReviewRequester()
     NmTabScaffold(
         selected = tab,
         background = background,
         onSelect = onSelect,
         overlay = if (pillTabLimitReached) {
-            { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit) }
+            { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit, onShown = review::limitShown) }
         } else {
             overlay
         },

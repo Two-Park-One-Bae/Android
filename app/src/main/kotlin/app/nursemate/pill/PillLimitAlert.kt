@@ -1,6 +1,7 @@
 package app.nursemate.pill
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import app.nursemate.core.designsystem.v2.NmV2Modal
 import app.nursemate.core.model.Usage
 
@@ -13,7 +14,10 @@ import app.nursemate.core.model.Usage
  * @param usage 리셋 시각을 안내하려고 받는다. 모르면(null) 시각 없이 안내만 한다.
  */
 @Composable
-fun PillLimitAlert(usage: Usage?, onConfirm: () -> Unit) {
+fun PillLimitAlert(usage: Usage?, onConfirm: () -> Unit, onShown: () -> Unit = {}) {
+    // 떴다는 것을 배선에 알린다 — 오늘 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+    // 기록 자체는 배선이 한다. 이 컴포넌트는 디자인 갤러리 · 캡처 테스트에서도 그려진다.
+    LaunchedEffect(Unit) { onShown() }
     NmV2Modal(
         title = "오늘 식별 횟수를 모두 사용했어요",
         message = usage.resetGuide(),

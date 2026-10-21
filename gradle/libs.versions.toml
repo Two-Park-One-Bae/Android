@@ -1,4 +1,6 @@
 [versions]
+# 인앱 리뷰(NM-561). 창은 Play 로 설치된 앱에서만 뜬다.
+playReview = "2.0.2"
 # 빌드 도구 — Now in Android(main, AGP 9) 검증 조합 기준. 함께 올릴 것.
 agp = "9.3.0"
 kotlin = "2.3.0"
@@ -63,6 +65,7 @@ ktlint = "1.8.0"
 litert = "2.3.0"
 
 [libraries]
+play-review-ktx = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }
 # build-logic 전용 (convention plugin 컴파일 클래스패스)
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
 kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }

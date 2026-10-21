@@ -36,6 +36,7 @@ import app.nursemate.pill.PillPreviewScreen
 import app.nursemate.pill.PillRecognitionViewModel
 import app.nursemate.pill.PillResultScreen
 import app.nursemate.pill.changesFrom
+import app.nursemate.pill.confirmedUntouched
 import app.nursemate.pill.copyPillResult
 import app.nursemate.pill.editOf
 import app.nursemate.pill.finalPills
@@ -44,6 +45,7 @@ import app.nursemate.pill.isManualPill
 import app.nursemate.pill.pillId
 import app.nursemate.pill.sharePillResultPdf
 import app.nursemate.pill.toResultUi
+import app.nursemate.review.rememberReviewRequester
 
 /**
  * 알약 탭 — 기록 목록(시작점, NM-555) → 촬영① → 미리보기② → 로딩④ → 식별 결과⑤ / 결과 없음⑥ / 분석 실패⑦.
@@ -236,6 +238,7 @@ private fun NavGraphBuilder.preview(navController: NavController, tabbed: PillTa
         val viewModel = entry.pillViewModel(navController)
         val state by viewModel.state.collectAsStateWithLifecycle()
         val usage by viewModel.usage.collectAsStateWithLifecycle()
+        val previewReview = rememberReviewRequester()
         tabbed {
             PillPreviewScreen(
                 state = state,
@@ -258,7 +261,9 @@ private fun NavGraphBuilder.preview(navController: NavController, tabbed: PillTa
                     }
                 },
                 limitReached = state.attributes == AttributePhase.LimitReached,
-                onDismissLimit = viewModel.limit::dismiss
+                onDismissLimit = viewModel.limit::dismiss,
+                // 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+                onLimitShown = previewReview::limitShown
             )
         }
     }
@@ -320,10 +325,15 @@ private fun NavGraphBuilder.result(navController: NavController, tabbed: PillTab
         LaunchedEffect(Unit) { viewModel.analyticsSession.resultShown() }
 
         // 남겼으면 들어온 화면으로 — 알약 탭이면 방금 남긴 기록이 목록 맨 위에 보인다(spec §완료 · 공유).
+        val review = rememberReviewRequester()
         LaunchedEffect(state.save) {
             if (state.save == HistorySave.Saved) {
                 viewModel.analyticsSession.completed(state.identificationSummary())
+                // 상태를 비우기 전에 읽는다 — 이번 식별을 고치지 않고 골랐는지(스토어 리뷰 묶음 1, NM-561).
+                val unmodified = state.confirmedUntouched()
                 navController.exitPillFlow(viewModel, fromHome)
+                // 들어온 화면으로 돌아온 직후에 검사한다(spec §스토어 리뷰 요청).
+                review.identified(unmodified)
             }
         }
 

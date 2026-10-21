@@ -171,6 +171,8 @@ dependencies {
     // release(R8)에서 WorkDatabase 생성에 실패해 앱이 바로 죽었다(2026-09-11 릴리스 스모크).
     // 슬롯 저장에 쓰는 DataStore 는 그동안 Glance 를 타고 들어와 있었다 — 직접 선언한다.
     implementation(libs.androidx.datastore.preferences)
+    // 스토어 평가 창 요청(NM-561).
+    implementation(libs.play.review.ktx)
 
     // 후보·세부정보의 낱알 이미지(CDN). 없는 품목은 404 가 오므로 폴백이 필요하다(NM-347).
     implementation(libs.coil.compose)

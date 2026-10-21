@@ -58,7 +58,8 @@ fun PillPreviewScreen(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     limitReached: Boolean = false,
-    onDismissLimit: () -> Unit = {}
+    onDismissLimit: () -> Unit = {},
+    onLimitShown: () -> Unit = {}
 ) {
     val colors = NmTheme.semanticColors
     SystemBarIcons(darkIcons = true)
@@ -111,7 +112,7 @@ fun PillPreviewScreen(
     }
 
     // 정본 ②-a — 이 사진을 쓰려는 순간 한도가 0 이면 요청 없이 여기서 알린다. 확인하면 이 화면에 머문다.
-    if (limitReached) PillLimitAlert(usage = usage, onConfirm = onDismissLimit)
+    if (limitReached) PillLimitAlert(usage = usage, onConfirm = onDismissLimit, onShown = onLimitShown)
 }
 
 /**

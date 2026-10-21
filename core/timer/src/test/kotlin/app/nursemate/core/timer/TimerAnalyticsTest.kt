@@ -35,12 +35,22 @@ class TimerAnalyticsTest {
         val started = mutableListOf<Started>()
         val ended = mutableListOf<Ended>()
 
-        override fun started(timer: CareTimer, source: String) {
+        /** 끝낸 기기 — 이 기기(phone)인지 상대(watch)인지. [ended] 와 같은 순서다. */
+        val endedSources = mutableListOf<String>()
+
+        override suspend fun started(timer: CareTimer, source: String) {
             started += Started(timer, source)
         }
 
-        override fun ended(timer: CareTimer, completed: Boolean, elapsedSec: Int, remainingSec: Int) {
+        override suspend fun ended(
+            timer: CareTimer,
+            completed: Boolean,
+            elapsedSec: Int,
+            remainingSec: Int,
+            source: String
+        ) {
             ended += Ended(timer, completed, elapsedSec, remainingSec)
+            endedSources += source
         }
     }
 
