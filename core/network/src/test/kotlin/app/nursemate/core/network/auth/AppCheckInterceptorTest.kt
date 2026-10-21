@@ -42,7 +42,7 @@ class AppCheckInterceptorTest {
     }
 
     @Test
-    fun `알약 식별 3경로에만 헤더를 붙인다`() {
+    fun `알약 식별 · 학습 라벨 경로에만 헤더를 붙인다`() {
         val tokens = FakeAppCheck("ac-token")
         val client = clientWith(tokens)
 
@@ -50,7 +50,11 @@ class AppCheckInterceptorTest {
             "/api/v0/pill-images/upload-url",
             // 속성 추출만 v1 으로 옮겼다(NM-516). 잔여 횟수 조회는 그대로 v0 이다.
             "/api/v1/pill-attributes",
-            "/api/v0/pill-attributes/usage"
+            "/api/v0/pill-attributes/usage",
+            // 학습 라벨(NM-571) — 경로에 imageId · 번호가 들어간다.
+            "/api/v0/pill-images/01a15cfb-f327-7f5f-b0fb-2411f9d8524d/labels/0",
+            "/api/v0/pill-images/01a15cfb-f327-7f5f-b0fb-2411f9d8524d/labels/100",
+            "/api/v0/pill-images/01a15cfb-f327-7f5f-b0fb-2411f9d8524d/segmentation"
         ).forEach { path ->
             server.enqueue(MockResponse().setResponseCode(HTTP_OK).setBody("{}"))
             call(client, path).use { }
@@ -67,7 +71,15 @@ class AppCheckInterceptorTest {
         val tokens = FakeAppCheck("ac-token")
         val client = clientWith(tokens)
 
-        listOf("/api/v0/users/me", "/api/v0/consents", "/api/v0/pill-candidates", "/actuator/health")
+        listOf(
+            "/api/v0/users/me",
+            "/api/v0/consents",
+            "/api/v0/pill-candidates",
+            "/actuator/health",
+            // 비슷하게 생긴 경로에 새지 않는다.
+            "/api/v0/pill-images/x/labels/0/extra",
+            "/api/admin/pill-labels/x/0"
+        )
             .forEach { path ->
                 server.enqueue(MockResponse().setResponseCode(HTTP_OK).setBody("{}"))
                 call(client, path).use { }
