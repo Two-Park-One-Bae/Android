@@ -318,13 +318,16 @@ class PillRecognitionViewModel @Inject constructor(
     private fun readFaces(result: DetectionResult) {
         facesJob?.cancel()
         facesJob = viewModelScope.launch {
-            result.pills.forEachIndexed { index, pill ->
-                // runCatching 이 취소까지 삼키므로 알약마다 확인한다 — 재촬영 뒤에도 돌면 새 사진의 검출기를 닫는다.
-                ensureActive()
-                val id = pillId(index)
-                runCatching { ondevice.faceReader.read(pill.crop) }
-                    .onSuccess { reading -> applyReading(id, reading) }
-                    .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+            // 탭을 옮겨도 남은 알약까지 다 읽고 내려놓는다(NM-636).
+            ondevice.inUse {
+                result.pills.forEachIndexed { index, pill ->
+                    // runCatching 이 취소까지 삼키므로 알약마다 확인한다 — 재촬영 뒤에도 돌면 새 사진의 검출기를 닫는다.
+                    ensureActive()
+                    val id = pillId(index)
+                    runCatching { ondevice.faceReader.read(pill.crop) }
+                        .onSuccess { reading -> applyReading(id, reading) }
+                        .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+                }
             }
         }
     }

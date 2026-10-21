@@ -182,7 +182,7 @@ internal class LiteRtModel private constructor(
                     // 번역 결과를 디스크에 남겨 다음 실행부터 건너뛴다(NM-636, [VisionBackend.gpuCache]).
                     serializationDir = cache?.dir?.path,
                     modelCacheKey = cache?.let { cacheKey(file, plan, it.salt) },
-                    serializeProgramCache = cache?.let { true }
+                    serializeProgramCache = cache != null
                 )
             }
         }

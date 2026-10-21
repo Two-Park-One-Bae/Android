@@ -36,8 +36,6 @@ import kotlinx.coroutines.withContext
  */
 class PillFaceReader(
     private val modelFile: PillModelFile,
-    /** 지금 열어도 되는가 — 내려놓은 뒤([PillOnDeviceModels.unhold])에는 남은 판독이 모델을 다시 열지 않게 막는다. */
-    private val canOpen: () -> Boolean = { true },
     /** 각인 · 마크 모델을 새로 열기 직전 — 검출기를 내려놓아 둘을 한꺼번에 쥐지 않는다(NM-636 번갈아 열기). */
     private val beforeOpen: suspend () -> Unit = {}
 ) {
@@ -58,7 +56,7 @@ class PillFaceReader(
      * @return 읽은 값. 모델이 확신하지 못한 항목은 null 이다 — **빈 값이 아니다**
      */
     suspend fun read(crop: Bitmap): FaceReading = opening.withLock {
-        check(!closed && canOpen()) { "닫혔거나 내려놓은 판독기다" }
+        check(!closed) { "닫힌 판독기다" }
         if (imprint == null || mark == null) beforeOpen()
         // 여는 것은 마크가 먼저다 — 위 「마크를 먼저 연다」.
         val markReader = mark ?: withContext(Dispatchers.IO) {
@@ -85,8 +83,12 @@ class PillFaceReader(
         )
     }
 
-    /** 모델을 닫되 다시 열 수 있게 둔다 — 식별이 끝나 메모리를 돌려줄 때(NM-636). 읽는 중이면 다 읽은 뒤 닫는다. */
-    suspend fun release() = opening.withLock {
+    /**
+     * 모델을 닫되 다시 열 수 있게 둔다 — 검출기를 열기 전 · 식별이 끝나 메모리를 돌려줄 때(NM-636). 읽는 중이면 다 읽은 뒤
+     * 닫는다. [onlyIf] 는 잠금을 얻은 뒤에 본다 — 기다리는 사이 다시 쓰게 됐으면 닫지 않는다.
+     */
+    suspend fun release(onlyIf: () -> Boolean = { true }) = opening.withLock {
+        if (!onlyIf()) return@withLock
         imprint?.closeWhenIdle()
         mark?.closeWhenIdle()
         imprint = null
