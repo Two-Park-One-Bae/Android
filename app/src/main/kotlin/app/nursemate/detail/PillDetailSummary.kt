@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,16 +21,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.model.Ingredient
 import app.nursemate.core.model.PillClassification
 import app.nursemate.core.model.PillDetail
+import app.nursemate.pill.PILL_DISCLAIMER
 import coil3.compose.SubcomposeAsyncImage
 
 /*
@@ -87,7 +86,7 @@ private fun PillImageFallback() {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            painter = painterResource(R.drawable.nm_ic_image),
+            painter = painterResource(NmSymbols.Image),
             contentDescription = null,
             tint = NmTheme.semanticColors.textTertiary,
             modifier = Modifier.size(36.dp)
@@ -148,11 +147,9 @@ internal fun DetailNotice() {
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.border))
         Text(
             text = "출처: 식품의약품안전처 의약품 제품 허가정보\n" +
-                "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. 투약 전 반드시 처방 내용과 " +
-                "약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요.",
+                PILL_DISCLAIMER,
             style = NoticeText,
             color = colors.textTertiary,
-            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
     }

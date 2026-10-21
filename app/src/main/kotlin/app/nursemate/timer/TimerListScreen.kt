@@ -25,22 +25,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2ButtonFloating
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.CareTimer
 import app.nursemate.core.model.CareTimerTransitions
-import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.TimerState
 
 /**
@@ -55,6 +53,8 @@ import app.nursemate.core.model.TimerState
 fun TimerListRoute(
     startPresetId: String? = null,
     onStartPresetHandled: () -> Unit = {},
+    openPresetSheet: Boolean = false,
+    onPresetSheetOpened: () -> Unit = {},
     viewModel: TimerListViewModel = hiltViewModel()
 ) {
     val timers by viewModel.timers.collectAsStateWithLifecycle()
@@ -67,6 +67,13 @@ fun TimerListRoute(
     val editing by editor.editing.collectAsStateWithLifecycle()
     val presetForm by editor.form.collectAsStateWithLifecycle()
     val deletingPreset by editor.deleting.collectAsStateWithLifecycle()
+
+    // 홈 `새 타이머` 로 들어오면 프리셋 시트를 연다 — 타이머 탭 추가 버튼과 같은 시트다(spec home).
+    LaunchedEffect(openPresetSheet) {
+        if (!openPresetSheet) return@LaunchedEffect
+        onPresetSheetOpened()
+        viewModel.setPresetSheet(true)
+    }
 
     // 프리셋 목록을 읽기 전에는 id 를 맞춰 볼 수 없다. 빈 목록은 "아직 안 읽혔다"와 구분되지
     // 않지만, 정말 비어 있으면 시작할 프리셋 자체가 없어 어느 쪽이든 할 일이 같다.
@@ -147,7 +154,6 @@ fun TimerListScreen(
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = NmTheme.semanticColors
     // 만료를 화면에서도 판정한다.
     //
     // 저장 상태를 RINGING 으로 올리는 건 알람 리시버 몫이지만, 알람이 못 오는 경우가 있다 —
@@ -155,7 +161,8 @@ fun TimerListScreen(
     // 00:00」으로 굳어 사용자가 손댈 수 없다. 보이는 것만이라도 만료로 바꿔 [완료]를 준다.
     val ordered = remember(timers, now) { CareTimerTransitions.projectedAndOrdered(timers, now) }
 
-    Box(modifier.fillMaxSize().background(colors.bgApp)) {
+    // 바탕(흰색)은 탭 셸(`NmTabScaffold`)이 칠한다 — 탭 바 뒤까지 한 색이어야 해서 거기 한 곳에 둔다.
+    Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             // ⚠️ **투영본을 넘긴다.** raw 를 세면 알람이 못 온 타이머가 카드로는 만료인데
             // 헤더에는 「진행 중」으로 남아, 투영을 넣은 이유와 앞뒤가 맞지 않는다.
@@ -195,24 +202,14 @@ fun TimerListScreen(
 
         // 정본은 FAB 을 탭바 위 16 에 띄운다. 탭바는 이 화면 밖(NmTabScaffold)이라
         // 여기서는 콘텐츠 하단 기준 16 이면 같은 자리가 된다.
-        Box(
-            Modifier
+        NmV2ButtonFloating(
+            icon = NmSymbols.Add,
+            contentDescription = "타이머 추가",
+            onClick = onAdd,
+            modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 16.dp)
-                .shadow(FabElevation, CircleShape, spotColor = FabShadow, ambientColor = FabShadow)
-                .size(FabSize)
-                .clip(CircleShape)
-                .background(NmColor.Primary.C500, CircleShape)
-                .clickable(onClick = onAdd),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(DsR.drawable.nm_ic_plus),
-                contentDescription = "타이머 추가",
-                tint = NmColor.Neutral.C0,
-                modifier = Modifier.size(26.dp)
-            )
-        }
+        )
     }
 }
 
@@ -225,7 +222,7 @@ private fun Header(timers: List<CareTimer>) {
             .padding(start = 20.dp, end = 20.dp, top = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text("타이머", style = TitleStyle, color = colors.textPrimary)
+        Text("타이머", style = NmV2Type.screenTitle, color = colors.textPrimary)
         // 정본은 빈 상태에서 Count 줄이 통째로 없다 — "진행 중 0"을 보여 주지 않는다.
         if (timers.isNotEmpty()) {
             Text(
@@ -234,7 +231,7 @@ private fun Header(timers: List<CareTimer>) {
                     paused = timers.count { it.state == TimerState.PAUSED },
                     ringing = timers.count { it.state == TimerState.RINGING }
                 ),
-                style = CountStyle,
+                style = NmV2Type.cardBody,
                 color = colors.textSecondary
             )
         }
@@ -260,7 +257,7 @@ private fun TimerListEmpty(onStart: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(DsR.drawable.nm_ic_timer),
+                painter = painterResource(NmSymbols.Timer),
                 contentDescription = null,
                 tint = NmColor.Neutral.C400,
                 modifier = Modifier.size(44.dp)
@@ -270,44 +267,37 @@ private fun TimerListEmpty(onStart: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("진행 중인 타이머가 없어요", style = EmptyTitle, color = colors.textPrimary)
+            Text("진행 중인 타이머가 없어요", style = NmV2Type.stateTitle, color = colors.textPrimary)
             Text(
                 text = "프리셋을 눌러 바로 시작할 수 있어요",
-                style = EmptySub,
+                style = NmV2Type.cardBody,
                 color = colors.textSecondary,
                 textAlign = TextAlign.Center
             )
         }
+        // 정본은 이 버튼만 볼록이 아니라 `primary-500` 평면이다 — 화면 가운데 하나뿐인 동작이라
+        // 그림자 없이도 눈에 띈다. 정본을 따른다.
         Row(
             modifier = Modifier
                 .clip(CtaShape)
                 .background(NmColor.Primary.C500, CtaShape)
-                .clickable(onClick = onStart)
+                .clickable(role = Role.Button, onClick = onStart)
                 .padding(horizontal = 28.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                painter = painterResource(DsR.drawable.nm_ic_plus),
+                painter = painterResource(NmSymbols.Add),
                 contentDescription = null,
                 tint = NmColor.Neutral.C0,
                 modifier = Modifier.size(18.dp)
             )
-            Text("타이머 시작하기", style = CtaStyle, color = NmColor.Neutral.C0)
+            Text("타이머 시작하기", style = NmV2Type.button, color = NmColor.Neutral.C0)
         }
     }
 }
 
 // 정본 수치 — `타이머 / C1 리스트`
 private val ContentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 20.dp)
-private val FabSize = 56.dp
-private val FabElevation = 8.dp
-private val FabShadow = Color(0x660284C7)
 private val EmptyIconBox = 96.dp
-private val CtaShape = RoundedCornerShape(12.dp)
-
-private val TitleStyle = NmTypography.heading2.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold)
-private val CountStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Normal)
-private val EmptyTitle = NmTypography.title.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-private val EmptySub = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Normal)
-private val CtaStyle = NmTypography.body.copy(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+private val CtaShape = RoundedCornerShape(NmRadius.md)

@@ -1,13 +1,18 @@
 package app.nursemate.core.vision.imprint
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
-import app.nursemate.core.vision.OrtBackend
+import app.nursemate.core.vision.GpuPrecision
+import app.nursemate.core.vision.LiteRtModel
+import app.nursemate.core.vision.Placement
+import app.nursemate.core.vision.RunPlan
+import app.nursemate.core.vision.VisionBackend
 import java.io.Closeable
 import java.io.File
-import java.nio.FloatBuffer
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,67 +32,67 @@ import org.opencv.imgproc.Imgproc
  * 나와야 한다(DoD). 전처리는 [ImprintPreprocess], 디코딩은 [ImprintDecoding] 에 있고 여기서는
  * 둘을 잇고 추론만 한다.
  *
- * ## 한 번에 144장을 돌린다
+ * ## 후보 144장을 읽는다
  * 회전 24 × 배율 6 이다. 방향 추정기는 기각됐다 — 여러 방향을 읽고 모델이 스스로 매긴 확률로
- * 고르는 편이 낫고, 자체 모델이라 그 확률이 보정돼 있다. 회전을 한 배치로 묶으므로 방향 수를
- * 늘려도 비용이 거의 안 는다.
+ * 고르는 편이 낫고, 자체 모델이라 그 확률이 보정돼 있다.
  *
- * ⚠️ **알약 하나당 144회다.** 셋을 찍으면 432회이고 저사양 기기의 대기 시간은 재봐야 한다
- * (NM-485 「정할 것」 1번).
+ * ## 모델이 다섯 조각이다 — G5 (LiteRT, NM-628)
+ * 한 판(ONNX `reader_ep60_s1.onnx`)을 ML 이 다섯 조각으로 나눴다. 조각마다 잘 도는 가속기가 달라서다.
  *
- * ## `rnn` 만 CPU 에 남긴다 (NM-534)
- * WebGPU 로 그냥 열면 **3배 느려진다** — Galaxy S24 에서 CPU 3472 ms 대 WebGPU 9943 ms 다.
- * EP 가 나쁜 게 아니라 `LstmCell` 셰이더가 **타임스텝마다 디스패치를 하나씩** 내기 때문이다
- * (양방향 × 2층 × 32스텝 = 실행당 128회). 그 한 덩어리가 전체의 84%를 먹는다.
+ * | 조각 | 하는 일 | 실행(ML 계약) | 왜 |
+ * |---|---|---|---|
+ * | `p1_loc` | TPS 제어점 추정 | GPU FP16 | |
+ * | `p2_tps` | 제어점대로 크롭을 편다 | **CPU** | GPU 판보다 CPU 가 빨랐다 |
+ * | `p3_trunk` | CNN 몸통 | GPU **FP32** | 8 Elite 에서 FP16 이면 실행마다 다르게 틀렸다 |
+ * | `p4_frm` | 특징 재배열 | **GPU+CPU** FP16 | GPU 만으로 열면 Exynos 에서 컴파일 실패 |
+ * | `p5_lstm_head` | 양방향 LSTM + 글자 확률 | **CPU** | GPU 판보다 CPU 가 빨랐다 |
  *
- * 같은 EP 에서 Conv·attention 은 2배 빠르므로, `rnn` 만 CPU 로 돌려 둘을 다 챙긴다.
+ * 공식 세트 550면에서 **전 기기 응답 · 정답 · 오답이 운영 fp32 와 같다**(233/207/26). 면당 0.4~1.2초
+ * (ONNX 시절 1.4~5.0초).
  *
- * | | 각인 144장 |
- * |---|---|
- * | CPU 만 | 3472 ms |
- * | WebGPU 만 | 9943 ms |
- * | **WebGPU + `cpu(/rnn/)`** | **1796 ms** |
- *
- * `/out/` 까지 묶으면 1880 ms 로 오히려 느려서 `rnn` 하나만 고정한다.
+ * ## 묶음이 조각을 차례로 흐른다
+ * 144장을 **24장 묶음 6개**로 나눈다. 조각마다 **전용 스레드 하나**를 두고 묶음이 p1 → p5 를 흘러가게 해서,
+ * 묶음 k 가 p3 에 있을 때 묶음 k+1 이 p1 을 돈다. 순차로 돌리면 약 2배 느리다(Exynos 2600 715 → 377ms).
+ * 조각 하나를 두 스레드가 동시에 부르지 않는다 — [LiteRtModel] 이 버퍼를 공유하기 때문이다.
  *
  * ## 못 읽으면 null 이다
  * 빈 문자열이 아니다. 계약에서 `imprint: ""` 는 「각인이 없는 알약만」이라는 하드 조건이라,
  * 못 읽은 것을 그렇게 보내면 각인이 있는 정답이 전부 탈락한다.
+ *
+ * @param parts [PART_FILE_NAMES] 순서의 조각 파일 다섯
  */
-class ImprintReader(
-    modelFile: File,
-    threads: Int = DEFAULT_THREADS,
-    cpuNodes: String? = RNN_ON_CPU,
-    webGpuOptions: Map<String, String> = emptyMap()
-) : Closeable {
+class ImprintReader(parts: List<File>) : Closeable {
 
     init {
+        // 모델을 열기 **전에** 거른다 — 연 뒤에 던지면 생성자가 끝나지 않아 아무도 close() 를 못 부른다.
+        require(parts.map { it.name } == PART_FILE_NAMES) {
+            "각인 조각은 ${PART_FILE_NAMES.joinToString()} 순서여야 한다 — 받은 것 ${parts.map { it.name }}"
+        }
         // 네이티브 로딩은 여기서 한 번만 한다. 앱 시작에 걸면 각인을 쓰지 않는 사용자도 비용을 낸다.
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
     }
 
-    private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
+    private val models: List<LiteRtModel> = openAll(parts)
 
-    private val session: OrtSession = OrtBackend.openSession(
-        env,
-        modelFile,
-        cpuNodeNames = cpuNodes,
-        webGpuOptions = webGpuOptions
-    ) {
-        setIntraOpNumThreads(threads)
+    /** 지금 GPU 로 도는 조각 이름 — 대체됐으면 빠진다. 벤치가 실제 경로를 남기려고 본다. */
+    internal val gpuParts: List<String> get() = models.filter { it.onGpu }.map { it.name }
+
+    /** 조각마다 전용 스레드 — 한 조각을 두 스레드가 부르지 않게 한다. */
+    private val lanes: List<ExecutorService> = models.map { model ->
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "imprint-${model.name}").apply {
+                isDaemon =
+                    true
+            }
+        }
     }
 
-    /** 144장 × 1채널 × 128 × 128. 매 호출 재할당하지 않는다(9.4MB). */
     private val input = FloatArray(ImprintPreprocess.SAMPLES * PLANE)
 
-    /** [input] 을 공유하므로 동시 호출을 직렬화한다. */
+    /** [input] 과 조각들을 공유하므로 동시 호출을 직렬화한다. */
     private val lock = Mutex()
 
-    /**
-     * @param crop 마스크로 오려낸 낱알 한 면. 배경이 투명한 `ARGB_8888` 을 받는다
-     *             (`PillDetector` 의 `DetectedPill.crop`).
-     * @return 확신 글자, 또는 채택 임계에 못 미치면 null
-     */
+    /** @param crop 검출기가 오려낸 투명 배경 낱알 이미지 */
     suspend fun read(crop: Bitmap): Result = lock.withLock {
         withContext(Dispatchers.Default) { readBlocking(crop) }
     }
@@ -98,10 +103,8 @@ class ImprintReader(
     }
 
     /**
-     * 회색조 한 장에서 바로 읽는다 — 비트맵 디코딩을 건너뛰는 자리.
-     *
-     * 대조 테스트가 쓴다. 픽스처를 PNG 로 두면 파이썬과 Android 의 **디코더 차이가 섞여**
-     * 전처리가 아닌 것을 재게 되므로, 기준값은 숫자 배열로 두고 여기로 들어온다.
+     * 흑백 크롭에서 바로 읽는다. 대조 테스트가 기준 구현과 **같은 입력**을 넣으려고 쓴다 — 비트맵을
+     * 거치면 알파 합성 · 흑백 변환이 끼어 정본 `.npy` 와 화소 단위로 맞출 수 없다.
      */
     internal fun readGray(gray: Mat): Result {
         val t0 = System.nanoTime()
@@ -124,7 +127,7 @@ class ImprintReader(
         squared.release()
 
         val t1 = System.nanoTime()
-        val logits = runSession()
+        val logits = runPipeline()
         val t2 = System.nanoTime()
         val result = decode(logits)
         val t3 = System.nanoTime()
@@ -138,16 +141,52 @@ class ImprintReader(
         )
     }
 
-    /** @return 로짓 [T][N][C] — 시간축이 먼저다(모델 출력 그대로). */
-    private fun runSession(): Array<Array<FloatArray>> {
-        val shape = longArrayOf(ImprintPreprocess.SAMPLES.toLong(), 1, SIDE_L, SIDE_L)
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
-            session.run(mapOf(INPUT_NAME to tensor)).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                return (result[0].value as Array<Array<FloatArray>>)
+    /**
+     * 묶음 6개를 p1 → p5 로 흘린다. 채널이 1 이라 NCHW 와 NHWC 가 같은 배열이다 — 그대로 넣는다.
+     *
+     * @return `[시간][후보][글자]` — ONNX 시절과 같은 시간축 먼저. p5 출력 `[T,24,37]` 을 후보 자리에 꽂는다.
+     */
+    private fun runPipeline(): Array<Array<FloatArray>> {
+        val gpu = models.firstOrNull { it.onGpu }
+        val outs = if (gpu != null) VisionBackend.whileOnGpu(gpu.name, gpu = true) { runOnLanes() } else runInOrder()
+        val steps = outs[0].size / (CHUNK * CLASSES)
+        return Array(steps) { t ->
+            Array(ImprintPreprocess.SAMPLES) { n ->
+                val from = (t * CHUNK + n % CHUNK) * CLASSES
+                outs[n / CHUNK].copyOfRange(from, from + CLASSES)
             }
         }
     }
+
+    /** 묶음이 조각 전용 스레드를 차례로 흐른다(클래스 KDoc). p2 만 입력이 둘(크롭 · 제어점)이다. */
+    private fun runOnLanes(): List<FloatArray> {
+        val chunks = (0 until ImprintPreprocess.SAMPLES / CHUNK).map { c ->
+            val image = chunkOf(c)
+            var flow = CompletableFuture.supplyAsync({ models[0].run(image)[0] }, lanes[0])
+                .thenApplyAsync({ points -> models[1].run(image, points)[0] }, lanes[1])
+            for (i in 2 until models.size) {
+                flow = flow.thenApplyAsync({ x -> models[i].run(x)[0] }, lanes[i])
+            }
+            flow
+        }
+        // ⚠️ 하나가 실패해도 **나머지가 다 끝날 때까지** 기다린 뒤 던진다. 먼저 던지면 남은 묶음이 조각 스레드에서
+        //    계속 돌아, 다음 판독 · close() 와 겹쳐 같은 모델을 건드린다.
+        chunks.forEach { it.handle { _, _ -> }.join() }
+        return chunks.map { it.awaitUnwrapped() }
+    }
+
+    /**
+     * 다섯 조각이 **모두 CPU** 면 겹쳐 돌리지 않고 이 스레드에서 차례로 돈다 — 조각마다 4스레드라 겹치면 최대 20개가
+     * 코어를 나눠 써 리틀코어로 넘친다(GPU 가 막힌 기기의 경로다).
+     */
+    private fun runInOrder(): List<FloatArray> = (0 until ImprintPreprocess.SAMPLES / CHUNK).map { c ->
+        val image = chunkOf(c)
+        var x = models[1].run(image, models[0].run(image)[0])[0]
+        for (i in 2 until models.size) x = models[i].run(x)[0]
+        x
+    }
+
+    private fun chunkOf(c: Int): FloatArray = input.copyOfRange(c * CHUNK * PLANE, (c + 1) * CHUNK * PLANE)
 
     /**
      * 후보 144개를 각각 풀어 `best_pair` 점수가 가장 높은 것을 고른다.
@@ -180,9 +219,26 @@ class ImprintReader(
         )
     }
 
+    /**
+     * 조각 스레드가 멈출 때까지 기다린 뒤 모델을 닫는다 — 아직 도는 묶음이 닫힌 네이티브 모델을 건드리면 SIGSEGV 고,
+     * 그 프로세스는 GPU 를 열었으니 GPU 크래시로 잘못 판정된다.
+     *
+     * 기다림은 **별도 스레드**에서 한다. 이 메서드는 화면을 떠날 때 메인 스레드(`onCleared`)에서 불려, 판독 중이면
+     * 몇 초를 막아 ANR 이 날 수 있다.
+     */
     override fun close() {
-        session.close()
+        lanes.forEach { it.shutdown() }
+        Thread({
+            lanes.forEach { it.awaitTermination(CLOSE_TIMEOUT_S, TimeUnit.SECONDS) }
+            models.forEach { it.close() }
+        }, "imprint-close").apply { isDaemon = true }.start()
     }
+
+    /**
+     * 돌고 있는 판독이 끝난 뒤 닫는다(조각을 순서대로 도는 CPU 경로까지) — 잠금을 잡고 닫으므로 네이티브 실행 한가운데서 모델이 닫히지 않는다.
+     * 화면을 떠나 코루틴이 취소돼도 블로킹 실행은 멈추지 않는데, 그 중에 닫으면 SIGSEGV 고 GPU 크래시로 잘못 판정된다.
+     */
+    suspend fun closeWhenIdle() = lock.withLock { close() }
 
     /**
      * 판독 결과.
@@ -196,36 +252,66 @@ class ImprintReader(
     /**
      * 단계별 소요. **어디가 비싼지 알아야 줄일 곳을 정한다.**
      *
-     * 전처리가 지배적이면 TTA 장수를 줄이는 것이 답이고, 추론이 지배적이면 스레드나 배치를
-     * 손봐야 한다. 합계만 보면 둘을 구분할 수 없다.
+     * 전처리가 지배적이면 TTA 장수를 줄이는 것이 답이고, 추론이 지배적이면 실행 계획을 손봐야 한다.
+     * 합계만 보면 둘을 구분할 수 없다.
      *
-     * ⚠️ **세션 생성은 여기 없다.** 21MB 모델을 여는 비용은 한 번만 드는데 여기 섞으면
-     * 알약마다 그만큼 든다고 잘못 읽힌다. 그건 호출부가 따로 잰다.
+     * ⚠️ **모델 열기는 여기 없다.** 한 번만 드는 비용인데 여기 섞으면 알약마다 그만큼 든다고 잘못 읽힌다.
      */
     data class Timings(val preprocessMs: Long = 0, val inferenceMs: Long = 0, val decodeMs: Long = 0) {
         val totalMs: Long get() = preprocessMs + inferenceMs + decodeMs
     }
 
     companion object {
-        /**
-         * `rnn` 을 CPU 에 고정하는 노드 이름 조각 — 부분 문자열로 맞는다.
-         *
-         * WebGPU EP 전용 옵션 `forceCpuNodeNames` 로도 해 봤는데 **안 먹는다**(11715 ms).
-         * 그쪽은 정확한 노드 이름 목록을 받는 것으로 보인다.
-         */
-        internal const val RNN_ON_CPU = "/rnn/"
+        /** 조각 파일 — 이 순서로 흐른다. 목록과 해시는 `app/models.md5`. */
+        val PART_FILE_NAMES = listOf(
+            "p1_loc.tflite",
+            "p2_tps.tflite",
+            "p3_trunk.tflite",
+            "p4_frm.tflite",
+            "p5_lstm_head.tflite"
+        )
 
-        /** 검출기와 같은 값. 실측 근거는 `PillDetector.DEFAULT_THREADS`. */
-        const val DEFAULT_THREADS = 4
+        /** [PART_FILE_NAMES] 와 같은 순서의 ML 실행 정밀도 계약. 바꾸면 정확도 보장이 없다(클래스 KDoc 표). */
+        private val PLANS = listOf(
+            RunPlan(Placement.GPU, GpuPrecision.FP16),
+            RunPlan(Placement.CPU),
+            RunPlan(Placement.GPU, GpuPrecision.FP32),
+            RunPlan(Placement.GPU_CPU, GpuPrecision.FP16),
+            RunPlan(Placement.CPU)
+        )
 
-        /** CRNN + CTC, 5.97M 파라미터. 21MB. */
-        const val MODEL_FILE_NAME = "reader_ep60_s1.onnx"
+        /** 조각 모델의 묶음 크기 — 변환 때 박혔다. 144 의 약수여야 한다. */
+        private const val CHUNK = 24
 
-        private const val INPUT_NAME = "image"
+        /** 글자 37종(CTC 빈칸 포함). */
+        private const val CLASSES = 37
+
         private const val PLANE = ImprintPreprocess.SIDE * ImprintPreprocess.SIDE
-        private const val SIDE_L = ImprintPreprocess.SIDE.toLong()
         private const val NANOS_PER_MS = 1_000_000L
+
+        /** 한 면 판독이 CPU 로도 5초 안팎이다. 그보다 넉넉히 기다린다. */
+        private const val CLOSE_TIMEOUT_S = 15L
+
+        /** 하나라도 못 열면 이미 연 것을 닫고 던진다 — 반쯤 열린 채 새지 않게. */
+        private fun openAll(parts: List<File>): List<LiteRtModel> {
+            val opened = ArrayList<LiteRtModel>(parts.size)
+            var done = false
+            try {
+                parts.zip(PLANS).forEach { (file, plan) -> opened += LiteRtModel.open(file, plan) }
+                done = true
+            } finally {
+                if (!done) opened.forEach { it.close() }
+            }
+            return opened
+        }
     }
+}
+
+/** 조각 실패는 [ExecutionException] 으로 싸여 온다 — 원래 예외를 꺼내 던진다. */
+private fun <T> CompletableFuture<T>.awaitUnwrapped(): T = try {
+    get()
+} catch (e: ExecutionException) {
+    throw e.cause ?: e
 }
 
 /**

@@ -5,14 +5,17 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,7 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -31,90 +37,134 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2Color
+import app.nursemate.core.designsystem.v2.NmV2Type
 
 /**
- * 각인 입력 줄 — 정본 ⑦ 「키보드 위 화면 폭」.
+ * 각인 입력 줄 — 정본 ⑧ ~ ⑬ 「키보드 위 화면 폭」. 두 층이다 — 윗줄 `[입력 칸] [확인]`,
+ * 아랫줄 `[원래 값] [모름] [각인 없음]`. 그 아래 기호 바([PillSymbolBar])가 붙는다.
  *
- * ## 왜 면 카드 칸에서 바로 치지 않나
- * 면 카드의 각인 칸은 약 8자다. 각인은 `ALX3`·`CKD` 같은 짧은 것도 있지만 여섯 자를 넘는
- * 것도 있고, 기호 바로 △·▽ 같은 글자를 끼워 넣기도 한다. 좁은 칸에서 치면 앞이 밀려 사라진다.
+ * ## 왜 칸에서 바로 치지 않나
+ * 각인 칩은 한 줄이라 몇 글자면 말줄임이다. 기호 바로 △ · ▽ 를 끼워 넣기도 한다. 화면 폭 줄에서 치고,
+ * 칩에서는 결과만 본다.
  *
- * 그래서 칸을 누르면 **화면 폭 줄**이 키보드 위로 올라온다. 어느 면을 치는 중인지 왼쪽
- * 라벨이 말하고(「앞면 각인」), 다 치면 오른쪽 확인으로 닫는다.
+ * ## 라벨이 없다
+ * 입력 칸이 비었을 때 안내 글자(`앞면 각인` · `뒷면 각인`)가 면을 알리고, 치는 동안은 카드에서 그 면의
+ * 각인 칩을 강조한다(spec §각인 입력).
  *
- * ## 비우고 확인하면 **없음**이다
- * 조건을 푸는 것이 아니다 — 「각인이 없는 알약만」이라는 하드 조건이 된다. 조건을 풀려면
- * 면 카드 드롭다운의 「전체」를 고른다. 둘을 헷갈리게 만들면 사용자가 무심코 정답을 지운다
- * (NM-516).
+ * ## 비면 `확인` 을 누를 수 없다
+ * 각인 없는 알약은 `각인 없음`, 조건을 두지 않으려면 `모름` 을 누른다 — 둘 다 누르면 바로 줄을 닫는다.
+ * 빈 칸 확인을 「없음」으로 읽던 출시된 앱은 사용자가 무심코 하드 조건을 걸었다(NM-516).
  *
- * @param onConfirm 다 쳤다. 빈 문자열이면 「없음」으로 나간다
+ * @param original 사진에서 읽은 각인 — **고쳤을 때만** `원래 값` 을 보인다. 없으면 null
  */
+@Suppress("LongParameterList")
 @Composable
 internal fun PillImprintInputRow(
     side: FaceSide,
     text: TextFieldValue,
+    original: String?,
     onTextChange: (TextFieldValue) -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    onRevert: () -> Unit,
+    onUnknown: () -> Unit,
+    onNone: () -> Unit
 ) {
     val colors = NmTheme.semanticColors
     val focusRequester = remember { FocusRequester() }
-
     // 줄이 뜨는 이유가 「이제 친다」라서 키보드도 같이 올라와야 한다.
     LaunchedEffect(side) { focusRequester.requestFocus() }
+    val canConfirm = text.text.isNotBlank()
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = if (side == FaceSide.Front) "앞면 각인" else "뒷면 각인",
-            style = SideLabel,
-            color = colors.textTertiary
-        )
-        val shape = RoundedCornerShape(8.dp)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(36.dp)
-                .clip(shape)
-                .background(NmColor.Warning.C50)
-                // 정본은 이 칸을 **열린 상태**로만 그린다 — 테두리가 primary-500 이다.
-                .border(1.dp, NmColor.Primary.C500, shape)
-                .padding(horizontal = 10.dp),
-            contentAlignment = Alignment.CenterStart
+    Column(Modifier.fillMaxWidth().background(colors.surface)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(NmColor.Neutral.C200))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            BasicTextField(
-                value = text,
-                onValueChange = onTextChange,
-                textStyle = FieldValue.copy(color = colors.textPrimary),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Characters,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = { onConfirm() }),
-                cursorBrush = SolidColor(NmColor.Primary.C500),
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
-            )
+            val shape = RoundedCornerShape(8.dp)
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(shape)
+                    .background(NmColor.Primary.C50)
+                    .border(2.dp, NmColor.Primary.C500, shape)
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (text.text.isEmpty()) {
+                    Text(
+                        if (side == FaceSide.Front) "앞면 각인" else "뒷면 각인",
+                        style = FieldHint,
+                        color = colors.textTertiary
+                    )
+                }
+                BasicTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    textStyle = FieldValue.copy(color = colors.textPrimary),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { if (canConfirm) onConfirm() }),
+                    cursorBrush = SolidColor(NmColor.Primary.C500),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                )
+            }
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (canConfirm) NmColor.Primary.C500 else NmColor.Primary.C100)
+                    .clickable(enabled = canConfirm, role = Role.Button, onClick = onConfirm)
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+            ) {
+                Text("확인", style = ConfirmLabel, color = NmColor.Neutral.C0)
+            }
         }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(NmColor.Primary.C500)
-                .clickable(onClick = onConfirm)
-                .padding(horizontal = 12.dp, vertical = 7.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "확인", style = ConfirmLabel, color = NmColor.Neutral.C0)
+            if (original != null) RowButton("원래 값", onRevert, icon = NmSymbols.RestartAlt)
+            RowButton("모름", onUnknown)
+            RowButton("각인 없음", onNone)
         }
     }
 }
 
-// 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
-private val SideLabel = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-private val FieldValue = NmTypography.bodyLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-private val ConfirmLabel = NmTypography.body.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold)
+/** 아랫줄 버튼 — 볼록한 흰 판 · 모서리 8 · 글자 13/600. */
+@Composable
+private fun RowButton(label: String, onClick: () -> Unit, icon: Int? = null) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        Modifier
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(NmTheme.semanticColors.surface, NmV2Color.Raised.neutralBottom)))
+            .border(1.dp, NmColor.Neutral.C200, shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(
+                painterResource(icon),
+                null,
+                tint = NmTheme.semanticColors.textSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Text(label, style = NmV2Type.chipConfirmed, color = NmTheme.semanticColors.textPrimary)
+    }
+}
+
+/** 정본 16/800 — 각인은 굵게 읽혀야 한다. */
+private val FieldValue = NmV2Type.button.copy(fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+private val FieldHint = NmV2Type.button.copy(fontSize = 16.sp, fontWeight = FontWeight.Normal)
+private val ConfirmLabel = NmV2Type.smallButton

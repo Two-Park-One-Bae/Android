@@ -35,6 +35,23 @@ internal fun PillConditions.changesFrom(previous: PillConditions): List<String> 
 }
 
 /**
+ * 면 조건에서 **무엇이 바뀌었는지** — `imprint` · `dividing_line` · `mark` (`pill_attr_edit.attribute`).
+ * 앞뒤 어느 면이든 같은 이름이다. `모름` 으로 바꾼 것도 고친 것이다.
+ */
+internal fun FaceInputs.changesFrom(previous: FaceInputs): List<String> = buildList {
+    val sides = listOf(front to previous.front, back to previous.back)
+    if (sides.any { (a, b) ->
+            a.imprint != b.imprint || a.imprintSource != b.imprintSource ||
+                a.imprintUnknown != b.imprintUnknown
+        }
+    ) {
+        add("imprint")
+    }
+    if (sides.any { (a, b) -> a.dividingLine != b.dividingLine || a.lineUnknown != b.lineUnknown }) add("dividing_line")
+    if (sides.any { (a, b) -> a.hasMark != b.hasMark || a.markUnknown != b.markUnknown }) add("mark")
+}
+
+/**
  * 이탈 시점까지 **채워진** 속성 요약 (`pill_flow_exit.entered_values`).
  *
  * 빈 문자열 대신 `"none"` 을 보낸다 — GA4 에서 빈 값은 `(not set)` 이라

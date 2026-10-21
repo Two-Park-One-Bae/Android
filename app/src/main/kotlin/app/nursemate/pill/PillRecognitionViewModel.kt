@@ -7,20 +7,25 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nursemate.core.data.pill.DailyLimitReached
+import app.nursemate.core.data.pill.PillHistoryRepository
+import app.nursemate.core.data.pill.PillLabelSender
 import app.nursemate.core.data.pill.PillRepository
 import app.nursemate.core.data.pill.UsageHolder
 import app.nursemate.core.model.PillAttribute
 import app.nursemate.core.model.PillCandidate
 import app.nursemate.core.model.PillConditions
+import app.nursemate.core.network.api.PillCandidatesRequest
 import app.nursemate.core.vision.DetectionResult
 import app.nursemate.core.vision.ImageLoader
-import app.nursemate.core.vision.PillDetector
 import app.nursemate.telemetry.AppAnalytics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -42,10 +47,12 @@ import kotlinx.coroutines.withContext
  * 하던 일이 남아 있어야 한다.
  *
  * 대신 **플로우를 끝내거나 버릴 때 부르는 쪽이 [discardPhoto] 로 직접 비운다**
- * (`PillNavHelpers.exitToHome`). 예전에는 이 주석대로 「탭을 벗어나면 정리된다」고 보고
+ * (`PillNavHelpers.exitPillFlow`). 예전에는 이 주석대로 「탭을 벗어나면 정리된다」고 보고
  * 완료 버튼이 탭만 바꿨는데, 그 바람에 알약 탭을 다시 눌러도 카메라가 아니라 지난 결과
  * 화면이 복원됐다.
  */
+// 의존이 일곱이다 — 기록 저장(NM-552)까지 이 플로우의 상태를 함께 쓰므로 나누면 상태가 둘로 갈린다.
+@Suppress("LongParameterList")
 @HiltViewModel
 class PillRecognitionViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -53,6 +60,8 @@ class PillRecognitionViewModel @Inject constructor(
     private val attributeCache: PillAttributeCache,
     private val pillRepository: PillRepository,
     private val usageHolder: UsageHolder,
+    private val historyRepository: PillHistoryRepository,
+    private val labelSender: PillLabelSender,
     appAnalytics: AppAnalytics
 ) : ViewModel() {
 
@@ -70,14 +79,11 @@ class PillRecognitionViewModel @Inject constructor(
     /** 앱 전체가 공유하는 값. 미리보기의 "오늘 남은 횟수"가 이걸 본다. */
     val usage = usageHolder.usage
 
-    /** ONNX 세션은 로드에 수백 ms가 걸린다. 한 번 만들고 플로우 내내 재사용한다. */
-    private var detector: PillDetector? = null
+    /** 검출 · 각인 · 마크 모델 — 촬영 화면에서 검출기를 미리 열고, 검출 뒤 각인 · 마크로 번갈아 연다([models]). */
+    private val ondevice = PillOnDeviceModels(modelFile)
 
-    /**
-     * 각인·마크 세션도 같은 수명을 갖는다. Hilt 로 주입하지 않고 여기서 만든다 —
-     * 의존이 [modelFile] 하나뿐이고, 주입하면 생성자만 길어진다.
-     */
-    private val faceReader = PillFaceReader(modelFile)
+    /** 지금 도는 각인 · 마크 판독 — 재촬영하면 멈춘다. */
+    private var facesJob: Job? = null
 
     /**
      * 촬영·선택한 사진을 읽는다.
@@ -91,7 +97,8 @@ class PillRecognitionViewModel @Inject constructor(
             runCatching {
                 withContext(Dispatchers.IO) { ImageLoader.load(context, uri) }
             }.onSuccess { bitmap ->
-                _state.update { it.copy(photo = bitmap, isLoadingPhoto = false) }
+                // 사진마다 학습 라벨 키를 만든다(NM-571) — 업로드와 속성 추출에 같은 값이 간다.
+                _state.update { it.copy(photo = bitmap, isLoadingPhoto = false, imageId = UuidV7.next()) }
             }.onFailure { throwable ->
                 _state.update {
                     it.copy(
@@ -108,6 +115,8 @@ class PillRecognitionViewModel @Inject constructor(
     fun discardPhoto() {
         // 새 사진은 새 세션이다. 안 비우면 앞 사진의 수정 횟수·체류시간이 그대로 얹힌다.
         analyticsSession.reset()
+        // 앞 사진의 각인 · 마크 판독을 멈춘다 — 안 멈추면 새 사진의 검출기와 번갈아 서로를 닫았다 연다(NM-636).
+        facesJob?.cancel()
         // 비트맵을 recycle()하지 않는다. 화면 전환 애니메이션이 아직 그리고 있을 수 있어
         // 그 순간 recycle하면 "Canvas: trying to use a recycled bitmap"으로 죽는다. GC에 맡긴다.
         _state.update { PillUiState() }
@@ -138,9 +147,10 @@ class PillRecognitionViewModel @Inject constructor(
 
     private fun startDetectionUnchecked(bitmap: Bitmap) {
         analyticsSession.analysisStarted()
-        _state.update { it.copy(detection = DetectionPhase.Running) }
+        // 기록 키는 식별을 시작할 때 정한다 — 저장을 다시 시도해도 같은 키라 기록이 늘지 않는다(spec §식별 기록 — 저장).
+        _state.update { it.copy(detection = DetectionPhase.Running, historyId = UUID.randomUUID().toString()) }
         viewModelScope.launch {
-            runCatching { loadDetector().detect(bitmap) }
+            runCatching { ondevice.detect(bitmap) }
                 .onSuccess { result ->
                     Log.i(
                         TAG,
@@ -215,28 +225,21 @@ class PillRecognitionViewModel @Inject constructor(
         //
         // 가공본을 보내므로 「JPEG 일 때만」 가드도 사라졌다 — 갤러리에서 고른 HEIC·PNG 도
         // 여기서 JPEG 로 다시 압축되어 나가므로 presigned 서명의 image/jpeg 와 어긋나지 않는다.
-        _state.value.photo?.let { processed ->
-            viewModelScope.launch {
-                runCatching { withContext(Dispatchers.IO) { processed.toJpegBytes() } }
-                    .getOrNull()?.let { bytes -> pillRepository.uploadOriginal(bytes) }
-            }
-        }
+        viewModelScope.uploadTrainingImage(_state, pillRepository)
+        val imageId = _state.value.imageId
 
         val pillIds = result.pills.indices.map(::pillId)
 
-        // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 Gemini 를
-        // 부르면 5~8초씩 기다리고 하루 15회 한도가 오후에 바닥난다. 릴리스에서는 늘 null 이다.
+        // 디버그 빌드에서 직전 결과가 남아 있으면 그걸 쓴다 — 화면을 고칠 때마다 속성 추출을 부르면
+        // 회원별 일 15회 한도가 금방 바닥난다. ⚠️ 다른 사진의 값이다(정확도를 보면 안 된다). 릴리스에서는 늘 null 이다.
         attributeCache.load(pillIds)?.let { cached ->
             analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = cached.size)
             _state.update { it.copy(attributes = AttributePhase.Done(cached.associateBy(PillAttribute::pillId))) }
             return
         }
 
-        val crops = result.pills.mapIndexed { index, pill ->
-            pillId(index) to pill.crop.toPngBytes()
-        }.toMap()
-
-        pillRepository.attributes(crops)
+        // 학습 라벨(NM-571) — 찾은 알약 **전부**의 원본 자리 · 점수와 사진 정보를 함께 싣는다([attributeCrops]).
+        pillRepository.attributes(result.attributeCrops(), result.attributeImage(imageId))
             .onSuccess { extracted ->
                 usageHolder.update(extracted.usage)
                 analyticsSession.analysisFinished(outcome = OUTCOME_SUCCESS, pillCount = extracted.items.size)
@@ -296,8 +299,8 @@ class PillRecognitionViewModel @Inject constructor(
      * 찍힌 면의 각인·마크를 읽어 [PillUiState.faceReadings] 에 쌓는다 — NM-485 · NM-515.
      *
      * ## 결과 화면을 막지 않는다
-     * 알약 하나에 2초다(각인 144장 1796 ms + 마크 8장 178 ms, S24 · WebGPU). 셋이면 6초인데,
-     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 두 배 넘게 는다.**
+     * 알약 하나에 약 0.9초다(각인 144장 680 ms + 마크 8장 157 ms, S24 · LiteRT GPU — NM-628). 셋이면 2.6초이고
+     * 서버 속성 추출은 860 ms 다 — 기다리게 하면 **사람이 보는 대기가 그만큼 는다.**
      * 그래서 별도 코루틴으로 띄우고 한 장씩 들어오는 대로 상태에 넣는다.
      *
      * ## 하나씩 넣는다
@@ -313,12 +316,18 @@ class PillRecognitionViewModel @Inject constructor(
      * 「전체」로 남아 후보를 자르지 않는다.
      */
     private fun readFaces(result: DetectionResult) {
-        viewModelScope.launch {
-            result.pills.forEachIndexed { index, pill ->
-                val id = pillId(index)
-                runCatching { faceReader.read(pill.crop) }
-                    .onSuccess { reading -> applyReading(id, reading) }
-                    .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+        facesJob?.cancel()
+        facesJob = viewModelScope.launch {
+            // 탭을 옮겨도 남은 알약까지 다 읽고 내려놓는다(NM-636).
+            ondevice.inUse {
+                result.pills.forEachIndexed { index, pill ->
+                    // runCatching 이 취소까지 삼키므로 알약마다 확인한다 — 재촬영 뒤에도 돌면 새 사진의 검출기를 닫는다.
+                    ensureActive()
+                    val id = pillId(index)
+                    runCatching { ondevice.faceReader.read(pill.crop) }
+                        .onSuccess { reading -> applyReading(id, reading) }
+                        .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+                }
             }
         }
     }
@@ -339,15 +348,22 @@ class PillRecognitionViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadDetector(): PillDetector = detector ?: withContext(Dispatchers.IO) {
-        PillDetector(modelFile.prepare()).also { detector = it }
-    }
+    /** 미리보기의 한도 안내(spec §세션 중 소진 방어 · 정본 ②-a). */
+    val limit = PillLimitGate(_state, usageHolder)
 
-    override fun onCleared() {
-        detector?.close()
-        detector = null
-        faceReader.close()
-    }
+    /** 학습 라벨 — 「선택」한 품목 · 「완료」 때 지운 번호(NM-571). */
+    val labels = PillLabels(_state, labelSender, viewModelScope)
+
+    /** 식별 기록 저장 — 식별 결과의 `완료`(spec §완료 · 공유). 누를 때마다 지운 번호도 보낸다(라벨). */
+    val history = PillHistorySaving(_state, historyRepository, viewModelScope, onSave = labels::completed)
+
+    /**
+     * 검출 · 각인 · 마크 모델 묶음 — 배선이 촬영 화면에 들어오면 [PillOnDeviceModels.prewarm] 으로 **미리 열고**(구도를 잡는 몇 초
+     * 동안 GPU 준비를 끝낸다), 플로우 화면마다 [PillOnDeviceModels.hold] 해 마지막 화면이 사라지면 **내려놓는다**(NM-636).
+     */
+    internal val models: PillOnDeviceModels get() = ondevice
+
+    override fun onCleared() = ondevice.close()
 
     private companion object {
         const val TAG = "NM394"
@@ -398,8 +414,44 @@ data class PillUiState(
      *
      * 아직 안 읽은 알약은 항목이 없다. 검출 직후에는 비어 있고 2초쯤 뒤부터 찬다.
      */
-    val faceReadings: Map<String, FaceReading> = emptyMap()
+    val faceReadings: Map<String, FaceReading> = emptyMap(),
+    /** 후보를 고른 순간 그 알약의 속성 칸이 모두 모델값이었는가 — 스토어 리뷰 묶음 1([confirmedUntouched]). */
+    val pickedUntouched: Map<String, Boolean> = emptyMap(),
+    /** 식별 기록 키(UUID). 식별을 시작할 때 정한다 — 그 전에는 없다. */
+    val historyId: String? = null,
+    /**
+     * 학습 라벨의 사진 id(UUID v7, NM-571) — 사진을 고르면 만든다. 업로드 · 속성 추출 · 라벨에 같은 값이 간다.
+     * 식별 기록([historyId])과 섞지 않는다 — 라벨은 회원과 잇지 않는다.
+     */
+    val imageId: String? = null,
+    /** 알약별로 화면 목록을 낸 마지막 후보 조회 요청 — 라벨의 `userInput`([PillLabels]). */
+    val labelQueries: Map<String, PillCandidatesRequest> = emptyMap(),
+    /**
+     * 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다 — 그래서 뒤로만 간다.
+     *
+     * **상태에 둔다** — 사진을 바꾸면 상태와 함께 0 으로 돌아간다. 키 번호가 학습 라벨 번호(`m1` → 100 … 199)라 사진마다
+     * 다시 세야 하는데, 이 뷰모델은 알약 탭 그래프에 남아 여러 사진을 지나 누적되면 100번째부터 라벨이 빠졌다(NM-571 리뷰).
+     */
+    val manualSequence: Int = 0,
+    /** 학습용 원본을 이 사진(imageId)으로 이미 올렸다 — 다시 시도에도 한 번만 올린다. */
+    val trainingUploaded: Boolean = false,
+    /** 식별 기록 저장 단계 — 식별 결과의 `완료` 가 연다. */
+    val save: HistorySave = HistorySave.Idle
 )
+
+/** 식별 기록 저장 단계(spec §완료 · 공유 · NM-552). */
+sealed interface HistorySave {
+    data object Idle : HistorySave
+
+    /** 응답을 기다리는 중 — `완료` 는 `저장 중…`, `공유` 는 꺼진다. */
+    data object Saving : HistorySave
+
+    /** 남겼다 — 들어온 화면으로 돌아간다. */
+    data object Saved : HistorySave
+
+    /** 못 남겼다. [retryable] 이 false 면(400) `다시 시도` 를 두지 않는다. */
+    data class Failed(val retryable: Boolean) : HistorySave
+}
 
 /**
  * 서버 속성 추출 단계.
@@ -440,7 +492,7 @@ sealed interface DetectionPhase {
  * ⚠️ **JPEG 로 바꾸지 말 것.** 크롭은 마스크를 알파에 담고 있어서, 알파를 버리면
  * 배경이 검게 살아나고 서버가 그 배경까지 알약으로 읽는다.
  */
-private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+internal fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out ->
     compress(Bitmap.CompressFormat.PNG, 100, out)
     out.toByteArray()
 }
@@ -452,7 +504,7 @@ private fun Bitmap.toPngBytes(): ByteArray = ByteArrayOutputStream().use { out -
  * 쌓아야 학습 데이터가 한 벌이 된다. 크롭은 PNG 로 보낸다([toPngBytes]): 그쪽은 서버가
  * 속성을 뽑는 입력이라 손실 압축을 끼워 넣지 않는다.
  */
-private fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
+internal fun Bitmap.toJpegBytes(): ByteArray = ByteArrayOutputStream().use { out ->
     compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, out)
     out.toByteArray()
 }
@@ -465,13 +517,16 @@ private const val UPLOAD_JPEG_QUALITY = 90
  *
  * 서버 요청에 실어 보낸 값이라 **삭제로 번호가 바뀌어도 이 키는 그대로다** —
  * 화면의 표시 번호와 헷갈리지 않게 둘을 나눠 둔다.
+ *
+ * ⚠️ **0부터다.** 학습 라벨 계약(NM-571)이 속성 추출의 `pillId` 를 0~99 정수로 읽어 라벨 번호(`pillIndex`)로 쓴다. 예전에는
+ * 1부터라 검출 100개째가 `"100"` 이 되어 범위를 벗어났다.
  */
-internal fun pillId(index: Int): String = (index + 1).toString()
+internal fun pillId(index: Int): String = index.toString()
 
 /**
- * 수동 추가 알약의 키.
+ * 수동 추가 알약의 키. 라벨 번호는 `m1` → 100 이다([labelIndexOf]).
  *
- * 검출 키가 "1"·"2"… 라 숫자만으로는 겹친다. 접두사로 갈라 두면 키만 보고도 사진에
+ * 검출 키가 "0"·"1"… 라 숫자만으로는 겹친다. 접두사로 갈라 두면 키만 보고도 사진에
  * 대응 영역이 있는 알약인지 알 수 있다.
  */
 internal fun manualPillId(index: Int): String = "m${index + 1}"
@@ -510,7 +565,31 @@ fun PillUiState.pillIds(): List<String> {
     return detected.indices.map(::pillId).filterNot { it in removedPillIds } + manualPillIds
 }
 
-/** 확정한 후보만, 보이는 순서대로. 최종 결과(⑨)가 읽는다. */
+/**
+ * 확정한 알약을 모두 **사용자 수정 없이** 골랐는가 — 스토어 리뷰 묶음 1(NM-561, spec §스토어 리뷰 요청).
+ * 고른 순간의 판정([PillUiState.pickedUntouched])을 본다.
+ */
+fun PillUiState.confirmedUntouched(): Boolean =
+    pillIds().filter { it in selections }.all { pickedUntouched[it] == true }
+
+/**
+ * 이 알약의 속성 칸이 지금 모두 모델값인가 — 손대지 않았거나 되돌렸으면 그렇다. 고쳤다가 같은 값으로 다시 맞춘 것도
+ * 모델값이므로 값으로 비교한다. 수동 추가 알약은 사용자가 모든 칸을 입력하므로 수정한 것으로 본다.
+ */
+internal fun PillUiState.isUntouched(pillId: String): Boolean {
+    val touched = edits[pillId]
+    return when {
+        pillId.isManualPill -> false
+
+        touched == null -> true
+
+        else -> copy(edits = edits - pillId).editOf(pillId).let { model ->
+            touched.conditions == model.conditions && touched.faces == model.faces
+        }
+    }
+}
+
+/** 확정한 후보만, 보이는 순서대로. 기록 저장 · 공유가 읽는다. */
 fun PillUiState.finalPills(): List<PillCandidate> = pillIds().mapNotNull { selections[it] }
 
 private fun PillUiState.extracted(pillId: String): PillAttribute? =
@@ -531,7 +610,14 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
 
     /** 후보를 확정한다. 취소하면 부르지 않으므로 여기 오면 사용자가 확인을 누른 것이다. */
     fun selectCandidate(pillId: String, candidate: PillCandidate) {
-        state.update { it.copy(selections = it.selections + (pillId to candidate)) }
+        state.update {
+            it.copy(
+                selections = it.selections + (pillId to candidate),
+                // 스토어 리뷰 묶음 1 은 「후보를 고를 때」 속성 칸이 모두 모델값이었는가다 — 고른 순간에 적는다.
+                // 완료할 때 다시 보면, 고른 뒤 수정 화면에서 값을 바꾸고 탭으로 빠져나간 경우 판정이 뒤집힌다.
+                pickedUntouched = it.pickedUntouched + (pillId to it.isUntouched(pillId))
+            )
+        }
     }
 
     /**
@@ -563,9 +649,55 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
         }
     }
 
-    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다. */
-    fun nextManualPillId(): String = manualPillId(manualSequence++)
+    /**
+     * 수정 화면을 연 동안의 **되돌릴 값**과 **고른 후보**. 화면이 아니라 여기 둔다 — 수정 화면에서 탭 바로 다른 탭에
+     * 다녀오면 화면 상태는 사라지지만 하던 수정은 남아야 한다. 확인 · 취소에서 [endEdit] 로 비운다.
+     */
+    private val originals = mutableMapOf<String, PillEdit?>()
+    private val pendings = mutableMapOf<String, PillCandidate>()
 
-    /** 수동 추가 키 카운터. 목록에서 지운 키를 다시 쓰면 옛 수정값이 딸려 온다. */
-    private var manualSequence = 0
+    /**
+     * 수정을 시작할 때 이 알약에 **사용자가 고친 값이 있었는가** — 처음 부를 때 붙잡고 이후에는 그 값을 돌려준다.
+     *
+     * 손대기 전이었으면 null 이다. 그때 화면에 보이던 값을 붙잡으면 안 된다 — 온디바이스 각인 · 마크 판독은
+     * 수정 화면에 들어온 **뒤에** 도착할 수 있어서, 붙잡은 값으로 되돌리면 판독값이 빠진다.
+     */
+    fun originalOf(pillId: String): PillEdit? {
+        if (pillId !in originals) originals[pillId] = state.value.edits[pillId]
+        return originals[pillId]
+    }
+
+    /** 취소 — 수정을 시작할 때로 되돌린다. 손대기 전이었으면 고친 값을 지워 모델값 · 판독값에서 다시 만든다. */
+    fun revert(pillId: String) {
+        val original = originalOf(pillId)
+        state.update {
+            if (original ==
+                null
+            ) {
+                it.copy(edits = it.edits - pillId)
+            } else {
+                it.copy(edits = it.edits + (pillId to original))
+            }
+        }
+    }
+
+    /** 아직 `선택` 을 누르지 않고 고른 후보. */
+    fun pendingOf(pillId: String): PillCandidate? = pendings[pillId]
+
+    fun choose(pillId: String, candidate: PillCandidate) {
+        pendings[pillId] = candidate
+    }
+
+    /** 확인 · 취소 — 붙잡아 둔 값을 놓는다. */
+    fun endEdit(pillId: String) {
+        originals.remove(pillId)
+        pendings.remove(pillId)
+    }
+
+    /** 다음 수동 추가 알약이 쓸 키. 지웠다 다시 추가해도 겹치지 않게 항상 뒤로만 간다([PillUiState.manualSequence]). */
+    fun nextManualPillId(): String {
+        val next = state.value.manualSequence
+        state.update { it.copy(manualSequence = it.manualSequence + 1) }
+        return manualPillId(next)
+    }
 }

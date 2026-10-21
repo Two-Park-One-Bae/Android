@@ -7,19 +7,20 @@ import app.nursemate.core.model.PillFaceRequest
 /**
  * 한 면의 조건 — 화면 전용 모델.
  *
- * ## 세 칸이 모두 **3단**이다 (NM-516)
- * 각인·구분선·마크가 각각 「전체 · 없음 · 값」을 갖는다. 정본이 세 칸을 같은 드롭다운으로
- * 그리는 이유이기도 하다.
+ * ## 세 칸이 모두 **네 상태**다 (V2.1.0 — NM-588)
+ * 각인·구분선·마크가 각각 「손대지 않음 · 모름 · 없음 · 값」을 갖는다.
  *
- * | | 전체 | 없음 | 값 |
- * |---|---|---|---|
- * | [imprint] | `null` | `""` | `"ALX3"` |
- * | [dividingLine] | `null` | [DividingLine.NONE] | `PLUS`·`MINUS` |
- * | [hasMark] | `null` | `false` | `true` |
+ * | | 손대지 않음 | 모름 | 없음 | 값 |
+ * |---|---|---|---|---|
+ * | [imprint] | `null` | `null` + [imprintUnknown] | `""` | `"ALX3"` |
+ * | [dividingLine] | `null` | `null` + [lineUnknown] | [DividingLine.NONE] | `PLUS`·`MINUS` |
+ * | [hasMark] | `null` | `null` + [markUnknown] | `false` | `true` |
  *
- * **전체와 없음은 정반대다.** 전체는 「이 항으로 자르지 마라」이고, 없음은 「이게 없는 알약만」
- * 이라는 하드 조건이다. 계약의 `PillFaceRequest` 가 그렇게 읽는다. 각인 칸을 비우고 확인하는
- * 것은 **없음**이고, 조건을 푸는 것은 드롭다운의 **전체**다 — 헷갈리게 만들면 사용자가
+ * **손대지 않음과 모름은 검색에서 같다** — 둘 다 조건이 없다. 화면만 다르다: 손대지 않음은 회색 안내
+ * 글자(`입력` · `선택`)이고, 모름은 사용자가 고른 말(`모름`)이다. 앱이 스스로 모름을 채우지는 않는다.
+ *
+ * **모름과 없음은 정반대다.** 모름은 「이 항으로 자르지 마라」이고, 없음은 「이게 없는 알약만」
+ * 이라는 하드 조건이다. 계약의 `PillFaceRequest` 가 그렇게 읽는다 — 헷갈리게 만들면 사용자가
  * 무심코 정답을 지운다.
  *
  * ## 모델이 「없음」을 말하지 않는다
@@ -38,7 +39,10 @@ data class FaceInput(
     val dividingLine: DividingLine? = null,
     val hasMark: Boolean? = null,
     val markEmbedding: String? = null,
-    val species: Int = 0
+    val species: Int = 0,
+    val imprintUnknown: Boolean = false,
+    val lineUnknown: Boolean = false,
+    val markUnknown: Boolean = false
 ) {
     /** 후보를 **자르는** 조건이 하나라도 있는가. 임베딩은 정렬 재료라 세지 않는다. */
     val hasCondition: Boolean
@@ -52,8 +56,18 @@ data class FaceInput(
      */
     fun typed(text: String?): FaceInput = copy(
         imprint = text,
-        imprintSource = text?.let { ImprintSource.USER }
+        imprintSource = text?.let { ImprintSource.USER },
+        imprintUnknown = false
     )
+
+    /** 각인을 `모름` 으로 — 조건을 두지 않는다. */
+    fun imprintUnknown(): FaceInput = copy(imprint = null, imprintSource = null, imprintUnknown = true)
+
+    /** 구분선을 고른다. null 이면 `모름`. */
+    fun line(value: DividingLine?): FaceInput = copy(dividingLine = value, lineUnknown = value == null)
+
+    /** 마크 유무를 고른다. null 이면 `모름`. */
+    fun mark(value: Boolean?): FaceInput = copy(hasMark = value, markUnknown = value == null)
 
     /**
      * 후보 검색의 면 조건.
@@ -76,7 +90,8 @@ data class FaceInputs(val front: FaceInput = FaceInput(), val back: FaceInput = 
 /**
  * 온디바이스가 읽은 값을 조건 칸의 **초기값**으로 옮긴다.
  *
- * 뒷면은 사진이 없어 읽을 것이 없다 — 「전체」로 남는다.
+ * 뒷면은 사진이 없어 읽을 것이 없다 — 세 칸 모두 손대지 않음(회색 `입력` · `선택`)으로 남는다. `모름` 이 아니다 —
+ * 앱이 스스로 `모름` 을 채우지 않는다.
  */
 fun FaceReading.toInputs(): FaceInputs = FaceInputs(
     front = FaceInput(

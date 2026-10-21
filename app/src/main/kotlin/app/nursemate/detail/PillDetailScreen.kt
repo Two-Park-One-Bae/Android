@@ -18,30 +18,31 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
-import app.nursemate.core.designsystem.NmButtonPrimary
-import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2Color
+import app.nursemate.core.designsystem.v2.NmV2NavBar
 import app.nursemate.core.model.DocType
 import app.nursemate.core.model.PillDetail
+import app.nursemate.pill.PillStateAction
+import app.nursemate.pill.PillStateIcon
+import app.nursemate.pill.PillStateLayout
 import app.nursemate.ui.SystemBarIcons
 
 /**
@@ -57,55 +58,64 @@ import app.nursemate.ui.SystemBarIcons
  */
 @Composable
 fun PillDetailScreen(state: DetailUiState, onBack: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = NmTheme.semanticColors
-    SystemBarIcons(darkIcons = true)
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        NmNavBar(title = "세부정보", onBack = onBack)
-
-        when (state) {
-            DetailUiState.Loading -> DetailLoading()
-
-            is DetailUiState.Ready -> DetailBody(state.detail)
-
-            DetailUiState.Empty -> DetailMessage(
-                icon = R.drawable.nm_ic_file_search,
-                iconTint = NmColor.Neutral.C400,
-                circle = NmColor.Neutral.C100,
-                title = "등록된 세부정보가 없어요",
-                description = "이 약은 허가정보가 아직 준비되지 않았어요\n후보 선택과 식별 결과에는 영향이 없어요",
-                onBack = onBack,
-                onRetry = null
-            )
-
-            DetailUiState.Failed -> DetailMessage(
-                icon = R.drawable.nm_ic_circle_alert,
-                iconTint = NmColor.Error.C500,
-                circle = NmColor.Error.C50,
-                title = "세부정보를 불러오지 못했어요",
-                description = "네트워크 연결을 확인하고\n다시 시도해 주세요",
-                onBack = onBack,
-                onRetry = onRetry
-            )
-
-            DetailUiState.Revoked -> DetailMessage(
-                icon = R.drawable.nm_ic_file_x,
-                iconTint = NmColor.Warning.C600,
-                circle = NmColor.Warning.C50,
-                title = "허가가 종료된 약이에요",
-                description = "허가가 취소되거나 취하된 품목이라\n세부정보가 제공되지 않아요\n" +
-                    "후보 선택과 식별 결과에는 영향이 없어요",
-                onBack = onBack,
-                onRetry = null
-            )
+    when (state) {
+        DetailUiState.Loading, is DetailUiState.Ready -> {
+            SystemBarIcons(darkIcons = true)
+            Column(
+                modifier
+                    .fillMaxSize()
+                    .background(NmTheme.semanticColors.surface)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+            ) {
+                NmV2NavBar(title = "세부정보", onBack = onBack)
+                if (state is DetailUiState.Ready) DetailBody(state.detail) else DetailLoading()
+            }
         }
+
+        // 없는 것은 다시 눌러도 없다 — 재시도는 오류일 때만이다.
+        DetailUiState.Empty -> DetailState(
+            title = "등록된 세부정보가 없어요",
+            description = "이 약은 허가정보가 아직 준비되지 않았어요\n후보 선택과 식별 결과에는 영향이 없어요",
+            onBack = onBack,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.FindInPage, NmColor.Neutral.C100, NmColor.Neutral.C400) }
+
+        DetailUiState.Failed -> DetailState(
+            title = "세부정보를 불러오지 못했어요",
+            description = "네트워크 연결을 확인하고\n다시 시도해 주세요",
+            onBack = onBack,
+            retry = onRetry,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.Error, NmColor.Error.C50, NmColor.Error.C500) }
+
+        DetailUiState.Revoked -> DetailState(
+            title = "허가가 종료된 약이에요",
+            description = "허가가 취소되거나 취하된 품목이라\n세부정보가 제공되지 않아요\n후보 선택과 식별 결과에는 영향이 없어요",
+            onBack = onBack,
+            modifier = modifier
+        ) { PillStateIcon(NmSymbols.ScanDelete, NmV2Color.Caution.C50, NmV2Color.Caution.C600) }
     }
 }
+
+/** 데이터 없음 · 오류 · 허가 종료 — 촬영 쪽과 같은 상태 틀에 `세부정보` 제목 · `뒤로`(보조)를 깐다. */
+@Composable
+private fun DetailState(
+    title: String,
+    description: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    retry: (() -> Unit)? = null,
+    visual: @Composable () -> Unit
+) = PillStateLayout(
+    navTitle = "세부정보",
+    onBack = onBack,
+    title = title,
+    description = description,
+    primary = retry?.let { PillStateAction("다시 시도", it) },
+    secondary = PillStateAction("뒤로", onBack),
+    modifier = modifier,
+    visual = visual
+)
 
 @Composable
 private fun DetailLoading() {
@@ -135,64 +145,12 @@ private fun DetailLoading() {
     }
 }
 
-/** 없음·오류·허가 종료가 같은 틀을 쓴다 — 아이콘·색·문구·버튼만 다르다. */
-@Composable
-private fun DetailMessage(
-    icon: Int,
-    iconTint: Color,
-    circle: Color,
-    title: String,
-    description: String,
-    onBack: () -> Unit,
-    onRetry: (() -> Unit)?
-) {
-    val colors = NmTheme.semanticColors
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier.size(96.dp).background(circle, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(icon),
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(42.dp)
-                )
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(text = title, style = NoticeTitle, color = colors.textPrimary)
-                Text(
-                    text = description,
-                    style = NoticeDesc,
-                    color = colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // 없는 것은 다시 눌러도 없다 — 오류일 때만 재시도를 준다.
-            onRetry?.let { NmButtonPrimary(text = "다시 시도", onClick = it, modifier = Modifier.fillMaxWidth()) }
-            NmButtonSecondary(text = "뒤로", onClick = onBack, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
 @Composable
 private fun DetailBody(detail: PillDetail) {
     var tab by rememberSaveable { mutableStateOf(DocType.EFFECT) }
+    // 주의사항에서 펼친 항목 — 탭을 오가도 남게 여기 둔다. 처음엔 모두 접는다(spec §세부정보 「기본 접힘」;
+    // 정본 ⑩-d 는 펼친 모양을 보이려고 첫 항목을 열어 그렸다).
+    var openCaution by rememberSaveable { mutableIntStateOf(NONE_OPEN) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         DetailSummary(detail)
@@ -207,7 +165,7 @@ private fun DetailBody(detail: PillDetail) {
                 blocks.isEmpty() -> EmptyDoc()
 
                 // 주의사항만 접어서 보여준다 — 원문이 길어 한 번에 펼치면 찾기 어렵다.
-                tab == DocType.CAUTION -> CautionSections(blocks)
+                tab == DocType.CAUTION -> CautionSections(blocks, openCaution) { openCaution = it }
 
                 else -> blocks.forEach { DocBlock(it) }
             }
@@ -270,14 +228,13 @@ private fun DocTab(label: String, selected: Boolean, onClick: () -> Unit, modifi
 }
 
 private val Tabs = listOf(
-    DocType.EFFECT to "효능효과",
-    DocType.DOSAGE to "용법용량",
+    // 가운뎃점으로 띄어 읽기 쉽게(spec §세부정보 — V2.1.0). 출시된 앱은 `효능효과` · `용법용량` 이었다.
+    DocType.EFFECT to "효능·효과",
+    DocType.DOSAGE to "용법·용량",
     DocType.CAUTION to "사용상 주의사항"
 )
 
 private val MessageTitle = NmTypography.bodyLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold)
 private val MessageHint = NmTypography.body.copy(fontSize = 13.sp)
-private val NoticeTitle = NmTypography.heading2.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold)
-private val NoticeDesc = NmTypography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 22.5.sp)
 private val TabLabel = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
 private val TabLabelOn = TabLabel.copy(fontWeight = FontWeight.Bold)

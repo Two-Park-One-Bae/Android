@@ -177,7 +177,7 @@ class TimerRepository @Inject constructor(
             if (target == null) current else current.filterNot { it.id == timerId }
         }
         if (target?.state == TimerState.RINGING) scheduler.dismiss(timerId) else scheduler.cancel(timerId)
-        target?.let(::reportEnded)
+        target?.let { reportEnded(it, TimerAnalytics.SOURCE_PHONE) }
     }
 
     /**
@@ -186,14 +186,15 @@ class TimerRepository @Inject constructor(
      * 완료와 취소를 가르는 기준은 **울렸는가** 하나다 — 알람이 울린 뒤 누른 [완료] 가 완료고,
      * 그 전에 끈 것이 취소다. 예약을 `dismiss` 로 걷을지 `cancel` 로 걷을지 정하는 기준과 같다.
      */
-    private fun reportEnded(timer: CareTimer) {
+    private suspend fun reportEnded(timer: CareTimer, source: String) {
         val completed = timer.state == TimerState.RINGING
         val remaining = if (completed) 0 else timer.remainingAt(clock.now())
         analytics.ended(
             timer = timer,
             completed = completed,
             elapsedSec = timer.durationSeconds - remaining,
-            remainingSec = remaining
+            remainingSec = remaining,
+            source = source
         )
     }
 
@@ -218,12 +219,12 @@ class TimerRepository @Inject constructor(
      * ⚠️ **사라진 타이머가 울리던 중이었으면 `dismiss` 다.** 상대가 끊긴 동안 [완료] 를
      * 누른 경우가 여기로 오는데, `cancel` 만 하면 **이미 떠 있는 알림이 안 지워진다.**
      */
-    private fun reschedule(before: Map<String, CareTimer>, after: Map<String, CareTimer>) {
+    private suspend fun reschedule(before: Map<String, CareTimer>, after: Map<String, CareTimer>) {
         (before.keys - after.keys).forEach { id ->
             if (before[id]?.state == TimerState.RINGING) scheduler.dismiss(id) else scheduler.cancel(id)
             // 상대가 끝낸 것이다. 이 기기에서 끝낸 건 remove() 가 이미 셌고, 그건 복제본이
             // 돌아와도 여기 안 걸린다 — 이미 목록에 없어 before 에도 없다.
-            before[id]?.let(::reportEnded)
+            before[id]?.let { reportEnded(it, TimerAnalytics.SOURCE_WATCH) }
         }
         after.values.forEach { timer ->
             // 이 기기에 없던 타이머가 복제본으로 들어왔다 = 상대가 시작했다.

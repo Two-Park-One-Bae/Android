@@ -1,37 +1,17 @@
 package app.nursemate.pill
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import app.nursemate.BuildConfig
-import app.nursemate.R
-import app.nursemate.core.designsystem.NmButtonPrimary
-import app.nursemate.core.designsystem.NmButtonSecondary
 import app.nursemate.core.designsystem.NmColor
-import app.nursemate.core.designsystem.NmNavBar
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.ui.SystemBarIcons
+import app.nursemate.core.designsystem.v2.NmSymbols
 
 /**
- * 분석 실패 — 디자인 `⑦ 분석 실패`.
+ * 분석 실패 — 정본 「알약 식별 · 촬영 ~ 로딩 · V2.1.0 (NM-586)」 ⑦.
  *
  * 모델 로드·추론이 깨졌거나(현재) 서버 호출이 실패했을 때(인증 이후)다.
  * 탐지 0개는 실패가 아니므로 여기가 아니라 [PillNotFoundScreen] 으로 간다.
@@ -50,85 +30,25 @@ import app.nursemate.ui.SystemBarIcons
  */
 @Composable
 fun PillAnalysisFailedScreen(message: String?, onRetry: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = NmTheme.semanticColors
-    SystemBarIcons(darkIcons = true)
     BackHandler(onBack = onBack)
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.bgApp)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
-        NmNavBar(title = "", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 40.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .background(NmColor.Error.C50, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.nm_ic_wifi_off),
-                    contentDescription = null,
-                    tint = NmColor.Error.C500,
-                    modifier = Modifier.size(42.dp)
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+    PillStateLayout(
+        navTitle = "",
+        onBack = onBack,
+        title = "분석에 실패했어요",
+        description = "네트워크 연결을 확인하고\n다시 시도해 주세요",
+        primary = PillStateAction("다시 시도", onRetry),
+        secondary = PillStateAction("뒤로", onBack),
+        modifier = modifier,
+        visual = { PillStateIcon(NmSymbols.WifiOff, NmColor.Error.C50, NmColor.Error.C500) },
+        extra = {
+            if (message != null && BuildConfig.DEBUG) {
                 Text(
-                    text = "분석에 실패했어요",
-                    style = PillOutcomeTitle,
-                    color = colors.textPrimary
-                )
-                Text(
-                    text = "네트워크 연결을 확인하고\n다시 시도해 주세요",
-                    style = PillOutcomeDescription,
-                    color = colors.textSecondary,
+                    text = message,
+                    style = PillOutcomeDetail,
+                    color = NmTheme.semanticColors.textTertiary,
                     textAlign = TextAlign.Center
                 )
-                if (message != null && BuildConfig.DEBUG) {
-                    Text(
-                        text = message,
-                        style = PillOutcomeDetail,
-                        color = colors.textTertiary,
-                        textAlign = TextAlign.Center
-                    )
-                }
             }
         }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            NmButtonPrimary(
-                text = "다시 시도",
-                onClick = onRetry,
-                modifier = Modifier.fillMaxWidth()
-            )
-            NmButtonSecondary(
-                text = "뒤로",
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
+    )
 }

@@ -2,41 +2,32 @@ package app.nursemate.timer
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,18 +41,20 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
-import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmSymbols
+import app.nursemate.core.designsystem.v2.NmV2ButtonShape
+import app.nursemate.core.designsystem.v2.NmV2RaisedButton
+import app.nursemate.core.designsystem.v2.NmV2Tag
+import app.nursemate.core.designsystem.v2.NmV2Type
 import app.nursemate.core.model.TimerPreset
 import app.nursemate.core.model.formatDuration
-import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -78,7 +71,6 @@ import kotlinx.coroutines.launch
  *
  * ⚠️ 편집 모드에서 행을 눌러도 **시작하지 않는다** — 수정 시트가 열린다.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimerPresetSheet(
     presets: List<TimerPreset>,
@@ -103,15 +95,7 @@ fun TimerPresetSheet(
     val screenHeightPx = LocalWindowInfo.current.containerSize.height
     val sheetMaxHeight = with(density) { (screenHeightPx * SHEET_MAX_RATIO).toDp() }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetGesturesEnabled = !reordering,
-        // 프리셋 6개면 절반 높이(partial)를 넘긴다. 거기서 멈추면 마지막 항목이 시트 밖으로
-        // 밀려 잘린 채 보이므로, 처음부터 콘텐츠 높이만큼 펼친다.
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = colors.surface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    ) {
+    TimerSheet(onDismiss = onDismiss, handleGap = SheetGap, sheetGesturesEnabled = !reordering) {
         // 제목과 「프리셋 추가」는 **고정**이고 목록만 스크롤한다. 스크롤을 이 바깥 Column 에
         // 걸면 안 된다 — 그러면 제목까지 함께 밀려 올라간다.
         Column(
@@ -121,7 +105,7 @@ fun TimerPresetSheet(
                 // 3버튼 내비게이션에서는 하단 인셋이 커서, 흡수하지 않으면 마지막 프리셋이 가린다.
                 .navigationBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(SheetGap)
         ) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
@@ -129,21 +113,24 @@ fun TimerPresetSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("프리셋", style = SheetTitle, color = colors.textPrimary)
+                    Text("프리셋", style = TimerSheetTitle, color = colors.textPrimary)
                     Text(
                         text = if (editing) "완료" else "편집",
                         style = if (editing) DoneStyle else EditStyle,
                         color = NmColor.Primary.C600,
-                        modifier = Modifier.clickable(onClick = onToggleEditing)
+                        modifier = Modifier
+                            .clip(NmV2ButtonShape)
+                            .clickable(role = Role.Button, onClick = onToggleEditing)
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
                     )
                 }
                 Text(
                     text = when {
                         presets.isEmpty() -> "프리셋을 추가하면 원탭으로 시작할 수 있어요"
-                        editing -> "프리셋을 눌러 수정 · 휴지통으로 삭제"
+                        editing -> "프리셋을 눌러 수정 · ≡ 드래그로 순서 변경"
                         else -> "누르면 타이머가 바로 시작됩니다"
                     },
-                    style = SheetSubStyle,
+                    style = NmV2Type.rowSubtitle,
                     color = colors.textSecondary
                 )
             }
@@ -173,28 +160,14 @@ fun TimerPresetSheet(
             // 아예 없다. 그런데 전부 지우는 건 막지 않았으므로(자기 것만 쓰려는 선택은 정당하다)
             // 여기서 빠져나갈 길을 열어 둔다. 정본에 0개 상태 프레임이 없어 충돌하지 않는다.
             if (editing || presets.isEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RowShape)
-                        .border(1.dp, NmColor.Neutral.C300, RowShape)
-                        .clickable(onClick = onAdd)
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                NmV2RaisedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth(), contentPadding = AddPadding) {
                     Icon(
-                        painter = painterResource(DsR.drawable.nm_ic_plus),
+                        painterResource(NmSymbols.Add),
                         contentDescription = null,
-                        tint = colors.textSecondary,
-                        modifier = Modifier.size(16.dp)
+                        tint = NmColor.Primary.C700,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Text(
-                        text = "프리셋 추가",
-                        style = AddStyle,
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
+                    Text("프리셋 추가", style = AddStyle, color = NmColor.Primary.C700, maxLines = 1)
                 }
             }
         }
@@ -315,7 +288,7 @@ private fun ReorderableRow(
             .zIndex(if (held) 1f else 0f)
             .graphicsLayer { translationY = if (held) dragOffset else slide.value }
             // 쥔 행만 살짝 들어 올린다 — 무엇을 잡고 있는지 손끝으로만 알 수는 없다.
-            .shadow(if (held) HeldElevation else 0.dp, RowShape)
+            .shadow(if (held) HeldElevation else 0.dp, NmV2ButtonShape)
             .onSizeChanged { onMeasured(it.height) }
     )
 }
@@ -354,6 +327,10 @@ private fun Modifier.reorderHandle(
     }
 }
 
+/**
+ * 프리셋 한 줄 — 정본 `Preset Row`(볼록 보조 버튼 면). 편집 모드에서는 왼쪽에 삭제, 오른쪽에 손잡이가 붙는다.
+ * 홈의 [app.nursemate.core.designsystem.v2.NmV2PresetRow] 와 같은 면이지만 편집 모드 · 손잡이가 있어 여기서 짠다.
+ */
 @Composable
 private fun PresetRow(
     preset: TimerPreset,
@@ -364,107 +341,91 @@ private fun PresetRow(
     modifier: Modifier = Modifier
 ) {
     val colors = NmTheme.semanticColors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RowShape)
-            .background(NmColor.Neutral.C50, RowShape)
-            .border(1.dp, colors.border, RowShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (editing) {
-            Icon(
-                painter = painterResource(DsR.drawable.nm_ic_trash_2),
-                contentDescription = "${preset.label} 삭제",
-                tint = NmColor.Error.C500,
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable(onClick = onDelete)
-            )
-        }
-
-        // 왼쪽 묶음이 남은 폭을 받고, 그 안에서 라벨만 줄어든다.
-        // 라벨에 weight 를 직접 주면 시간·손잡이가 라벨 길이에 따라 좌우로 움직인다.
+    NmV2RaisedButton(onClick = onClick, modifier = modifier.fillMaxWidth(), contentPadding = RowPadding) {
         Row(
-            modifier = Modifier.weight(1f),
+            Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = preset.label,
-                style = PresetLabel,
-                color = colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // fill = false 라 짧은 라벨은 태그를 오른쪽으로 끌고 가지 않는다.
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            Text(
-                text = preset.category.label,
-                style = TagStyle,
-                color = tagForeground(preset.category),
-                maxLines = 1,
-                modifier = Modifier
-                    .clip(TagShape)
-                    .background(tagBackground(preset.category), TagShape)
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            )
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = formatDuration(preset.durationSeconds),
-                style = DurationStyle,
-                color = colors.textSecondary,
-                maxLines = 1
-            )
             if (editing) {
-                // 아이콘은 18 이지만 터치 영역은 패딩으로 넓힌다 — 손잡이가 작으면 못 잡는다.
                 Icon(
-                    painter = painterResource(DsR.drawable.nm_ic_menu),
-                    contentDescription = "${preset.label} 순서 변경",
-                    tint = NmColor.Neutral.C400,
-                    modifier = dragModifier
-                        .padding(HandleTouchPadding)
-                        .size(18.dp)
+                    painter = painterResource(NmSymbols.Delete),
+                    contentDescription = "${preset.label} 삭제",
+                    tint = NmColor.Error.C500,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onDelete)
+                        .size(20.dp)
                 )
-            } else {
-                Icon(
-                    painter = painterResource(DsR.drawable.nm_ic_circle_play),
-                    contentDescription = null,
-                    tint = NmColor.Primary.C500,
-                    modifier = Modifier.size(28.dp)
+            }
+
+            // 왼쪽 묶음이 남은 폭을 받고, 그 안에서 라벨만 줄어든다.
+            // 라벨에 weight 를 직접 주면 시간·손잡이가 라벨 길이에 따라 좌우로 움직인다.
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = preset.label,
+                    style = NmV2Type.rowTitle,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // fill = false 라 짧은 라벨은 태그를 오른쪽으로 끌고 가지 않는다.
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+                NmV2Tag(preset.category.label, tone = preset.category.v2Tone)
+            }
+
+            // 정본 간격 — 평소 10(시간 · 재생), 편집 모드 8(시간 · 손잡이).
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(if (editing) 8.dp else 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatDuration(preset.durationSeconds),
+                    style = NmV2Type.chip,
+                    color = colors.textSecondary,
+                    maxLines = 1
+                )
+                if (editing) {
+                    // 아이콘은 18 이다. 패딩으로 누르는 영역을 넓히면 행이 그만큼 커져 정본(행 높이 그대로)과
+                    // 어긋난다. 대신 Compose 의 최소 터치 영역(48) 확장에 맡긴다 — `pointerInput` 이 붙은
+                    // 작은 노드는 주변 48 안의 손가락도 받는다. 행 전체의 누름보다 이 노드가 먼저다 — 실기기(S24)에서
+                    // 아이콘 밖 12dp(행 안쪽)를 끌어 행 편집이 아니라 순서 변경이 일어나는 것을 확인했다.
+                    Icon(
+                        painter = painterResource(NmSymbols.Menu),
+                        contentDescription = "${preset.label} 순서 변경",
+                        tint = NmColor.Neutral.C400,
+                        modifier = dragModifier.size(18.dp)
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(NmSymbols.PlayCircle),
+                        contentDescription = null,
+                        tint = NmColor.Primary.C500,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
     }
 }
 
 // 정본 수치 — `타이머 / C3 프리셋 시트`
-private val RowShape = RoundedCornerShape(12.dp)
+private val SheetGap = 14.dp
 private val RowGap = 8.dp
-private val HandleTouchPadding = 10.dp
+private val RowPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+private val AddPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
 private val HeldElevation = 6.dp
 
 /** 비켜 주는 행의 움직임. 튕기지 않게 damping 을 높였다. */
 private val SlideSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
 
-private val TagShape = RoundedCornerShape(6.dp)
-
-private val SheetTitle = NmTypography.title.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold)
-private val SheetSubStyle = NmTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal)
-private val EditStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
-private val DoneStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-private val PresetLabel = NmTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-private val TagStyle = NmTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium)
-private val DurationStyle = NmTypography.caption.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium)
-private val AddStyle = NmTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+private val EditStyle = NmV2Type.menu
+private val DoneStyle = NmV2Type.menu.copy(fontWeight = FontWeight.SemiBold)
+private val AddStyle = NmV2Type.menu.copy(fontWeight = FontWeight.SemiBold)
 
 /** 시트가 차지할 화면 비율의 상한. 넘치면 목록만 스크롤한다. */
 private const val SHEET_MAX_RATIO = 0.6f

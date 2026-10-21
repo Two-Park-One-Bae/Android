@@ -1,13 +1,17 @@
 package app.nursemate.core.vision.mark
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.nursemate.core.vision.GpuOverride
+import app.nursemate.core.vision.VisionBackend
 import java.io.File
 import java.nio.ByteBuffer
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,8 +20,17 @@ import org.opencv.android.OpenCVLoader
 /**
  * 마크 판독 소요 측정 — NM-515 「앱 용량과 저사양 기기 추론 시간을 측정하고 허용치를 정했다」.
  *
- * ## 실측 (Galaxy S24 · SM-S921N · Exynos 2400 · 4스레드 · 8방향)
- * ORT 1.30 + WebGPU (NM-534). fp16 모델이다.
+ * ## 실측 — LiteRT GPU+CPU FP32 (NM-628, Galaxy S24 · Exynos 2400, 2026-10-19)
+ * ```
+ * 모델 열기   2212 ms   (한 번만 · GPU 셰이더 준비 포함)
+ * 전처리        33 ms
+ * 추론         157 ms
+ * 디코딩         2 ms
+ * ─────────────────────────
+ * 한 면        192 ms
+ * ```
+ *
+ * ## 옛 실측 — ORT 1.30 + WebGPU (NM-534). fp16 모델.
  * ```
  * 세션 생성   약 150 ms   (한 번만)
  * 전처리       약 80 ms
@@ -39,20 +52,30 @@ import org.opencv.android.OpenCVLoader
  *
  * ## 모델이 없으면 건너뛴다
  * ```
- * adb push mark_species_fp16.onnx /sdcard/Android/data/app.nursemate.core.vision.test/files/
+ * adb push app/src/main/assets/mark_m4_f16w.tflite /sdcard/Android/data/app.nursemate.core.vision.test/files/
  * ```
  */
 @RunWith(AndroidJUnit4::class)
 class MarkReaderBenchmark {
 
+    /** 바꾼 전역 GPU 허용을 되돌린다 — 같은 계측 프로세스의 다음 테스트가 순서에 따라 CPU 로 돌지 않게. */
+    @After
+    fun restore() {
+        VisionBackend.allowGpu = { true }
+    }
+
     @Test
     fun `한_면_판독_소요를_단계별로_잰다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
         val context = InstrumentationRegistry.getInstrumentation().context
+        Log.i(TAG, "경로 ${GpuOverride.apply()}")
 
-        // 발열 상태에서 잰 값은 대표성이 없다. 기기를 더 굽지 않고 접는다.
-        val status = context.getSystemService(PowerManager::class.java)?.currentThermalStatus
-        assumeTrue("발열 상태 $status — 재지 않는다", status == PowerManager.THERMAL_STATUS_NONE)
+        // 발열 상태에서 잰 값은 대표성이 없다. 기기를 더 굽지 않고 접는다. 발열 API 는 29 부터다 — 그 아래(F-01L 27 ·
+        // Pixel 3 28)는 `NoSuchMethodError` 로 죽었다(2026-10-19 Test Lab). 그 판에서는 묻지 않고 잰다.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val status = context.getSystemService(PowerManager::class.java)?.currentThermalStatus
+            assumeTrue("발열 상태 $status — 재지 않는다", status == PowerManager.THERMAL_STATUS_NONE)
+        }
 
         val model = File(context.getExternalFilesDir(null), MarkReader.MODEL_FILE_NAME)
         assumeTrue("모델이 없어 건너뛴다", model.isFile && model.length() > 0)
@@ -75,6 +98,7 @@ class MarkReaderBenchmark {
                 reader.readGray(gray)
 
                 val runs = (1..ROUNDS).map { reader.readGray(gray).timings }
+                Log.i(TAG, "실제 경로 ${if (reader.onGpu) "GPU" else "CPU"}(잰 뒤)")
                 Log.i(TAG, "세션 생성 ${openMs}ms (한 번만) · 모델 ${model.length() / 1024 / 1024}MB")
                 Log.i(TAG, "전처리  중앙값 ${runs.map { it.preprocessMs }.median()}ms")
                 Log.i(TAG, "추론    중앙값 ${runs.map { it.inferenceMs }.median()}ms")

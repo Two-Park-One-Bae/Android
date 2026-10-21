@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import app.nursemate.core.designsystem.NmTheme
@@ -23,14 +24,12 @@ import app.nursemate.home.NmTab
 import app.nursemate.ui.SystemBarIcons
 
 /**
- * 탭 루트 화면을 하단 탭바로 감싼다.
+ * 화면을 하단 탭바로 감싼다.
  *
  * ## 왜 앱 셸이 아니라 화면마다 두는가
- * 디자인에서 **탭바를 가진 화면은 홈 · 타이머 리스트 · 설정뿐이다.** 알약 식별 플로우는
- * 촬영부터 결과까지 전부 전체화면이다(`spec/design/DESIGN.pen` 의 ①~⑦ 프레임에 Tab Bar 가 없다).
- *
- * 앱 셸에 탭바를 깔면 알약 화면까지 탭바가 따라붙어 **카메라 뷰파인더가 눌리고 잘린다.**
- * 그래서 셸은 화면만 그리고, 탭바가 필요한 루트만 이걸로 감싼다.
+ * V2.1.0 은 거의 모든 화면에 탭바를 둔다 — 탭 루트, 알약 식별 화면 · 식별 기록 상세(spec §화면 공통).
+ * **알약 촬영만 뺀다** — 셸에 탭바를 깔면 촬영 화면까지 따라붙어 **카메라 뷰파인더가 눌리고 잘린다.**
+ * 그래서 셸은 화면만 그리고, 탭바가 필요한 화면이 이걸로 감싼다.
  *
  * 상단은 상태바 인셋만 피한다. 하단 인셋은 [NmBottomBar] 가 직접 흡수한다 —
  * 바 배경이 제스처 영역까지 이어져야 잘린 것처럼 보이지 않는다.
@@ -44,18 +43,18 @@ fun NmTabScaffold(
     selected: NmTab,
     onSelect: (NmTab) -> Unit,
     modifier: Modifier = Modifier,
+    background: Color = NmTheme.semanticColors.bgApp,
     overlay: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = NmTheme.semanticColors
-    // 밝은 bg-app 위라 시스템 바 아이콘은 어둡게.
+    // 밝은 바탕 위라 시스템 바 아이콘은 어둡게.
     SystemBarIcons(darkIcons = true)
 
     // 탭바가 차지하는 높이. 화면이 키보드를 피할 때 **이미 빠져 있는 몫**이라 빼 줘야 한다.
     var barHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
 
-    Box(modifier = modifier.fillMaxSize().background(colors.bgApp)) {
+    Box(modifier = modifier.fillMaxSize().background(background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier

@@ -3,7 +3,7 @@ package app.nursemate.core.vision.mark
 import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.nursemate.core.vision.EpOverride
+import app.nursemate.core.vision.GpuOverride
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -27,13 +27,14 @@ import org.opencv.android.OpenCVLoader
  * ## 임베딩이 제일 예민하다
  * 서버가 카탈로그 48,883장과 코사인으로 후보를 재정렬하는 값이라, 조금만 틀어져도 **예외가
  * 아니라 순서로만** 드러난다. DoD 가 코사인 0.99 이상을 요구하는데 실제로는 훨씬 높게 나와야
- * 정상이다 — 전처리가 바이트 단위로 같으니 남는 차이는 실행 공급자(WebGPU)의 fp16 누적뿐이다.
+ * 정상이다 — 전처리가 바이트 단위로 같으니 남는 차이는 가속기 연산 순서뿐이다(아래 허용치는 ORT WebGPU 시절 실측,
+ * LiteRT GPU FP32 · CPU 는 S24 에서 모두 그 안에 들었다 — NM-628).
  *
  * ## 모델이 없으면 건너뛴다
  * ```
- * adb push mark_species_fp16.onnx /sdcard/Android/data/app.nursemate.core.vision.test/files/
+ * adb push mark_m4_f16w.tflite /sdcard/Android/data/app.nursemate.core.vision.test/files/
  * ```
- * 53MB 를 저장소에 둘 수 없어 계측 테스트는 밀어 넣은 파일을 쓴다. 릴리스는 `app/models.md5`
+ * 57MB 를 저장소에 둘 수 없어 계측 테스트는 밀어 넣은 파일을 쓴다. 릴리스는 `app/models.md5`
  * 가 정한 경로로 받는다(`docs/RELEASE.md`).
  */
 @RunWith(AndroidJUnit4::class)
@@ -46,8 +47,8 @@ class MarkReaderParityTest {
     @Before
     fun setUp() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
-        // 리더를 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 EP 로 돈다.
-        EpOverride.apply()
+        // 리더를 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 가속기로 돈다.
+        GpuOverride.apply()
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         fixtures = JSONObject(assets.open("mark/fixtures.json").use { it.readBytes().decodeToString() })
         answers = JSONObject(assets.open("mark/answers.json").use { it.readBytes().decodeToString() })

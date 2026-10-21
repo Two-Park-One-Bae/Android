@@ -37,6 +37,7 @@ import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.designsystem.R as DsR
+import app.nursemate.core.designsystem.v2.NmV2Wordmark
 import app.nursemate.ui.SystemBarIcons
 
 /**
@@ -83,18 +84,8 @@ fun LoginScreen(
     ) {
         Spacer(modifier = Modifier.height(30.dp))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                painter = painterResource(DsR.drawable.nm_logo),
-                contentDescription = null,
-                tint = NmColor.Primary.C500,
-                modifier = Modifier.size(27.dp)
-            )
-            Text(text = "NurseMate", style = Wordmark, color = colors.textPrimary)
-        }
+        // V2.1.0 정본은 로고 마크 없이 글자 로고(Wordmark) 하나다. 소셜 버튼은 각 회사 규정 그대로 둔다.
+        NmV2Wordmark()
 
         Spacer(modifier = Modifier.weight(COPY_TOP_WEIGHT))
 
@@ -269,10 +260,6 @@ private val GoogleTextColor = Color(0xFF1F1F1F)
 
 // 정본 스케일에 없는 크기다. 화면이 요구하는 값이라 여기 명시한다.
 // lineHeight 는 정본의 배수(1.42·1.6)를 fontSize 에 곱한 값이다.
-private val Wordmark = NmTypography.title.copy(
-    fontWeight = FontWeight.ExtraBold,
-    letterSpacing = (-0.7).sp
-)
 private val Headline = NmTypography.heading2.copy(
     fontSize = 34.sp,
     lineHeight = 48.sp,

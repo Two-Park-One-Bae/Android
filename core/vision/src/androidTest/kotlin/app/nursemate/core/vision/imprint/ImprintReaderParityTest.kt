@@ -2,7 +2,7 @@ package app.nursemate.core.vision.imprint
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.nursemate.core.vision.EpOverride
+import app.nursemate.core.vision.GpuOverride
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -19,9 +19,9 @@ import org.opencv.core.Mat
  * 모델을 태워 **같은 답이 나오는지**까지 본다.
  *
  * ## 모델을 저장소에 넣지 않는다
- * 21MB 다. `*.onnx` 는 `.gitignore` 대상이기도 하다. 기기에 밀어 넣고 읽는다:
+ * 조각 다섯(p1~p5, 합 23MB)은 `.gitignore` 대상이다. 기기에 밀어 넣고 읽는다:
  * ```
- * adb push reader_ep60_s1.onnx /sdcard/Android/data/app.nursemate.core.vision.test/files/
+ * adb push app/src/main/assets/p?_*.tflite /sdcard/Android/data/app.nursemate.core.vision.test/files/
  * ```
  *
  * ⚠️ **모델이 없으면 건너뛴다 — 통과가 아니다.** `assumeTrue` 는 리포트에 skipped 로 남는다.
@@ -29,7 +29,7 @@ import org.opencv.core.Mat
  *
  * ## 기준값
  * `sample_crop.png` → `YS`, best_pair 점수 0.969883, 회전 90°, 배율 1.0.
- * `INFO.md` 의 「결과 `YS` 0.970」과 같다.
+ * `INFO.md` 의 「결과 `YS` 0.970」과 같다. LiteRT G5(NM-628)도 이 값에 맞아야 한다 — 허용 오차는 아래.
  */
 @RunWith(AndroidJUnit4::class)
 class ImprintReaderParityTest {
@@ -37,26 +37,38 @@ class ImprintReaderParityTest {
     @Test
     fun `sample_crop_의_답이_기준과_같다`() {
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
-        // 세션을 만들기 전이어야 한다 — 만든 뒤에 바꾸면 이미 열린 EP 로 돈다.
-        val path = EpOverride.apply()
+        // 모델을 열기 전이어야 한다 — 연 뒤에 바꾸면 이미 열린 가속기로 돈다.
+        val path = GpuOverride.apply()
 
         val context = InstrumentationRegistry.getInstrumentation().context
-        val model = File(context.getExternalFilesDir(null), ImprintReader.MODEL_FILE_NAME)
+        val parts = ImprintReader.PART_FILE_NAMES.map { File(context.getExternalFilesDir(null), it) }
         assumeTrue(
-            "모델이 없어 건너뛴다 — adb push ${ImprintReader.MODEL_FILE_NAME} " +
-                "${context.getExternalFilesDir(null)}/",
-            model.isFile && model.length() > 0
+            "조각이 없어 건너뛴다 — adb push p?_*.tflite ${context.getExternalFilesDir(null)}/",
+            parts.all { it.isFile && it.length() > 0 }
         )
 
         val bytes = context.assets.open("imprint/input_gray.bin").use { it.readBytes() }
         val gray = Mat(ImprintPreprocess.SIDE, ImprintPreprocess.SIDE, CvType.CV_8UC1)
             .also { it.put(0, 0, bytes) }
 
-        val result = ImprintReader(model).use { it.readGray(gray) }
+        val result = ImprintReader(parts).use { it.readGray(gray) }
         gray.release()
 
         assertEquals("[$path] 확신 글자", "YS", result.imprint)
         assertEquals("[$path] best_pair", "YS", result.pair)
-        assertEquals("[$path] best_pair 점수", 0.969883f, result.score, 1e-4f)
+        val tolerance = if (GpuOverride.gpu) GPU_TOLERANCE else CPU_TOLERANCE
+        assertEquals("[$path] best_pair 점수", 0.969883f, result.score, tolerance)
+    }
+
+    private companion object {
+        /** CPU 는 fp32 라 기준 구현(ONNX CPU)과 소수 넷째 자리까지 같다 — S24 실측 통과. */
+        const val CPU_TOLERANCE = 1e-4f
+
+        /**
+         * GPU 는 계약상 p1 · p4 가 **FP16** 이라 점수가 조금 흔들린다 — S24(Exynos 2400) 실측 0.9723(+0.0024).
+         * 답과 pair 는 같다. ML 이 같은 계약으로 공식 세트 550면 응답 · 정답 · 오답이 fp32 와 같음을 확인했으므로
+         * 점수 한 장의 흔들림은 이 정도면 정상이다. 0.005 를 넘으면 정밀도 계약이 깨졌는지 본다.
+         */
+        const val GPU_TOLERANCE = 5e-3f
     }
 }

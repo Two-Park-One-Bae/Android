@@ -9,7 +9,7 @@ android {
     /*
      * 계측 테스트 APK 의 ABI 를 하나로 줄이는 탈출구 — **Firebase Test Lab 에 올릴 때만** 쓴다.
      *
-     * OpenCV 와 ONNX Runtime 이 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 267MB 다.
+     * OpenCV 와 LiteRT 가 ABI 4개분 네이티브를 싣고 와서 테스트 APK 가 크다.
      * 올리는 데만 한참 걸리는데 Test Lab 실기기는 전부 arm64 다.
      *
      * ```
@@ -26,8 +26,8 @@ android {
      * 테스트 메서드마다 프로세스를 새로 띄운다 (NM-577).
      *
      * 두 가지를 막는다.
-     *  - **세그폴트가 나머지를 날리는 것.** Adreno 에서 각인이 죽으면 그 뒤 EP 를 하나도 못 쟀다.
-     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 119MB 검출 모델을 EP 마다 열면
+     *  - **세그폴트가 나머지를 날리는 것.** GPU 드라이버가 죽으면 그 뒤 테스트를 하나도 못 잰다(ORT 시절 Adreno 각인).
+     *  - **테스트끼리 메모리를 물려받는 것.** 한 프로세스에서 큰 검출 모델을 여러 번 열면
      *    뒤쪽 테스트가 압박을 받아 메시지도 없이 죽는다(2026-10-13 실측).
      *
      * Test Lab 은 `--use-orchestrator`, 로컬은 이 설정이 같은 일을 한다.
@@ -70,12 +70,22 @@ configurations.configureEach {
 }
 
 dependencies {
-    // 온디바이스 검출 (RF-DETR-Seg-Small).
+    // 온디바이스 추론 — 검출 · 각인 · 마크 셋 다 LiteRT `CompiledModel` 로 돈다(NM-628).
     //
-    // 프리빌트 Maven 배포본을 쓴다. WebGPU EP가 포함된 커스텀 빌드가 CPU 대비 1.75배
-    // 빠르지만(1550 → 845 ms), 11 MB 바이너리를 저장소에 넣어야 하고 minSdk를 28로
-    // 올려야 해서 채택하지 않았다. 근거는 NM-396 스파이크 참조.
-    implementation(libs.onnxruntime.android)
+    // 전 기기 같은 모델 파일 · 기기별 분기 없음. GPU(OpenCL) 가 안 되면 같은 파일을 CPU 로 연다.
+    // 앱에 싣는다(Play 서비스 판이 아니다) — ML 이 이 판(2.3.0 CompiledModel)으로 정확도를 쟀고,
+    // 버전이 우리 모르게 바뀌지 않아야 기기별 출력 차이를 추적할 수 있다. arm64 약 8.9MB.
+    // NPU 런타임(`litert-npu-*`)은 넣지 않는다 — 2.1.0 범위 밖.
+    //
+    // ⚠️ **`play:ai-delivery` 를 뺀다.** `litert-api` 가 Play for On-device AI 의 AI Pack 받기(알파)를 끌고 오고,
+    // 그게 `asset-delivery` → `work-runtime` 을 끌고 온다. 그러면 WorkManager 가 androidx.startup 으로 프로세스
+    // 시작 때 돌다 **release(R8)에서 `WorkDatabase` 생성에 실패해 앱이 바로 죽는다** — PR #21(Glance)과 같은
+    // 결함이다(2026-10-19 에뮬레이터 릴리스 스모크). 덤으로 `FOREGROUND_SERVICE_DATA_SYNC` 권한과 서비스 · 리시버
+    // 여럿이 병합돼 Play 에 포그라운드 서비스 신고까지 요구된다.
+    // 우리는 모델을 assets 에서 파일로 연다 — AI Pack 을 쓰는 클래스는 `deployment.AiPackModelProvider` 하나뿐이고
+    // 부르지 않는다(남는 빈 참조는 `proguard-rules.pro` 의 `-dontwarn`). Play AI Pack 으로 옮길 때 되살린다.
+    implementation(libs.litert) { exclude(group = "com.google.android.play", module = "ai-delivery") }
+    implementation(libs.litert.gpu) { exclude(group = "com.google.android.play", module = "ai-delivery") }
 
     // 각인 OCR 전처리(NM-485) — CLAHE(clip 3.0, 8×8) · morphologyEx(CLOSE) ·
     // connectedComponents · floodFill · warpAffine · resize(INTER_AREA).
@@ -105,7 +115,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
 
-    // 메서드마다 프로세스를 새로 띄운다 — Adreno 에서 세그폴트가 나도 나머지 EP 를 끝까지 잰다.
+    // 메서드마다 프로세스를 새로 띄운다 — GPU 드라이버가 세그폴트를 내도 나머지 테스트를 끝까지 돈다.
     // Test Lab 은 --use-orchestrator, 로컬은 android.testInstrumentationRunnerArguments.clearPackageData 와 함께.
     androidTestUtil(libs.androidx.test.orchestrator)
 }

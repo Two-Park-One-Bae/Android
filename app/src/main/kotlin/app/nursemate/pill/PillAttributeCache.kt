@@ -17,9 +17,9 @@ import kotlinx.serialization.json.Json
  * 마지막 속성 추출 결과를 디버그 빌드에서 재사용한다.
  *
  * ## 왜 필요한가
- * 속성 추출은 Gemini 호출이라 **한 번에 5~8초 걸리고 하루 15회 한도를 깎는다.** 화면을
- * 고칠 때마다 실제 호출을 하면 오후 한 나절에 한도가 바닥나고, 그때부터는 한도 안내만
- * 보게 된다. 그래서 한 번 받은 응답을 파일에 두고 다시 쓴다.
+ * 속성 추출(`POST /api/v1/pill-attributes` — 색은 OpenCV, 모양 · 제형은 서버 자체 분류 모델)은 **회원별 일 15회
+ * 식별 한도를 깎는다.** 화면을 고칠 때마다 실제 호출을 하면 한도가 금방 바닥나고, 그때부터는 한도 안내만 보게
+ * 된다. 그래서 한 번 받은 응답을 파일에 두고 다시 쓴다. (처음 만들 때는 v0 · Gemini 였다 — 그때는 5~8초.)
  *
  * ## 릴리스에서는 아무 일도 하지 않는다
  * [BuildConfig.DEBUG] 가 아니면 저장도 조회도 건너뛴다. 실제 사용자가 남의 사진에서 나온
@@ -27,7 +27,10 @@ import kotlinx.serialization.json.Json
  *
  * ## 사진이 달라도 그대로 쓴다
  * 이건 **UI 확인용**이라 값의 정확성이 목적이 아니다. 검출 개수가 다르면 앞에서부터 잘라
- * 맞추고 모자라면 그만큼만 채운다. 실제 값을 봐야 할 때는 캐시를 지운다:
+ * 맞추고 모자라면 그만큼만 채운다.
+ *
+ * ⚠️ **디버그 빌드로 모양 · 색 · 제형의 정확도를 보면 안 된다** — 다른 사진의 값이 나온다(2026-10-19 실기기에서
+ * 「너무 못 잡는다」로 오인). 실제 값을 봐야 할 때는 캐시를 지운다:
  * ```
  * adb shell run-as app.nursemate.debug rm files/debug/last-attributes.json
  * ```
@@ -51,7 +54,7 @@ class PillAttributeCache @Inject constructor(
                     saved.getOrNull(index)?.copy(pillId = id)
                 }.takeIf { it.isNotEmpty() }
             }.getOrNull()
-                ?.also { Log.i(TAG, "캐시된 속성 ${it.size}개 재사용 — Gemini 호출 건너뜀") }
+                ?.also { Log.i(TAG, "캐시된 속성 ${it.size}개 재사용 — 서버 속성 추출을 건너뛴다(디버그 · 다른 사진의 값일 수 있다)") }
         }
     }
 

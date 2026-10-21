@@ -14,26 +14,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** 앱이 품고 다니는 온디바이스 모델 셋. 파일 이름의 정본은 각 모델을 여는 쪽에 있다. */
-enum class PillModel(val fileName: String) {
-    /** 알약 검출·분할 (RF-DETR-seg). 119MB 로 셋 중 가장 크다. */
-    Detector(PillDetector.MODEL_FILE_NAME),
+enum class PillModel(val fileNames: List<String>) {
+    /** 알약 검출·분할 (RF-DETR-seg). 63MB. */
+    Detector(listOf(PillDetector.MODEL_FILE_NAME)),
 
-    /** 각인 OCR (CRNN + CTC). */
-    Imprint(ImprintReader.MODEL_FILE_NAME),
+    /** 각인 OCR (CRNN + CTC). LiteRT 에서 다섯 조각이다(NM-628) — 순서대로 흐른다. */
+    Imprint(ImprintReader.PART_FILE_NAMES),
 
     /** 마크 종·유무·임베딩 (ConvNeXt-Tiny species). */
-    Mark(MarkReader.MODEL_FILE_NAME)
+    Mark(listOf(MarkReader.MODEL_FILE_NAME))
 }
 
 /**
  * 온디바이스 모델 파일을 준비한다.
  *
- * ONNX Runtime 은 세션을 만들 때 **파일 경로**를 요구하는데 APK 안의 asset 에는 경로가 없다.
- * 그래서 처음 한 번 앱 전용 저장소로 꺼내 두고 그다음부터는 그걸 쓴다.
+ * 모델은 **파일 경로**로 연다(LiteRT `CompiledModel.create(path)`). APK 안의 asset 에는 경로가 없어서
+ * 처음 한 번 앱 전용 저장소로 꺼내 두고 그다음부터는 그걸 쓴다.
  *
- * ## 왜 통째로 메모리에 올리지 않나
- * ORT 는 바이트 배열로도 세션을 만들 수 있지만 셋을 합치면 196MB 다. 힙에 그만큼 올리면
- * 저사양 기기에서 OOM 이 난다. 디스크에 한 번 쓰는 편이 안전하다.
+ * LiteRT 는 `AssetManager` 로도 열 수 있지만, asset 이 압축돼 있으면 통째로 메모리에 풀어야 한다 —
+ * 합치면 136MB 다. 디스크에 한 번 쓰는 편이 저사양 기기에서 안전하다(ONNX 시절과 같은 판단).
  *
  * ## 저장소를 두 배 쓴다
  * APK 안(압축)과 꺼낸 파일 양쪽에 있게 된다. Play Asset Delivery 를 쓰면 꺼내는 단계 없이
@@ -46,29 +45,32 @@ enum class PillModel(val fileName: String) {
 class PillModelFile @Inject constructor(@param:ApplicationContext private val context: Context) {
 
     /**
-     * @return 바로 열 수 있는 모델 파일
+     * @return 바로 열 수 있는 모델 파일 — [PillModel.fileNames] 순서
      * @throws IllegalStateException 꺼내지 못한 경우 — 화면은 ⑦ 분석 실패로 간다
      */
-    suspend fun prepare(model: PillModel = PillModel.Detector): File = withContext(Dispatchers.IO) {
-        val name = model.fileName
-        developerOverride(name)?.let { return@withContext it }
+    suspend fun prepare(model: PillModel = PillModel.Detector): List<File> = withContext(Dispatchers.IO) {
+        model.fileNames.map { prepareFile(it) }
+    }
 
+    private fun prepareFile(name: String): File = developerOverride(name) ?: extracted(name)
+
+    private fun extracted(name: String): File {
         // 버전을 경로에 박아 둔다. 앱을 올렸는데 예전 모델을 그대로 쓰는 사고를 막는다.
         val target = File(context.filesDir, "model/${BuildConfig.VERSION_CODE}/$name")
-        if (target.isFile && target.length() > 0) return@withContext target
-
-        target.parentFile?.mkdirs()
-        extract(name, target)
-        cleanUpOldVersions(target.parentFile)
-        target
+        if (!(target.isFile && target.length() > 0)) {
+            target.parentFile?.mkdirs()
+            extract(name, target)
+            cleanUpOldVersions(target.parentFile)
+        }
+        return target
     }
 
     /**
      * 개발용 우회 — 앱 전용 외부 저장소에 파일을 밀어 넣으면 그쪽을 쓴다.
      * ```
-     * adb push rfdetr_seg_small.onnx /sdcard/Android/data/app.nursemate.debug/files/
+     * adb push rfdetr_seg_small_f16w.tflite /sdcard/Android/data/app.nursemate.debug/files/
      * ```
-     * 다른 양자화(int8·fp16)를 실기기에서 비교할 때 앱을 다시 빌드하지 않아도 된다.
+     * 다른 변환본을 실기기에서 비교할 때 앱을 다시 빌드하지 않아도 된다. 각인은 조각 파일마다 따로 본다.
      * **디버그 빌드에서만** 본다 — 릴리스에서 외부 파일을 읽으면 남이 바꿔치기할 수 있다.
      */
     private fun developerOverride(name: String): File? {

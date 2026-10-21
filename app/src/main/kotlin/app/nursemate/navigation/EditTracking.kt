@@ -109,16 +109,6 @@ internal class EditTracking(
     }
 }
 
-/**
- * 취소했을 때 되돌릴 진입 시점의 값.
- *
- * 속성·각인은 후보를 실시간으로 조회해야 해서 고치는 즉시 뷰모델에 들어간다 —
- * 스펙이 "선택·확인 시 갱신, 취소 시 폐기"라 되돌릴 값을 화면이 따로 붙잡아 둬야 한다.
- */
-@Composable
-internal fun rememberOriginalEdit(state: PillUiState, pillId: String): PillEdit =
-    remember(pillId) { state.editOf(pillId) }
-
 /** 검출 결과에서 이 알약의 자리. 수동 추가 알약은 사진에 대응 영역이 없어 null 이다. */
 internal fun PillUiState.detectedIndexOf(pillId: String): Int? {
     val detected = (detection as? DetectionPhase.Success)?.result?.pills.orEmpty()

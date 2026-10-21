@@ -56,6 +56,18 @@ fun com.android.build.api.dsl.ApplicationBuildType.airbridge(appName: String?, t
 android {
     namespace = "app.nursemate"
 
+    /*
+     * LiteRT AAR 에 딸려 오는 **퀄컴 NPU 용** `.so` 를 뺀다 — NPU 는 2.1.0 범위 밖이다(NM-628).
+     * `libLiteRtDispatch_Qualcomm` · `libLiteRtCompilerPlugin_Qualcomm` 합 1.2MB(arm64). 없으면 NPU 를
+     * 등록하지 못한다는 경고만 찍고(`npu_registry.cc`) GPU · CPU 는 그대로 돈다.
+     */
+    packaging {
+        jniLibs {
+            excludes +=
+                setOf("**/libLiteRtDispatch_Qualcomm.so", "**/libLiteRtCompilerPlugin_Qualcomm.so")
+        }
+    }
+
     defaultConfig {
         applicationId = "app.nursemate"
         // 증가 정책은 docs/RELEASE.md — versionCode는 Play 업로드마다 +1, versionName은 SemVer
@@ -68,8 +80,8 @@ android {
         //    같은 번호로 다시 올릴 수 없다.
         //
         // 폰·워치를 함께 올려 오프셋을 지킨다.
-        versionCode = 15
-        versionName = "2.0.1"
+        versionCode = 16
+        versionName = "2.1.0"
     }
 
     buildFeatures {
@@ -100,7 +112,7 @@ android {
             kakaoAppKey(secret("KAKAO_APP_KEY_RELEASE"))
             airbridge(secret("AIRBRIDGE_APP_NAME"), secret("AIRBRIDGE_APP_TOKEN"))
 
-            // ⚠️ **네이티브 심볼을 올려야 `libonnxruntime.so` 스택이 함수명으로 보인다.**
+            // ⚠️ **네이티브 심볼을 올려야 `libLiteRt.so` · GPU 드라이버 스택이 함수명으로 보인다.**
             // 이게 없으면 주소만 남아, 정확히 이번에 겪은 상황(원격에서 스택을 못 읽음)이 반복된다.
             //
             // release 에만 건다 — debug 는 R8 을 안 써서 올릴 매핑이 없고, 네이티브 심볼도
@@ -151,6 +163,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.extensions)
 
     // 위젯(NM-443)은 RemoteViews 로 직접 그린다. Glance 를 쓰다 걷어냈다 — 사정은
     // [PresetWidgetRenderer]. 의존성도 함께 뺀다: glance-appwidget 이 WorkManager 2.7.1 을
@@ -158,6 +171,8 @@ dependencies {
     // release(R8)에서 WorkDatabase 생성에 실패해 앱이 바로 죽었다(2026-09-11 릴리스 스모크).
     // 슬롯 저장에 쓰는 DataStore 는 그동안 Glance 를 타고 들어와 있었다 — 직접 선언한다.
     implementation(libs.androidx.datastore.preferences)
+    // 스토어 평가 창 요청(NM-561).
+    implementation(libs.play.review.ktx)
 
     // 후보·세부정보의 낱알 이미지(CDN). 없는 품목은 404 가 오므로 폴백이 필요하다(NM-347).
     implementation(libs.coil.compose)
@@ -182,22 +197,30 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    // V2.1.0 화면 캡처(V210HomeCaptureTest) — 정본과 나란히 보는 용도다. 액티비티는 debug 의 DesignGalleryActivity 를 쓴다.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
-// R8 이 ONNX Runtime · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
+// R8 이 LiteRT · OpenCV 의 클래스 이름을 바꾸지 않았는지 **매핑으로** 확인한다.
 //
-// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3).
-// ONNX Runtime 의 네이티브 쪽이 추론 **결과를 JVM 으로 돌려줄 때** 클래스를 이름으로 찾는데
-// (`FindClass("ai/onnxruntime/TensorInfo")` → `GetMethodID`), Java 코드가 그 클래스들을 직접
-// 부르지 않아 R8 이 지워도 되는 것으로 본다. 지금은 `proguard-rules.pro` 의
-// `-keep class ai.onnxruntime.** { *; }` 가 막고 있다.
+// `KNOWN-ISSUES.md` ⑩ — 릴리스에서만 알약 식별이 100% SIGABRT 로 죽었다(0.2.1~0.2.3, 그때는 ONNX Runtime).
+// 네이티브 쪽이 결과를 JVM 으로 돌려줄 때 클래스를 **이름으로** 찾는데, Java 코드가 그 클래스들을 직접
+// 만들지 않아 R8 이 지우거나 바꿔도 되는 것으로 본다.
 //
-// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 컴파일도 단위 테스트도
-// 아무 말을 하지 않는다. 그런데 증거는 매핑 파일에 그대로 남는다 — ⑩ 문서가 적어 둔 형태가
-// 바로 이것이다:
+// LiteRT 도 같은 부류다(NM-628). `liblitert_jni.so` 가 `LiteRtException` · `TensorBufferRequirements` ·
+// `TensorType`(+`ElementType` · `Layout`)을 이름으로 찾는다(문자열로 확인 — 2026-10-19). AAR 에 딸린 R8 규칙은
+// `org.tensorflow.lite` 애노테이션만 지켜서 **이 클래스들은 막아 주지 않는다.** `proguard-rules.pro` 의
+// `-keep class com.google.ai.edge.litert.** { *; }` 가 막는다.
 //
-//     살아 있을 때:  ai.onnxruntime.TensorInfo -> ai.onnxruntime.TensorInfo:
-//     깨졌을 때:     ai.onnxruntime.TensorInfo -> at4:
+// ⚠️ **그 keep 이 사라지면 빌드는 멀쩡히 성공하고 사용자만 죽는다.** 그런데 증거는 매핑 파일에 남는다:
+//
+//     살아 있을 때:  com.google.ai.edge.litert.TensorType -> com.google.ai.edge.litert.TensorType:
+//     깨졌을 때:     com.google.ai.edge.litert.TensorType -> at4:
 //
 // 그래서 매핑을 읽어 대조한다. 에뮬레이터로 실제 추론을 돌려 보는 길도 있었지만, 그러자면
 // 계측 테스트를 minify 된 앱에 붙여야 하고 그러면 테스트 하네스가 요구하는 것들을
@@ -212,11 +235,11 @@ dependencies {
 androidComponents {
     // JNI 가 이름으로 찾는 것들. 하나라도 리네임되면 그 타입이 나오는 순간 프로세스가 죽는다.
     val jniLookedUp = listOf(
-        "ai.onnxruntime.TensorInfo",
-        "ai.onnxruntime.OnnxTensor",
-        "ai.onnxruntime.MapInfo",
-        "ai.onnxruntime.SequenceInfo",
-        "ai.onnxruntime.OnnxJavaType",
+        "com.google.ai.edge.litert.LiteRtException",
+        "com.google.ai.edge.litert.TensorBufferRequirements",
+        "com.google.ai.edge.litert.TensorType",
+        "com.google.ai.edge.litert.TensorType${'$'}ElementType",
+        "com.google.ai.edge.litert.TensorType${'$'}Layout",
         // OpenCV 도 같은 부류다(NM-485). 네이티브가 이름으로 찾는 값 타입들이다.
         "org.opencv.core.Mat",
         "org.opencv.core.Size",
@@ -226,7 +249,7 @@ androidComponents {
 
     onVariants(selector().withBuildType("release")) { variant ->
         val mapping = variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE)
-        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}OnnxKeep") {
+        val verify = tasks.register("verify${variant.name.replaceFirstChar(Char::uppercase)}JniKeep") {
             inputs.file(mapping).withPropertyName("mapping")
             doLast {
                 val file = mapping.get().asFile
@@ -237,7 +260,7 @@ androidComponents {
                 file.useLines { lines ->
                     for (line in lines) {
                         // 클래스 줄만 본다 — 멤버 줄은 들여쓰기가 있다.
-                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가
+                        // ⚠️ 접두사를 박아 두지 않는다. `"ai.onnxruntime."` 로 하드코딩했다가(ORT 시절)
                         // OpenCV 를 목록에 더했을 때 그 줄을 통째로 건너뛰어, 멀쩡히 있는
                         // 클래스를 「매핑에서 찾지 못했다」로 잘못 읽었다(NM-485).
                         if (line.isEmpty() || line[0].isWhitespace() || line[0] == '#') continue
@@ -256,7 +279,7 @@ androidComponents {
                     R8 이 네이티브가 이름으로 찾는 클래스를 바꿨습니다 — 릴리스에서 알약 식별이 죽습니다.
                     ${renamed.joinToString("\n")}
 
-                    `proguard-rules.pro` 의 `-keep class ai.onnxruntime.**` · `org.opencv.**` 를 확인하십시오.
+                    `proguard-rules.pro` 의 `-keep class com.google.ai.edge.litert.**` · `org.opencv.**` 를 확인하십시오.
                     사정은 docs/KNOWN-ISSUES.md ⑩.
                     """.trimIndent()
                 }
@@ -280,7 +303,7 @@ androidComponents {
 
 // 릴리스 산출물에 모델이 빠지거나 **정본이 아닌 것이 들어가지 않게** 막는다.
 //
-// 모델은 저장소에 넣지 않으므로(.gitignore 의 *.onnx) 파일이 없어도 빌드는 그냥 성공한다 —
+// 모델은 저장소에 넣지 않으므로(.gitignore 의 *.tflite) 파일이 없어도 빌드는 그냥 성공한다 —
 // 그 AAB 를 올리면 사용자는 식별을 시도할 때마다 '분석 실패'만 본다.
 // 조용히 깨진 릴리스보다 큰 소리로 실패하는 편이 낫다.
 //

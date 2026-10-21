@@ -1,13 +1,14 @@
 package app.nursemate.core.vision.mark
 
-import ai.onnxruntime.OnnxTensor
-import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtSession
 import android.graphics.Bitmap
-import app.nursemate.core.vision.OrtBackend
+import app.nursemate.core.vision.GpuPrecision
+import app.nursemate.core.vision.LiteRtModel
+import app.nursemate.core.vision.Placement
+import app.nursemate.core.vision.RunPlan
+import app.nursemate.core.vision.VisionBackend
+import app.nursemate.core.vision.nchwToNhwc
 import java.io.Closeable
 import java.io.File
-import java.nio.FloatBuffer
 import kotlin.math.exp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -43,22 +44,28 @@ import org.opencv.core.Mat
  *
  * ## L2 정규화를 다시 하지 않는다
  * 모델이 이미 한 값이다(`torch.nn.functional.normalize`). 앱에서 또 걸면 값이 달라진다.
+ *
+ * ## LiteRT · M4 (NM-628)
+ * 파일은 `mark_m4_f16w.tflite`(가중치 fp16 저장). 입력이 **NHWC** `[8,224,224,3]` 이라 전처리가 쓴 NCHW 를
+ * 넣기 직전에 돌린다. M4 는 Xclipse(Exynos GPU)가 틀리는 7×7 depthwise 를 피한 판이고, 공식 세트 564면에서
+ * 유무 · 종 100% · 임베딩 cos 최소 1.0000 이라 **임베딩 공간이 같다** — 서버에 보내는 [MODEL_VERSION] 은 그대로다.
+ *
+ * 실행은 GPU **FP32**(ML 계약). 8 Elite 에서 FP16 이면 회전 13~19% 의 임베딩이 실행마다 틀어졌다(cos 0.20~0.46).
  */
-class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
+class MarkReader(modelFile: File) : Closeable {
 
     init {
         // 네이티브 로딩은 여기서 한 번만. 앱 시작에 걸면 마크를 쓰지 않는 사용자도 비용을 낸다.
         check(OpenCVLoader.initLocal()) { "OpenCV 네이티브를 초기화하지 못했습니다" }
     }
 
-    private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
+    private val model = LiteRtModel.open(modelFile, PLAN)
 
-    private val session: OrtSession = OrtBackend.openSession(env, modelFile) {
-        setIntraOpNumThreads(threads)
-    }
+    /** 지금 GPU 로 도는가 — 대체됐으면 false. 벤치 · 대조 테스트가 요청값이 아니라 실제 경로를 남기려고 본다. */
+    internal val onGpu: Boolean get() = model.onGpu
 
-    /** 8장 × 3채널 × 224 × 224 = 4.8MB. 매 호출 재할당하지 않는다. */
     private val input = FloatArray(MarkPreprocess.BATCH)
+    private val nhwc = FloatArray(MarkPreprocess.BATCH)
 
     /** [input] 을 공유하므로 동시 호출을 직렬화한다. */
     private val lock = Mutex()
@@ -117,24 +124,17 @@ class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
 
     /** @return `logits` [8][104] 와 `embedding` 을 8×768 로 평탄화한 것(회전이 바깥). */
     private fun runSession(): Pair<Array<FloatArray>, FloatArray> {
-        val shape = longArrayOf(
-            MarkPreprocess.ROTATIONS.toLong(),
-            3,
-            MarkPreprocess.SIDE.toLong(),
-            MarkPreprocess.SIDE.toLong()
-        )
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { tensor ->
-            session.run(mapOf(INPUT_NAME to tensor)).use { result ->
-                @Suppress("UNCHECKED_CAST")
-                val logits = result[0].value as Array<FloatArray>
-
-                @Suppress("UNCHECKED_CAST")
-                val rows = result[1].value as Array<FloatArray>
-                val flat = FloatArray(MarkPreprocess.ROTATIONS * EMBEDDING_DIM)
-                for (i in rows.indices) rows[i].copyInto(flat, i * EMBEDDING_DIM)
-                return logits to flat
-            }
+        val n = MarkPreprocess.ROTATIONS
+        val side = MarkPreprocess.SIDE
+        val outputs = VisionBackend.whileOnGpu(model.name, model.onGpu) {
+            model.run(nchwToNhwc(input, nhwc, n = n, c = 3, plane = side * side))
         }
+        // 출력은 크기로 가른다 — 8×104 와 8×768 이라 겹치지 않는다.
+        val flat = outputs.first { it.size != n * EMBEDDING_DIM }
+        val embedding = outputs.first { it.size == n * EMBEDDING_DIM }
+        val classes = flat.size / n
+        val logits = Array(n) { flat.copyOfRange(it * classes, (it + 1) * classes) }
+        return logits to embedding
     }
 
     /**
@@ -156,8 +156,14 @@ class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
     }
 
     override fun close() {
-        session.close()
+        model.close()
     }
+
+    /**
+     * 돌고 있는 판독이 끝난 뒤 닫는다 — 잠금을 잡고 닫으므로 네이티브 실행 한가운데서 모델이 닫히지 않는다.
+     * 화면을 떠나 코루틴이 취소돼도 블로킹 실행은 멈추지 않는데, 그 중에 닫으면 SIGSEGV 고 GPU 크래시로 잘못 판정된다.
+     */
+    suspend fun closeWhenIdle() = lock.withLock { close() }
 
     /**
      * 판독 결과.
@@ -201,11 +207,11 @@ class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
     }
 
     companion object {
-        /** 각인과 같은 이유로 4다 — big.LITTLE 에서 6·8은 오히려 느리다(NM-485). */
-        const val DEFAULT_THREADS = 4
+        /** assets · DVC 에서 이 이름으로 온다. 가중치 fp16 저장 · 57MB. 목록과 해시는 `app/models.md5`. */
+        const val MODEL_FILE_NAME = "mark_m4_f16w.tflite"
 
-        /** assets·DVC 에서 이 이름으로 온다. **fp16 판이다** — 53MB 이고 fp32(106MB)와 답이 같다(NM-526). */
-        const val MODEL_FILE_NAME = "mark_species_fp16.onnx"
+        /** ML 실행 정밀도 계약 — GPU FP32. 검출과 같이 GPU+CPU 로 연다(ML 벤치가 그렇게 쟀다 · `PillDetector.PLAN`). */
+        private val PLAN = RunPlan(Placement.GPU_CPU, GpuPrecision.FP32)
 
         /**
          * 임베딩을 뽑은 모델 버전 — **ML 레포 모델 폴더 이름 그대로**다.
@@ -216,13 +222,14 @@ class MarkReader(modelFile: File, threads: Int = DEFAULT_THREADS) : Closeable {
          *
          * ⚠️ **모델 파일을 바꾸면 이 값도 같이 바꾼다.** 파일 이름에는 날짜가 없어 둘이
          * 조용히 갈릴 수 있다 — 갈리면 서버가 엉뚱한 카탈로그와 견준다.
+         *
+         * LiteRT M4(NM-628)로 파일은 바뀌었지만 **값은 그대로 둔다.** 같은 학습 가중치를 옮긴 것이고 공식
+         * 세트 564면 임베딩 cos 최소 1.0000 이라 카탈로그와 같은 공간이다. 재학습이면 그때 바꾼다.
          */
         const val MODEL_VERSION = "20260925-convnext-species"
 
-        /** 임베딩 차원. fp16 판은 그래프에 768 로 박혀 있다(fp32 판은 동적이다). */
+        /** 임베딩 차원. */
         const val EMBEDDING_DIM = 768
-
-        private const val INPUT_NAME = "image"
 
         /** 클래스 0 = 「마크 없음」. `species_map.json` 의 `none`. */
         private const val NONE_CLASS = 0

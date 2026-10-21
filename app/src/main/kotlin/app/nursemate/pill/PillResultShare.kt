@@ -35,9 +35,18 @@ import java.util.Locale
 */
 
 /** 텍스트를 클립보드에 넣는다. 화면은 그대로 둔다(spec §최종 결과 — "화면 유지"). */
-fun Context.copyPillResult(pills: List<PillCandidate>) {
+fun Context.copyPillResult(pills: List<PillCandidate>) = copyPillShare(pills.map { it.toSharedPill() }, LocalDate.now())
+
+/** PDF 로 만들어 공유 시트에 넘긴다. */
+fun Context.sharePillResultPdf(pills: List<PillCandidate>) =
+    sharePillPdf(pills.map { it.toSharedPill() }, LocalDate.now())
+
+/**
+ * 텍스트를 클립보드에 넣는다. [date] 는 문서에 적는 식별 날짜 — 식별 결과는 오늘, 식별 기록은 그 기록의 날이다.
+ */
+fun Context.copyPillShare(pills: List<SharedPill>, date: LocalDate) {
     getSystemService<ClipboardManager>()
-        ?.setPrimaryClip(ClipData.newPlainText(SHARE_TITLE, pills.toShareText()))
+        ?.setPrimaryClip(ClipData.newPlainText(SHARE_TITLE, pills.toShareText(date)))
 
     // 안드로이드 13 부터는 시스템이 복사 알림을 대신 띄운다 — 그 아래에서만 낸다.
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -45,9 +54,9 @@ fun Context.copyPillResult(pills: List<PillCandidate>) {
     }
 }
 
-/** PDF 로 만들어 공유 시트에 넘긴다. */
-fun Context.sharePillResultPdf(pills: List<PillCandidate>) {
-    val uri = runCatching { writePdf(pills.toShareText()) }
+/** PDF 로 만들어 공유 시트에 넘긴다. [date] 는 [copyPillShare] 와 같다. */
+fun Context.sharePillPdf(pills: List<SharedPill>, date: LocalDate) {
+    val uri = runCatching { writePdf(pills.toShareText(date)) }
         .onFailure { Log.w(TAG, "PDF 생성 실패", it) }
         .getOrNull()
 
@@ -75,7 +84,7 @@ fun Context.sharePillResultPdf(pills: List<PillCandidate>) {
  * App Store 심사 대응으로 문구를 확정하며 "정본은 제출본과 일치시킨다"고 못박았다.
  * 밖으로 나가는 문서라 오히려 더 지켜야 하는 자리다.
  */
-internal fun List<PillCandidate>.toShareText(today: LocalDate = LocalDate.now()): String {
+internal fun List<SharedPill>.toShareText(today: LocalDate = LocalDate.now()): String {
     // ⚠️ buildString 안에서는 `size`·`forEachIndexed` 가 StringBuilder 쪽으로 붙는다
     //    (CharSequence 라서 조용히 컴파일된다). 목록을 밖에서 잡아 둔다.
     val pills = this
@@ -96,7 +105,7 @@ internal fun List<PillCandidate>.toShareText(today: LocalDate = LocalDate.now())
         }
 
         appendLine(DIVIDER)
-        append(DISCLAIMER)
+        append(PILL_DISCLAIMER)
     }
 }
 
@@ -152,11 +161,6 @@ private const val SHARE_TITLE = "알약 식별 결과"
 private const val PDF_NAME = "널스메이트_알약식별결과.pdf"
 private const val PDF_MIME = "application/pdf"
 private const val DIVIDER = "────────────────"
-
-/** NM-380 확정 문구. 화면·공유물 모두 이 한 문장을 쓴다. */
-private const val DISCLAIMER =
-    "널스메이트의 알약 식별 결과는 참고용 보조 정보입니다. " +
-        "투약 전 반드시 처방 내용과 약품 라벨을 확인하시고, 최종 판단은 의료진의 확인을 따라 주세요."
 
 private val DateFormat = DateTimeFormatter.ofPattern("yyyy년 M월 d일", Locale.KOREAN)
 

@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,9 +25,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import app.nursemate.auth.LoginScreen
 import app.nursemate.auth.LoginViewModel
 import app.nursemate.consent.ConsentScreen
@@ -41,15 +44,21 @@ import app.nursemate.core.designsystem.NmTypography
 import app.nursemate.core.model.ConsentStatus
 import app.nursemate.core.model.Usage
 import app.nursemate.core.model.User
+import app.nursemate.history.PillHistoryDetailRoute
+import app.nursemate.history.PillHistoryDetailViewModel
+import app.nursemate.history.PillTabScreen
+import app.nursemate.history.PillTabViewModel
 import app.nursemate.home.HomeScreen
 import app.nursemate.home.HomeViewModel
 import app.nursemate.home.NmTab
 import app.nursemate.pill.PillLimitAlert
+import app.nursemate.review.rememberReviewRequester
 import app.nursemate.settings.SettingsConfirm
 import app.nursemate.settings.SettingsConfirmDialog
 import app.nursemate.settings.SettingsScreen
 import app.nursemate.settings.SettingsViewModel
 import app.nursemate.timer.TimerListRoute
+import java.time.LocalDate
 
 /**
  * 앱 셸.
@@ -148,7 +157,6 @@ private fun NmNavHost(
     // 이 이미 UsageHolder 를 감싼 얇은 창이라 새 클래스를 만들지 않고 이 레벨로 끌어올린다.
     val homeViewModel: HomeViewModel = hiltViewModel()
     val homeUsage by homeViewModel.usage.collectAsStateWithLifecycle()
-    val activeTimerCount by homeViewModel.activeTimerCount.collectAsStateWithLifecycle()
     // 어느 탭에 있든 최신값을 본다 — Home 화면을 아직 안 들렀으면 usage 가 null 인 채로
     // 게이트를 통과시켜 버릴 수 있다(§한도 도달 플로우: 모르면 막지 않는다는 원칙과는 별개로,
     // 알 수 있으면 최대한 안다).
@@ -195,6 +203,19 @@ private fun NmNavHost(
         requested = openTimerTab,
         onHandled = onTimerTabOpened
     )
+
+    // 알약 탭 안의 화면(촬영 제외)에 두르는 탭 바 — 알약 플로우 · 기록 상세가 함께 쓴다(spec §화면 공통).
+    val pillTabbed: PillTabbed = { content ->
+        TabRoot(
+            navController = navController,
+            tab = NmTab.Pill,
+            usage = homeUsage,
+            pillTabLimitReached = false,
+            onDismissPillTabLimit = {},
+            background = NmTheme.semanticColors.surface,
+            content = content
+        )
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(NmRoute.LOGIN) {
@@ -243,49 +264,140 @@ private fun NmNavHost(
         }
 
         composable(NmRoute.HOME) {
-            // 한도에 걸렸으면 촬영으로 보내지 않고 안내만 한다(spec §한도 도달 플로우).
-            // 카드 탭 전용 — 하단 탭바 쪽은 pillTabLimitReached(TabRoot 공통 게이트)가 맡는다.
-            var cardLimitReached by remember { mutableStateOf(false) }
+            val timers by homeViewModel.timers.collectAsStateWithLifecycle()
+            val recent by homeViewModel.recent.collectAsStateWithLifecycle()
+            // 홈이 보일 때마다 최근 식별을 다시 받는다 — 저장 · 삭제하고 돌아왔을 때 맞는 값이어야 한다(spec home).
+            LifecycleResumeEffect(Unit) {
+                homeViewModel.refreshRecent()
+                onPauseOrDispose {}
+            }
+            // 시각은 State 째 넘겨 타이머 카드 안에서만 읽힌다 — 여기서 값을 읽으면 1초마다 탭 루트 전체가
+            // 다시 그려진다. 처음값은 지금 시각이다(돌아왔을 때 옛 시각으로 한 장 그리지 않게).
+            val now = homeViewModel.now.collectAsStateWithLifecycle(initialValue = System.currentTimeMillis())
 
             TabRoot(
                 navController = navController,
                 tab = NmTab.Home,
                 usage = homeUsage,
-                blocked = homeViewModel::blocked,
                 pillTabLimitReached = pillTabLimitReached,
-                onPillTabLimitReached = { pillTabLimitReached = true },
                 onDismissPillTabLimit = { pillTabLimitReached = false },
-                overlay = if (cardLimitReached) {
-                    { PillLimitAlert(usage = homeUsage, onConfirm = { cardLimitReached = false }) }
-                } else {
-                    null
-                }
+                background = NmTheme.semanticColors.surface
             ) {
                 HomeScreen(
                     usage = homeUsage,
-                    activeTimerCount = activeTimerCount,
-                    onPillClick = {
-                        if (homeViewModel.blocked()) cardLimitReached = true else navController.switchTab(NmTab.Pill)
+                    timers = timers,
+                    now = { now.value },
+                    recent = recent,
+                    // 곧장 촬영으로 — 알약 탭 스택 위에 올린다(촬영 · 결과 화면이 알약 탭 아래에 있다).
+                    // 0회면 버튼이 비활성이라 여기 오지 않는다(spec home — 팝업 없음).
+                    onTakePhoto = { navController.startCaptureFromHome() },
+                    // 카드의 나머지는 알약 탭(기록 목록) — 한도와 상관없이 간다(spec home §누르는 곳).
+                    onPillCard = { navController.switchTab(NmTab.Pill) },
+                    onNewTimer = {
+                        navController.switchTab(NmTab.Timer)
+                        // 요청을 **타이머 화면 자신의 항목**에 싣는다. 이동이 안 됐으면 항목이 없어 아무 일도
+                        // 없다 — 전역 플래그로 두면 남아 있다가 나중에 타이머 탭을 열 때 시트가 저절로 뜬다.
+                        runCatching { navController.getBackStackEntry(NmRoute.TIMER) }
+                            .getOrNull()?.savedStateHandle?.set(OPEN_PRESET_SHEET, true)
                     },
-                    onTimerClick = { navController.switchTab(NmTab.Timer) },
-                    onActiveTimerClick = { navController.switchTab(NmTab.Timer) }
+                    onTimerCard = { navController.switchTab(NmTab.Timer) },
+                    // 그 기록의 상세로 — 상세에서 뒤로는 홈이다(spec §홈 최근 식별 카드).
+                    onRecent = {
+                        navController.switchTab(NmTab.Pill)
+                        navController.navigate(
+                            NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount, fromHome = true)
+                        )
+                    }
                 )
             }
         }
 
-        pillNavGraph(navController)
+        pillNavGraph(navController, tabbed = pillTabbed) {
+            val pillTab: PillTabViewModel = hiltViewModel()
+            val listState by pillTab.state.collectAsStateWithLifecycle()
+            val tabUsage by pillTab.usage.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(Unit) {
+                pillTab.refreshUsage()
+                onPauseOrDispose {}
+            }
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Pill,
+                usage = homeUsage,
+                pillTabLimitReached = pillTabLimitReached,
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface
+            ) {
+                PillTabScreen(
+                    usage = tabUsage,
+                    state = listState,
+                    today = LocalDate.now(),
+                    // 촬영 버튼은 비활성으로 두지 않는다 — 0회면 팝업으로 답한다(spec §게이트 위치).
+                    onCapture = {
+                        if (homeViewModel.blocked()) {
+                            pillTabLimitReached = true
+                        } else {
+                            navController.navigate(
+                                NmRoute.pillCapture(fromHome = false)
+                            )
+                        }
+                    },
+                    onOpen = {
+                        navController.navigate(
+                            NmRoute.pillHistory(it.historyId, it.identifiedAt, it.pillCount, fromHome = false)
+                        )
+                    },
+                    onRetry = pillTab::reload,
+                    onLoadMore = pillTab::loadMore
+                )
+            }
+        }
 
-        composable(NmRoute.TIMER) {
+        composable(
+            route = NmRoute.PILL_HISTORY,
+            arguments = listOf(
+                navArgument(PillHistoryDetailViewModel.ARG_HISTORY_ID) { type = NavType.StringType },
+                navArgument("at") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("count") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                },
+                navArgument("from") {
+                    type = NavType.StringType
+                    defaultValue = NmRoute.FROM_PILL_TAB
+                }
+            )
+        ) { entry ->
+            PillHistoryDetailRoute(
+                navController = navController,
+                identifiedAt = entry.arguments?.getString("at").orEmpty(),
+                pillCount = entry.arguments?.getInt("count") ?: 1,
+                fromHome = entry.cameFromHome(),
+                tabbed = pillTabbed
+            )
+        }
+
+        composable(NmRoute.TIMER) { entry ->
+            val openPresetSheet by entry.savedStateHandle.getStateFlow(OPEN_PRESET_SHEET, false)
+                .collectAsStateWithLifecycle()
             TabRoot(
                 navController = navController,
                 tab = NmTab.Timer,
                 usage = homeUsage,
-                blocked = homeViewModel::blocked,
                 pillTabLimitReached = pillTabLimitReached,
-                onPillTabLimitReached = { pillTabLimitReached = true },
-                onDismissPillTabLimit = { pillTabLimitReached = false }
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                // V2.1.0 화면 바탕은 흰색이다 — 탭 바 뒤까지 같은 색이어야 경계가 생기지 않는다.
+                background = NmTheme.semanticColors.surface
             ) {
-                TimerListRoute(startPresetId = startPresetId, onStartPresetHandled = onStartPresetHandled)
+                TimerListRoute(
+                    startPresetId = startPresetId,
+                    onStartPresetHandled = onStartPresetHandled,
+                    openPresetSheet = openPresetSheet,
+                    onPresetSheetOpened = { entry.savedStateHandle[OPEN_PRESET_SHEET] = false }
+                )
             }
         }
 
@@ -301,10 +413,9 @@ private fun NmNavHost(
                 navController = navController,
                 tab = NmTab.Settings,
                 usage = homeUsage,
-                blocked = homeViewModel::blocked,
                 pillTabLimitReached = pillTabLimitReached,
-                onPillTabLimitReached = { pillTabLimitReached = true },
                 onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface,
                 overlay = confirming?.let { pending ->
                     {
                         SettingsConfirmDialog(
@@ -334,22 +445,32 @@ private fun NmNavHost(
         }
 
         // 설정 / 약관 및 동의 — 선택 동의 철회·재동의(NM-548).
-        // 탭바를 두르지 않는다(정본에 없다) — 설정 탭 위로 밀고 들어왔다가 뒤로가기로 돌아간다.
+        // 설정 탭 안의 화면이라 `설정` 을 고른 탭 바를 두른다(V2.1.0, NM-616). `저장` 은 탭 바 위에 붙는다.
         composable(NmRoute.CONSENT_SETTINGS) {
             val viewModel: ConsentSettingsViewModel = hiltViewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val context = LocalContext.current
             LaunchedEffect(Unit) { viewModel.start(consents) }
-            ConsentSettingsScreen(
-                state = state,
-                onBack = { navController.popBackStack() },
-                onToggle = viewModel::toggle,
-                // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
-                // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
-                onSave = { viewModel.save(onSaved = onUserUpdated) },
-                onOpenPolicy = { context.openPolicy(it.policyUrl) },
-                onRetry = { viewModel.load() }
-            )
+            TabRoot(
+                navController = navController,
+                tab = NmTab.Settings,
+                usage = homeUsage,
+                pillTabLimitReached = pillTabLimitReached,
+                onDismissPillTabLimit = { pillTabLimitReached = false },
+                background = NmTheme.semanticColors.surface,
+                onSelect = navController::switchTabFromSettingsChild
+            ) {
+                ConsentSettingsScreen(
+                    state = state,
+                    onBack = { navController.popBackStack() },
+                    onToggle = viewModel::toggle,
+                    // 저장 응답의 회원 정보를 셸로 올린다. 철회했으면 그 순간 측정 SDK 가 멈춘다
+                    // (AppSessionViewModel 의 overseasConsented 흐름, NM-543).
+                    onSave = { viewModel.save(onSaved = onUserUpdated) },
+                    onOpenPolicy = { context.openPolicy(it.policyUrl) },
+                    onRetry = { viewModel.load() }
+                )
+            }
         }
     }
 }
@@ -395,34 +516,34 @@ private fun NavController.replaceWith(route: String) {
 /**
  * 탭바를 두르는 루트 화면. 전체화면 플로우(알약 촬영 등)는 이걸 쓰지 않는다.
  *
- * ## 알약 탭 게이트가 여기 있는 이유
- * spec §게이트 위치: "홈 '알약 식별' 카드**·탭** … 탭은 항상 가능하고, 0회일 때 탭하면
- * 팝업으로 응답한다." 카드는 화면마다 다르지만 **하단 탭바는 홈·타이머·설정 셋이 공유하는
- * 한 자리**라, 게이트도 이 공통 지점 하나에 둔다 — 화면마다 따로 걸면 빠뜨리는 곳이 생긴다.
+ * ## 탭 바에는 한도 게이트가 없다
+ * 알약 탭이 **기록 목록**이 되면서(NM-555) 탭을 누르는 것만으로는 식별을 시작하지 않는다. 한도
+ * 게이트는 알약 탭의 **촬영 버튼**이 맡는다 — 누르는 것은 늘 가능하고 0회면 팝업으로 답한다
+ * (spec §게이트 위치). 그 팝업을 탭 바까지 덮어 그리려고 [pillTabLimitReached] 를 여기서 받는다.
  *
  * 호출부가 이미 자기 사정의 [overlay](확인 모달 등)를 쓰고 있을 수 있어 두 알럿이 동시에
- * 필요할 일이 없다는 전제로 [pillTabLimitReached] 를 우선 그린다 — 한도 알럿이 뜬 상태에서
- * 탈퇴 확인 같은 걸 새로 열 수 있는 조작 자체가 없다.
+ * 필요할 일이 없다는 전제로 [pillTabLimitReached] 를 우선 그린다.
  */
 @Composable
 private fun TabRoot(
     navController: NavController,
     tab: NmTab,
     usage: Usage?,
-    blocked: () -> Boolean,
     pillTabLimitReached: Boolean,
-    onPillTabLimitReached: () -> Unit,
     onDismissPillTabLimit: () -> Unit,
     overlay: (@Composable () -> Unit)? = null,
+    background: Color = NmTheme.semanticColors.bgApp,
+    onSelect: (NmTab) -> Unit = { target -> navController.switchTab(target) },
     content: @Composable () -> Unit
 ) {
+    // 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+    val review = rememberReviewRequester()
     NmTabScaffold(
         selected = tab,
-        onSelect = { target ->
-            if (target == NmTab.Pill && blocked()) onPillTabLimitReached() else navController.switchTab(target)
-        },
+        background = background,
+        onSelect = onSelect,
         overlay = if (pillTabLimitReached) {
-            { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit) }
+            { PillLimitAlert(usage = usage, onConfirm = onDismissPillTabLimit, onShown = review::limitShown) }
         } else {
             overlay
         },
@@ -442,6 +563,17 @@ internal fun NavController.switchTab(tab: NmTab) {
         restoreState = true
     }
 }
+
+/**
+ * 설정 탭 안 화면(약관 및 동의)의 탭 전환. 지금 탭(설정)을 다시 누르면 설정 첫 화면으로 돌아간다 —
+ * [switchTab] 은 이 화면까지 저장해 둔 스택을 그대로 되살려 아무 일도 일어나지 않는다.
+ */
+private fun NavController.switchTabFromSettingsChild(target: NmTab) {
+    if (target == NmTab.Settings) popBackStack(NmRoute.SETTINGS, inclusive = false) else switchTab(target)
+}
+
+/** 홈 `새 타이머` → 타이머 탭 프리셋 시트 요청. 타이머 항목의 savedStateHandle 키다. */
+private const val OPEN_PRESET_SHEET = "openPresetSheet"
 
 internal val NmTab.route: String
     get() = when (this) {

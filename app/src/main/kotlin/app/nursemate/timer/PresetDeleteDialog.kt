@@ -17,18 +17,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.nursemate.core.designsystem.NmColor
+import app.nursemate.core.designsystem.NmRadius
 import app.nursemate.core.designsystem.NmTheme
-import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmV2Type
 
 /**
  * 프리셋 삭제 확인 — 정본 `타이머 / C3 프리셋 삭제 확인`.
  *
  * 되돌릴 수 없어 한 번 묻는다. 프리셋은 매일 쓰는 것이라 실수로 지우면 다시 만들어야 한다.
+ *
+ * ⚠️ V2.1.0 정본도 이 모달만은 공용 `Modal`(유리 판 · 볼록 버튼)이 아니라 흰 판 · 평면 버튼으로 그렸다.
+ *    정본을 따른다 — 공용 모달로 맞출지는 디자인 결정이다(NM-614 PR).
  */
 @Composable
 fun PresetDeleteDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
@@ -82,7 +85,7 @@ private fun DialogButton(
             .height(ButtonHeight)
             .clip(ButtonShape)
             .background(background, ButtonShape)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -92,9 +95,9 @@ private fun DialogButton(
 
 // 정본 수치 — `C3 프리셋 삭제 확인`
 private val DialogWidth = 300.dp
-private val DialogShape = RoundedCornerShape(16.dp)
-private val ButtonShape = RoundedCornerShape(12.dp)
+private val DialogShape = RoundedCornerShape(NmRadius.lg)
+private val ButtonShape = RoundedCornerShape(NmRadius.md)
 private val ButtonHeight = 48.dp
 
-private val TitleStyle = NmTypography.body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold)
-private val ButtonStyle = NmTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+private val TitleStyle = NmV2Type.sectionTitle
+private val ButtonStyle = NmV2Type.textButton

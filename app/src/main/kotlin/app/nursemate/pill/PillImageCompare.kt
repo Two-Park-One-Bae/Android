@@ -33,10 +33,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.nursemate.R
 import app.nursemate.core.designsystem.NmColor
 import app.nursemate.core.designsystem.NmTheme
 import app.nursemate.core.designsystem.NmTypography
+import app.nursemate.core.designsystem.v2.NmSymbols
 import app.nursemate.core.model.PillCandidate
 import coil3.compose.SubcomposeAsyncImage
 
@@ -153,7 +153,7 @@ private fun ImagePlaceholder(text: String?) {
     ) {
         if (text == null) return@Column
         Icon(
-            painter = painterResource(R.drawable.nm_ic_image),
+            painter = painterResource(NmSymbols.Image),
             contentDescription = null,
             tint = colors.textTertiary,
             modifier = Modifier.size(42.dp)
@@ -173,7 +173,7 @@ private fun CloseButton(onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            painter = painterResource(R.drawable.nm_ic_close),
+            painter = painterResource(NmSymbols.Close),
             contentDescription = "닫기",
             tint = NmTheme.semanticColors.textPrimary,
             modifier = Modifier.size(26.dp)

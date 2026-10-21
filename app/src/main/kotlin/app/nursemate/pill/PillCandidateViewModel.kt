@@ -13,7 +13,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,7 +57,7 @@ data class CandidateUiState(
  * **이전 요청을 취소**하고 짧게 기다렸다 보낸다 — 안 그러면 늦게 도착한 옛 응답이
  * 최신 결과를 덮어쓴다.
  *
- * 후보 조회는 Gemini 를 쓰지 않아 **식별 횟수를 깎지 않는다.** 자주 불러도 된다.
+ * 후보 조회는 식별 횟수 제한 대상이 아니라 **식별 횟수를 깎지 않는다.** 자주 불러도 된다(속성 추출만 깎는다).
  */
 @HiltViewModel
 class PillCandidateViewModel @Inject constructor(private val pillRepository: PillRepository) : ViewModel() {
@@ -65,6 +67,14 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
 
     private var searchJob: Job? = null
     private var moreJob: Job? = null
+
+    /**
+     * **응답이 와서 화면 목록이 된** 조회 요청 — 취소 · 실패한 것은 빠지고, 토큰 없이 다시 보냈으면 다시 보낸 쪽이다. 학습
+     * 라벨이 알약마다 마지막 것을 들고 있다가 「선택」 때 `userInput` 으로 보낸다(NM-571). 이 화면은 어느 알약인지 모르므로
+     * 배선이 키를 붙여 받는다.
+     */
+    private val _answered = MutableSharedFlow<PillCandidatesRequest>(extraBufferCapacity = ANSWERED_BUFFER)
+    val answered = _answered.asSharedFlow()
 
     fun search(conditions: PillConditions?, faces: FaceInputs = FaceInputs()) {
         searchJob?.cancel()
@@ -87,7 +97,10 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
             delay(DEBOUNCE_MS)
 
             pillRepository.candidates(request)
-                .onSuccess { result ->
+                .onSuccess { answer ->
+                    val result = answer.result
+                    // 화면에 이 목록이 뜬다 — 이 요청이 사용자가 고를 후보를 낸 요청이다(라벨의 userInput).
+                    _answered.tryEmit(answer.request)
                     Log.i(TAG, "후보 ${result.ids.size}개 (상세 ${result.candidates.size}) 잘림=${result.truncated}")
                     _state.value = CandidateUiState(
                         candidates = result.candidates,
@@ -168,6 +181,7 @@ class PillCandidateViewModel @Inject constructor(private val pillRepository: Pil
          */
         const val PAGE_SIZE = 50
         const val DEBOUNCE_MS = 250L
+        const val ANSWERED_BUFFER = 8
     }
 }
 
