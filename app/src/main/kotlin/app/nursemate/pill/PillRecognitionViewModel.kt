@@ -24,6 +24,8 @@ import java.io.ByteArrayOutputStream
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -77,8 +79,11 @@ class PillRecognitionViewModel @Inject constructor(
     /** 앱 전체가 공유하는 값. 미리보기의 "오늘 남은 횟수"가 이걸 본다. */
     val usage = usageHolder.usage
 
-    /** 검출 · 각인 · 마크 모델 — 플로우 내내 재사용하고 촬영 화면에서 미리 연다([prewarm]). */
+    /** 검출 · 각인 · 마크 모델 — 촬영 화면에서 검출기를 미리 열고, 검출 뒤 각인 · 마크로 번갈아 연다([models]). */
     private val ondevice = PillOnDeviceModels(modelFile)
+
+    /** 지금 도는 각인 · 마크 판독 — 재촬영하면 멈춘다. */
+    private var facesJob: Job? = null
 
     /**
      * 촬영·선택한 사진을 읽는다.
@@ -110,6 +115,8 @@ class PillRecognitionViewModel @Inject constructor(
     fun discardPhoto() {
         // 새 사진은 새 세션이다. 안 비우면 앞 사진의 수정 횟수·체류시간이 그대로 얹힌다.
         analyticsSession.reset()
+        // 앞 사진의 각인 · 마크 판독을 멈춘다 — 안 멈추면 새 사진의 검출기와 번갈아 서로를 닫았다 연다(NM-636).
+        facesJob?.cancel()
         // 비트맵을 recycle()하지 않는다. 화면 전환 애니메이션이 아직 그리고 있을 수 있어
         // 그 순간 recycle하면 "Canvas: trying to use a recycled bitmap"으로 죽는다. GC에 맡긴다.
         _state.update { PillUiState() }
@@ -143,7 +150,7 @@ class PillRecognitionViewModel @Inject constructor(
         // 기록 키는 식별을 시작할 때 정한다 — 저장을 다시 시도해도 같은 키라 기록이 늘지 않는다(spec §식별 기록 — 저장).
         _state.update { it.copy(detection = DetectionPhase.Running, historyId = UUID.randomUUID().toString()) }
         viewModelScope.launch {
-            runCatching { ondevice.detector().detect(bitmap) }
+            runCatching { ondevice.detect(bitmap) }
                 .onSuccess { result ->
                     Log.i(
                         TAG,
@@ -309,12 +316,18 @@ class PillRecognitionViewModel @Inject constructor(
      * 「전체」로 남아 후보를 자르지 않는다.
      */
     private fun readFaces(result: DetectionResult) {
-        viewModelScope.launch {
-            result.pills.forEachIndexed { index, pill ->
-                val id = pillId(index)
-                runCatching { ondevice.faceReader.read(pill.crop) }
-                    .onSuccess { reading -> applyReading(id, reading) }
-                    .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+        facesJob?.cancel()
+        facesJob = viewModelScope.launch {
+            // 탭을 옮겨도 남은 알약까지 다 읽고 내려놓는다(NM-636).
+            ondevice.inUse {
+                result.pills.forEachIndexed { index, pill ->
+                    // runCatching 이 취소까지 삼키므로 알약마다 확인한다 — 재촬영 뒤에도 돌면 새 사진의 검출기를 닫는다.
+                    ensureActive()
+                    val id = pillId(index)
+                    runCatching { ondevice.faceReader.read(pill.crop) }
+                        .onSuccess { reading -> applyReading(id, reading) }
+                        .onFailure { Log.w(TAG, "$id 각인·마크 읽기 실패", it) }
+                }
             }
         }
     }
@@ -345,11 +358,10 @@ class PillRecognitionViewModel @Inject constructor(
     val history = PillHistorySaving(_state, historyRepository, viewModelScope, onSave = labels::completed)
 
     /**
-     * 모델을 **미리 연다** — 촬영 화면에 들어오면 부른다. 사용자가 구도를 잡는 몇 초 동안 GPU 준비를 끝내,
-     * 「이 사진 사용」 뒤 기다림을 없앤다. 앱을 새로 연 뒤 첫 식별이 3초 늦던 것(2026-10-19 실기기, NM-632 체크리스트 3번).
-     * 실패는 삼킨다 — 실제 검출 때 다시 드러난다.
+     * 검출 · 각인 · 마크 모델 묶음 — 배선이 촬영 화면에 들어오면 [PillOnDeviceModels.prewarm] 으로 **미리 열고**(구도를 잡는 몇 초
+     * 동안 GPU 준비를 끝낸다), 플로우 화면마다 [PillOnDeviceModels.hold] 해 마지막 화면이 사라지면 **내려놓는다**(NM-636).
      */
-    fun prewarm() = ondevice.prewarm()
+    internal val models: PillOnDeviceModels get() = ondevice
 
     override fun onCleared() = ondevice.close()
 

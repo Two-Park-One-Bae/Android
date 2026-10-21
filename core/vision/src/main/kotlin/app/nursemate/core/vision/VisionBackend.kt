@@ -1,5 +1,7 @@
 package app.nursemate.core.vision
 
+import java.io.File
+
 /**
  * **어느 모델을 GPU 로 열지**를 바깥에서 정하게 하는 구멍 — NM-574 에서 시작해 NM-628(LiteRT)로 넘어왔다.
  *
@@ -67,7 +69,24 @@ object VisionBackend {
      */
     @Volatile
     var onModelOpened: (modelFileName: String, outcome: OpenOutcome) -> Unit = { _, _ -> }
+
+    /**
+     * GPU 로 연 모델의 번역 결과(이 기기 GPU 용 실행 코드)를 디스크에 남길 자리 — NM-636. null 이면 남기지 않는다
+     * (계측 테스트 · `core:vision` 단독).
+     *
+     * 모델을 GPU 로 열 때마다 LiteRT 가 셰이더를 번역한다(S24 세그 약 3초). 번역 결과를 남겨 두면 다음 실행부터 건너뛴다 —
+     * S24 세그 2.8초 → 0.6초. 앱 프로세스가 죽으면 메모리의 번역은 사라지므로 디스크에 둔다(Google LiteRT GPU 문서의
+     * serialization 권장).
+     */
+    @Volatile
+    var gpuCache: GpuCache? = null
 }
+
+/**
+ * @param dir 앱 전용 폴더(`codeCacheDir` 아래 — 앱을 올리면 시스템이 비운다)
+ * @param salt 키에 덧붙일 값 — 앱 버전 · 기기 빌드. 바뀌면 다른 키라 새로 번역한다(드라이버가 바뀌었을 수 있다)
+ */
+data class GpuCache(val dir: File, val salt: String)
 
 /** 모델이 실제로 어디서 열렸고, CPU 라면 왜인가. 이름(`label`)은 분석 이벤트 값이다 — 바꾸지 않는다. */
 enum class OpenOutcome(val label: String, val onGpu: Boolean) {
