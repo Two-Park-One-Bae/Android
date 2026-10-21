@@ -232,6 +232,7 @@ private fun NavGraphBuilder.preview(navController: NavController, tabbed: PillTa
         val viewModel = entry.pillViewModel(navController)
         val state by viewModel.state.collectAsStateWithLifecycle()
         val usage by viewModel.usage.collectAsStateWithLifecycle()
+        val previewReview = rememberReviewRequester()
         tabbed {
             PillPreviewScreen(
                 state = state,
@@ -254,7 +255,9 @@ private fun NavGraphBuilder.preview(navController: NavController, tabbed: PillTa
                     }
                 },
                 limitReached = state.attributes == AttributePhase.LimitReached,
-                onDismissLimit = viewModel.limit::dismiss
+                onDismissLimit = viewModel.limit::dismiss,
+                // 한도 안내를 본 날은 스토어 리뷰 묶음 1 로 요청하지 않는다(NM-561).
+                onLimitShown = previewReview::limitShown
             )
         }
     }

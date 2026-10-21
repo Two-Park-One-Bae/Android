@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
         // 시작 도중 재생성되면 요청이 사라져, 알람을 눌렀는데 홈에 남는다.
         if (savedInstanceState == null) {
             startPresetId.value = intent.widgetPresetId()
-            intent.forceReviewIfDebug()
+            pendingDebugReview = intent.isDebugReview()
         }
 
         // 시스템 바 뒤까지 그린다. 없으면 상·하단에 회색 띠가 남는다.
@@ -119,6 +119,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { remoteConfig.refresh() }
         // 앱을 연 날로 세고, 앱 밖에서 끝낸 타이머가 있었으면 지금 리뷰를 검사한다(NM-561).
         review.onForeground(this)
+        // 디버그 강제 요청은 앞으로 온 **뒤에** — 그 전에는 창을 띄울 액티비티가 없다.
+        if (pendingDebugReview) {
+            pendingDebugReview = false
+            review.forceForDebug()
+        }
     }
 
     /**
@@ -142,16 +147,18 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.wantsTimerTab()) openTimerTab.value = true
         intent.widgetPresetId()?.let { startPresetId.value = it }
-        intent.forceReviewIfDebug()
+        // 이미 떠 있던 액티비티라 onStart 를 거치지 않을 수 있다 — 앞에 있으면 바로 부른다.
+        if (intent.isDebugReview()) review.forceForDebug()
     }
+
+    /** 콜드 스타트로 받은 디버그 리뷰 요청 — onStart 에서 처리한다. */
+    private var pendingDebugReview = false
 
     /**
      * 디버그 전용 — `adb shell am start -d nursemate-debug://review` 로 조건을 건너뛰고 리뷰를 요청한다(NM-561).
      * 창은 Play 로 설치된 앱에서만 뜨니 사이드로드에서는 로그(`NM561`)로 흐름만 본다.
      */
-    private fun Intent.forceReviewIfDebug() {
-        if (BuildConfig.DEBUG && data?.toString() == DEBUG_REVIEW_URI) review.forceForDebug()
-    }
+    private fun Intent.isDebugReview(): Boolean = BuildConfig.DEBUG && data?.toString() == DEBUG_REVIEW_URI
 }
 
 private const val DEBUG_REVIEW_URI = "nursemate-debug://review"

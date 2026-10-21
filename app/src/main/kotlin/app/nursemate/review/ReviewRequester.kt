@@ -57,15 +57,25 @@ class ReviewRequester @Inject constructor(
         if (foreground?.get() === activity) foreground = null
     }
 
-    /** 타이머가 시작됐다(폰 · 위젯 · 워치). [startedAtMs] 그날로 센다. */
-    fun timerStarted(startedAtMs: Long) {
-        scope.launch { tracker.timerStarted(startedAtMs) }
+    /**
+     * 타이머가 시작됐다(폰 · 위젯 · 워치). [startedAtMs] 그날로 센다. 부른 쪽 코루틴 안에서 쓴다 — 위젯 리시버의
+     * `goAsync` 가 끝나면 프로세스가 거둬질 수 있다.
+     */
+    suspend fun timerStarted(startedAtMs: Long) {
+        tracker.timerStarted(startedAtMs)
     }
 
-    /** 타이머를 끝까지 울린 뒤 「완료」했다. 앱이 앞에 있으면 지금, 아니면 다음에 앱을 열 때 검사한다. */
-    fun timerCompleted() {
-        scope.launch {
-            if (foreground?.get() != null) request(ReviewTrigger.TIMER_ENDED) else tracker.timerEndedOutside()
+    /**
+     * 타이머를 끝까지 울린 뒤 「완료」했다. 앱 안(앱이 앞에 있음)이면 지금, 앱 밖(알림 · 전체화면 알람 · 워치)이면
+     * 다음에 앱을 열 때 검사한다.
+     *
+     * @param outside 워치에서 끝냈다 — 폰 앱이 앞에 있어도 앱 밖이다. 맥락 없이 창을 띄우지 않는다
+     */
+    suspend fun timerCompleted(outside: Boolean) {
+        if (outside || foreground?.get() == null) {
+            tracker.timerEndedOutside()
+        } else {
+            scope.launch { request(ReviewTrigger.TIMER_ENDED) }
         }
     }
 
@@ -82,7 +92,10 @@ class ReviewRequester @Inject constructor(
         scope.launch { tracker.limitShown() }
     }
 
-    /** 디버그 전용 — 조건을 건너뛰고 요청한다(`nursemate-debug://review`). 기록은 바꾸지 않는다. */
+    /**
+     * 디버그 전용 — 조건을 건너뛰고 요청한다(`nursemate-debug://review`). 간격 기록은 바꾸지 않는다.
+     * `MainActivity` 가 앞으로 온 뒤(onStart) 부른다 — 그 전에는 창을 띄울 액티비티가 없다.
+     */
     fun forceForDebug() {
         scope.launch {
             Log.i(TAG, "디버그 강제 요청 | ${tracker.snapshot()}")
@@ -91,22 +104,26 @@ class ReviewRequester @Inject constructor(
     }
 
     private suspend fun request(trigger: ReviewTrigger, unmodified: Boolean = false) {
-        val activity = foreground?.get() ?: return
-        if (tracker.decide(trigger, unmodified) == null) return
-        launch(activity)
+        val bundle = if (foreground?.get() != null) tracker.decide(trigger, unmodified) else null
+        Log.i(TAG, "리뷰 검사 $trigger — ${bundle?.let { "묶음 $it" } ?: "요청 안 함"} | ${tracker.snapshot()}")
+        // 판정하는 사이 앱을 떠났으면 부르지 않는다 — 간격도 쓰지 않는다.
+        val activity = foreground?.get()
+        if (bundle == null || activity == null) return
+        if (launch(activity)) tracker.requested()
     }
 
+    /** @return 요청까지 갔는가 — 창이 떴는지는 Play 만 안다 */
     @Suppress("TooGenericExceptionCaught") // Play 쪽 무엇이 실패하든 앱 흐름으로 번지지 않게 — 취소만 되던진다
-    private suspend fun launch(activity: Activity) {
-        try {
-            val info = manager.requestReview()
-            manager.launchReview(activity, info)
-            Log.i(TAG, "평가 창 요청 끝 — 떴는지는 Play 만 안다")
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "평가 창 요청 실패 — 다시 시도하지 않는다: ${e.message}")
-        }
+    private suspend fun launch(activity: Activity): Boolean = try {
+        val info = manager.requestReview()
+        manager.launchReview(activity, info)
+        Log.i(TAG, "평가 창 요청 끝 — 떴는지는 Play 만 안다")
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "평가 창 요청 실패 — 다시 시도하지 않는다: ${e.message}")
+        false
     }
 
     private companion object {

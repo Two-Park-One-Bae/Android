@@ -85,7 +85,6 @@ enum class ReviewTrigger {
  * @param usedDays 쓴 날짜(기기 시간대의 epoch day). 앱을 연 날 · 위젯 · 워치로 타이머를 시작한 날
  * @param firstUseAt 첫 사용 시각 — 앱을 연 것뿐 아니라 위젯 · 워치로 타이머를 쓴 것도 사용이다
  * @param limitShownDay 오늘 한도 안내를 본 날(epoch day)
- * @param timerEndedOutside 앱 밖(알림 · 전체화면 알람 · 워치)에서 타이머를 끝냈다 — 다음에 앱을 열 때 검사한다
  */
 data class ReviewStats(
     val identifyCount: Int = 0,
@@ -93,6 +92,5 @@ data class ReviewStats(
     val usedDays: Set<Long> = emptySet(),
     val firstUseAt: Long? = null,
     val lastRequestAt: Long? = null,
-    val limitShownDay: Long? = null,
-    val timerEndedOutside: Boolean = false
+    val limitShownDay: Long? = null
 )

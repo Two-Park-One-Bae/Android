@@ -404,6 +404,8 @@ data class PillUiState(
      * 아직 안 읽은 알약은 항목이 없다. 검출 직후에는 비어 있고 2초쯤 뒤부터 찬다.
      */
     val faceReadings: Map<String, FaceReading> = emptyMap(),
+    /** 후보를 고른 순간 그 알약의 속성 칸이 모두 모델값이었는가 — 스토어 리뷰 묶음 1([confirmedUntouched]). */
+    val pickedUntouched: Map<String, Boolean> = emptyMap(),
     /** 식별 기록 키(UUID). 식별을 시작할 때 정한다 — 그 전에는 없다. */
     val historyId: String? = null,
     /** 식별 기록 저장 단계 — 식별 결과의 `완료` 가 연다. */
@@ -535,15 +537,26 @@ fun PillUiState.pillIds(): List<String> {
 
 /**
  * 확정한 알약을 모두 **사용자 수정 없이** 골랐는가 — 스토어 리뷰 묶음 1(NM-561, spec §스토어 리뷰 요청).
- *
- * 후보를 고를 때 속성 칸이 모두 모델값이었으면(손대지 않았거나 되돌렸으면) 수정 없음이다. 고쳤다가 같은 값으로 다시
- * 맞춘 것도 모델값이므로 값으로 비교한다. 수동 추가 알약은 사용자가 모든 칸을 입력하므로 수정한 것으로 본다.
+ * 고른 순간의 판정([PillUiState.pickedUntouched])을 본다.
  */
-fun PillUiState.confirmedUntouched(): Boolean = pillIds().filter { it in selections }.all { pillId ->
-    if (pillId.isManualPill) return@all false
-    val touched = edits[pillId] ?: return@all true
-    val model = copy(edits = edits - pillId).editOf(pillId)
-    touched.conditions == model.conditions && touched.faces == model.faces
+fun PillUiState.confirmedUntouched(): Boolean =
+    pillIds().filter { it in selections }.all { pickedUntouched[it] == true }
+
+/**
+ * 이 알약의 속성 칸이 지금 모두 모델값인가 — 손대지 않았거나 되돌렸으면 그렇다. 고쳤다가 같은 값으로 다시 맞춘 것도
+ * 모델값이므로 값으로 비교한다. 수동 추가 알약은 사용자가 모든 칸을 입력하므로 수정한 것으로 본다.
+ */
+internal fun PillUiState.isUntouched(pillId: String): Boolean {
+    val touched = edits[pillId]
+    return when {
+        pillId.isManualPill -> false
+
+        touched == null -> true
+
+        else -> copy(edits = edits - pillId).editOf(pillId).let { model ->
+            touched.conditions == model.conditions && touched.faces == model.faces
+        }
+    }
 }
 
 /** 확정한 후보만, 보이는 순서대로. 기록 저장 · 공유가 읽는다. */
@@ -567,7 +580,14 @@ class PillCorrections internal constructor(private val state: MutableStateFlow<P
 
     /** 후보를 확정한다. 취소하면 부르지 않으므로 여기 오면 사용자가 확인을 누른 것이다. */
     fun selectCandidate(pillId: String, candidate: PillCandidate) {
-        state.update { it.copy(selections = it.selections + (pillId to candidate)) }
+        state.update {
+            it.copy(
+                selections = it.selections + (pillId to candidate),
+                // 스토어 리뷰 묶음 1 은 「후보를 고를 때」 속성 칸이 모두 모델값이었는가다 — 고른 순간에 적는다.
+                // 완료할 때 다시 보면, 고른 뒤 수정 화면에서 값을 바꾸고 탭으로 빠져나간 경우 판정이 뒤집힌다.
+                pickedUntouched = it.pickedUntouched + (pillId to it.isUntouched(pillId))
+            )
+        }
     }
 
     /**

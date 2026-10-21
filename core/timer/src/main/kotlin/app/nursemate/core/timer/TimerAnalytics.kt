@@ -16,24 +16,35 @@ import app.nursemate.core.model.CareTimer
  * 워치도 보내면 **한 번의 시작이 두 번 잡힌다** — 워치가 시작한 타이머는 복제본으로
  * 폰에 넘어와 폰이 `source=watch` 로 이미 세기 때문이다.
  * [TimerAlarmScheduler] 와 같은 구조다.
+ *
+ * ## suspend 다
+ * 폰은 여기서 스토어 리뷰용 사용 기록을 기기에 쓴다(NM-561). 위젯 · 알림 리시버는 `goAsync` 가 끝나면 프로세스가
+ * 거둬질 수 있어, 따로 떼어 낸 코루틴에서 쓰면 기록이 사라진다 — 부른 쪽 코루틴 안에서 끝낸다.
  */
 interface TimerAnalytics {
 
     /** 타이머가 시작됐다. [source] 는 `phone`/`widget`/`watch`. */
-    fun started(timer: CareTimer, source: String)
+    suspend fun started(timer: CareTimer, source: String)
 
     /**
      * 타이머가 끝났다.
      *
      * @param completed 끝까지 울린 뒤 [완료] 면 true, 울리기 전에 껐으면 false.
      * @param elapsedSec 시작부터 끈 시각까지. 취소가 언제 일어나는지 보는 값이다.
+     * @param source 끝낸 기기 — 이 기기면 [SOURCE_PHONE], 상대(워치)가 끝내 복제본으로 알았으면 [SOURCE_WATCH]
      */
-    fun ended(timer: CareTimer, completed: Boolean, elapsedSec: Int, remainingSec: Int)
+    suspend fun ended(timer: CareTimer, completed: Boolean, elapsedSec: Int, remainingSec: Int, source: String)
 
     /** 아무 데도 안 보낸다. 워치가 쓴다. */
     object None : TimerAnalytics {
-        override fun started(timer: CareTimer, source: String) = Unit
-        override fun ended(timer: CareTimer, completed: Boolean, elapsedSec: Int, remainingSec: Int) = Unit
+        override suspend fun started(timer: CareTimer, source: String) = Unit
+        override suspend fun ended(
+            timer: CareTimer,
+            completed: Boolean,
+            elapsedSec: Int,
+            remainingSec: Int,
+            source: String
+        ) = Unit
     }
 
     companion object {
